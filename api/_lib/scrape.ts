@@ -63,12 +63,11 @@ const IMAGE_ATTRS = [
 
 function firstSrcsetUrl(srcset: string | undefined): string | undefined {
   if (!srcset) return undefined
-  const last = srcset
+  const urls = srcset
     .split(',')
     .map((part) => part.trim().split(' ')[0])
     .filter(Boolean)
-    .at(-1)
-  return last
+  return urls.length > 0 ? urls[urls.length - 1] : undefined
 }
 
 function isRealImage(url: string | undefined): boolean {
