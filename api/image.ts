@@ -1,0 +1,106 @@
+type ReqLike = {
+  query?: { src?: string }
+  url?: string
+}
+
+type ResLike = {
+  setHeader: (name: string, value: string) => void
+  status: (code: number) => {
+    send: (body: string | Uint8Array) => void
+    json: (body: unknown) => void
+  }
+}
+
+const USER_AGENT =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0 Safari/537.36'
+
+function getSrc(req: ReqLike): string | undefined {
+  if (req.query?.src) return req.query.src
+  if (!req.url) return undefined
+  const url = new URL(req.url, 'http://localhost')
+  return url.searchParams.get('src') ?? undefined
+}
+
+function isPrivateIpv4(hostname: string): boolean {
+  const parts = hostname.split('.').map((part) => Number(part))
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
+    return false
+  }
+
+  const [a, b] = parts
+  if (a === 10) return true
+  if (a === 127) return true
+  if (a === 169 && b === 254) return true
+  if (a === 172 && b >= 16 && b <= 31) return true
+  if (a === 192 && b === 168) return true
+  return false
+}
+
+function isAllowedHost(hostname: string): boolean {
+  const normalized = hostname.toLowerCase()
+  if (!normalized) return false
+  if (normalized === 'localhost' || normalized.endsWith('.localhost')) return false
+  if (normalized === '::1' || normalized === '[::1]') return false
+  if (normalized.endsWith('.local')) return false
+  if (isPrivateIpv4(normalized)) return false
+  return true
+}
+
+function sendPlaceholder(res: ResLike) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800"><rect width="100%" height="100%" fill="#1f2937"/><text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle" fill="#e5e7eb" font-size="42" font-family="Arial, sans-serif">Photo unavailable</text></svg>`
+  res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8')
+  res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=300')
+  res.status(200).send(svg)
+}
+
+export default async function handler(req: ReqLike, res: ResLike) {
+  const src = getSrc(req)
+  if (!src) {
+    res.status(400).json({ error: 'Missing src parameter' })
+    return
+  }
+
+  let parsed: URL
+  try {
+    parsed = new URL(src)
+  } catch {
+    res.status(400).json({ error: 'Invalid src URL' })
+    return
+  }
+
+  if (parsed.protocol !== 'https:' || !isAllowedHost(parsed.hostname)) {
+    res.status(403).json({ error: 'Image host is not allowed' })
+    return
+  }
+
+  try {
+    const response = await fetch(parsed.toString(), {
+      headers: {
+        'user-agent': USER_AGENT,
+        accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+        referer: `${parsed.protocol}//${parsed.hostname}/`,
+      },
+      redirect: 'follow',
+    })
+
+    if (!response.ok) {
+      sendPlaceholder(res)
+      return
+    }
+
+    const contentType = response.headers.get('content-type') ?? 'image/jpeg'
+    if (!contentType.startsWith('image/')) {
+      sendPlaceholder(res)
+      return
+    }
+
+    const arrayBuffer = await response.arrayBuffer()
+    const body = new Uint8Array(arrayBuffer)
+
+    res.setHeader('Content-Type', contentType)
+    res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=86400')
+    res.status(200).send(body)
+  } catch {
+    sendPlaceholder(res)
+  }
+}
