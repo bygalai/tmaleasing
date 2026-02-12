@@ -53,6 +53,16 @@ function sendPlaceholder(res: ResLike) {
   res.status(200).send(svg)
 }
 
+async function convertWebpToJpeg(body: Uint8Array): Promise<Uint8Array | undefined> {
+  try {
+    const sharp = (await import('sharp')).default
+    const converted = await sharp(body).jpeg({ quality: 82, mozjpeg: true }).toBuffer()
+    return new Uint8Array(converted)
+  } catch {
+    return undefined
+  }
+}
+
 export default async function handler(req: ReqLike, res: ResLike) {
   const src = getSrc(req)
   if (!src) {
@@ -100,9 +110,14 @@ export default async function handler(req: ReqLike, res: ResLike) {
     }
 
     const arrayBuffer = await response.arrayBuffer()
-    const body = new Uint8Array(arrayBuffer)
+    const originalBody = new Uint8Array(arrayBuffer)
+    const shouldConvertFromWebp = contentType.toLowerCase().startsWith('image/webp')
+    const convertedBody = shouldConvertFromWebp
+      ? await convertWebpToJpeg(originalBody)
+      : undefined
+    const body = convertedBody ?? originalBody
 
-    res.setHeader('Content-Type', contentType)
+    res.setHeader('Content-Type', convertedBody ? 'image/jpeg' : contentType)
     res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=86400')
     res.status(200).send(body)
   } catch {
