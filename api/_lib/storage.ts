@@ -115,6 +115,21 @@ function toPublicItem(item: InternalListing, stats?: PriceStats): PublicListing 
       }
     : estimateMarket(item.priceRub)
 
+  const normalizedImageUrl = (() => {
+    const raw = item.imageUrl?.trim()
+    if (!raw) return undefined
+    if (raw.startsWith('http://') || raw.startsWith('https://')) return raw
+    if (raw.startsWith('//')) return `https:${raw}`
+    if (raw.startsWith('/')) {
+      try {
+        return new URL(raw, item.source.providerUrl).toString()
+      } catch {
+        return undefined
+      }
+    }
+    return undefined
+  })()
+
   return {
     id: item.id,
     title: item.title,
@@ -126,9 +141,9 @@ function toPublicItem(item: InternalListing, stats?: PriceStats): PublicListing 
     year: item.year,
     mileageKm: item.mileageKm,
     location: item.location,
-    imageUrl: item.imageUrl.startsWith('http')
-      ? `/api/image?src=${encodeURIComponent(item.imageUrl)}`
-      : item.imageUrl,
+    imageUrl: normalizedImageUrl
+      ? `/api/image?src=${encodeURIComponent(normalizedImageUrl)}`
+      : '/api/image',
     detailUrl: 'https://t.me/GONKACONFBOT',
     description: item.description,
     badges: item.badges,

@@ -46,16 +46,20 @@ export function parseMileage(text: string): number | undefined {
 
 export function normalizeUrl(url: string | undefined, base: string): string {
   if (!url) return base
-  if (url.startsWith('http://') || url.startsWith('https://')) return url
-  if (url.startsWith('//')) return `https:${url}`
-  return new URL(url, base).toString()
+  const normalized = url.trim().replace(/^['"]|['"]$/g, '')
+  if (!normalized) return base
+  if (normalized.startsWith('http://') || normalized.startsWith('https://')) return normalized
+  if (normalized.startsWith('//')) return `https:${normalized}`
+  return new URL(normalized, base).toString()
 }
 
 export function normalizeOptionalUrl(url: string | undefined, base: string): string | undefined {
   if (!url) return undefined
-  if (url.startsWith('http://') || url.startsWith('https://')) return url
-  if (url.startsWith('//')) return `https:${url}`
-  return new URL(url, base).toString()
+  const normalized = url.trim().replace(/^['"]|['"]$/g, '')
+  if (!normalized) return undefined
+  if (normalized.startsWith('http://') || normalized.startsWith('https://')) return normalized
+  if (normalized.startsWith('//')) return `https:${normalized}`
+  return new URL(normalized, base).toString()
 }
 
 export function makeId(providerId: ProviderId, title: string, priceRub: number): string {

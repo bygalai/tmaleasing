@@ -56,7 +56,7 @@ function sendPlaceholder(res: ResLike) {
 export default async function handler(req: ReqLike, res: ResLike) {
   const src = getSrc(req)
   if (!src) {
-    res.status(400).json({ error: 'Missing src parameter' })
+    sendPlaceholder(res)
     return
   }
 
@@ -64,21 +64,26 @@ export default async function handler(req: ReqLike, res: ResLike) {
   try {
     parsed = new URL(src)
   } catch {
-    res.status(400).json({ error: 'Invalid src URL' })
+    sendPlaceholder(res)
     return
   }
 
-  if (parsed.protocol !== 'https:' || !isAllowedHost(parsed.hostname)) {
-    res.status(403).json({ error: 'Image host is not allowed' })
+  if ((parsed.protocol !== 'https:' && parsed.protocol !== 'http:') || !isAllowedHost(parsed.hostname)) {
+    sendPlaceholder(res)
     return
   }
 
   try {
-    const response = await fetch(parsed.toString(), {
+    const imageUrl =
+      parsed.protocol === 'http:'
+        ? new URL(`${parsed.pathname}${parsed.search}`, `https://${parsed.host}`).toString()
+        : parsed.toString()
+
+    const response = await fetch(imageUrl, {
       headers: {
         'user-agent': USER_AGENT,
         accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
-        referer: `${parsed.protocol}//${parsed.hostname}/`,
+        referer: `https://${parsed.hostname}/`,
       },
       redirect: 'follow',
     })
