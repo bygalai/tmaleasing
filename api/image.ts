@@ -6,7 +6,7 @@ type ReqLike = {
 type ResLike = {
   setHeader: (name: string, value: string) => void
   status: (code: number) => {
-    send: (body: string | Uint8Array) => void
+    send: (body: string | Buffer) => void
     json: (body: unknown) => void
   }
 }
@@ -115,9 +115,10 @@ export default async function handler(req: ReqLike, res: ResLike) {
     const convertedBody = shouldConvertFromWebp
       ? await convertWebpToJpeg(originalBody)
       : undefined
-    const body = convertedBody ?? originalBody
+    const body = Buffer.from(convertedBody ?? originalBody)
 
     res.setHeader('Content-Type', convertedBody ? 'image/jpeg' : contentType)
+    res.setHeader('Content-Length', String(body.byteLength))
     res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=86400')
     res.status(200).send(body)
   } catch {
