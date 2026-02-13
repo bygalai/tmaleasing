@@ -1,5 +1,6 @@
 import { syncListings } from '../_lib/service.js'
 import type { ProviderId } from '../_lib/models.js'
+import { readListings } from '../_lib/storage.js'
 
 type ReqLike = {
   url?: string
@@ -67,9 +68,13 @@ export default async function handler(req: ReqLike, res: ResLike) {
 
     const requestedProviders = extractProviders(req)
     const forceFullSync = shouldForceFullSync(req)
+    const existing = await readListings()
+    const hasExistingItems = Boolean(existing && existing.publicItems.length > 0)
     const providers =
       requestedProviders.length > 0
         ? requestedProviders
+        : !hasExistingItems
+          ? ['vtb']
         : forceFullSync
           ? ALLOWED_PROVIDERS
           : [getCurrentSlotProvider()]

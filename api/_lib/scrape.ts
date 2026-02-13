@@ -168,6 +168,151 @@ type JsonLdEntry = {
   description?: string
 }
 
+function pickFirstString(...values: Array<unknown>): string | undefined {
+  for (const value of values) {
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      if (trimmed.length > 0) return trimmed
+    }
+  }
+  return undefined
+}
+
+function firstImageFromAny(value: unknown): string | undefined {
+  if (typeof value === 'string') return value
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const found = firstImageFromAny(entry)
+      if (found) return found
+    }
+    return undefined
+  }
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    return pickFirstString(
+      record.url,
+      record.src,
+      record.image,
+      record.imageUrl,
+      record.preview,
+      record.webp,
+    )
+  }
+  return undefined
+}
+
+function parseFromEmbeddedState(provider: ProviderConfig, html: string): InternalListing[] {
+  if (provider.id !== 'alfaleasing' && provider.id !== 'europlan') return []
+
+  const $ = load(html)
+  const output: InternalListing[] = []
+  const seen = new Set<string>()
+
+  const rawJsonBlocks: string[] = []
+  $('script#__NEXT_DATA__, script[type="application/json"]').each((_, node) => {
+    const raw = $(node).html()
+    if (raw && raw.trim().length > 2) rawJsonBlocks.push(raw)
+  })
+
+  $('script:not([src])').each((_, node) => {
+    const raw = $(node).html()
+    if (!raw) return
+    const trimmed = raw.trim()
+    if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return
+    if (trimmed.length < 20) return
+    rawJsonBlocks.push(trimmed)
+  })
+
+  const walk = (value: unknown): void => {
+    if (Array.isArray(value)) {
+      value.forEach(walk)
+      return
+    }
+    if (!value || typeof value !== 'object') return
+
+    const obj = value as Record<string, unknown>
+    const title = pickFirstString(
+      obj.title,
+      obj.name,
+      obj.model,
+      obj.vehicleName,
+      obj.carName,
+      obj.fullName,
+    )
+    const priceCandidate = pickFirstString(
+      obj.price,
+      obj.cost,
+      obj.amount,
+      obj.sum,
+      obj.priceRub,
+      obj.fullPrice,
+    )
+    const numericPrice = typeof obj.price === 'number' ? obj.price : undefined
+    const priceRub =
+      (numericPrice && Number.isFinite(numericPrice) ? Math.round(numericPrice) : undefined) ??
+      (priceCandidate ? parsePrice(priceCandidate) ?? parsePrice(`${priceCandidate} руб`) : undefined)
+
+    const detailUrl = normalizeUrl(
+      pickFirstString(obj.url, obj.href, obj.link, obj.detailUrl, obj.slug) ?? provider.url,
+      provider.url,
+    )
+    const imageRaw = firstImageFromAny(
+      obj.images ??
+        obj.photos ??
+        obj.gallery ??
+        obj.preview ??
+        obj.image ??
+        obj.imageUrl ??
+        obj.photo ??
+        obj.picture,
+    )
+    const image = normalizeOptionalUrl(imageRaw, provider.url)
+
+    if (title && title.length >= 3 && priceRub) {
+      const key = `${provider.id}:${title}:${priceRub}`
+      if (!seen.has(key)) {
+        seen.add(key)
+        output.push({
+          id: makeId(provider.id, title, priceRub),
+          title,
+          subtitle: providerSubtitle(provider.id),
+          priceRub,
+          ...estimateMarket(priceRub),
+          year: parseYear(JSON.stringify(obj)),
+          mileageKm: parseMileage(JSON.stringify(obj)),
+          imageUrl: image ?? FALLBACK_IMAGE,
+          imageUrls: image ? [image] : [],
+          detailUrl,
+          description:
+            'Позиция автоматически собрана из JSON-состояния страницы лизинговой компании.',
+          badges: ['in_stock', 'leasing'],
+          source: {
+            providerId: provider.id,
+            providerName: provider.name,
+            providerUrl: provider.url,
+            listingUrl: detailUrl,
+            parserHint: `${provider.parserHint}-state-json`,
+            fallback: false,
+          },
+        })
+      }
+    }
+
+    Object.values(obj).forEach(walk)
+  }
+
+  for (const raw of rawJsonBlocks) {
+    try {
+      const parsed = JSON.parse(raw)
+      walk(parsed)
+    } catch {
+      // Skip non-JSON script blocks.
+    }
+  }
+
+  return output.slice(0, 80)
+}
+
 function parseFromJsonLd(provider: ProviderConfig, html: string): InternalListing[] {
   const $ = load(html)
   const output: InternalListing[] = []
@@ -706,8 +851,9 @@ export async function scrapeProvider(
   const vtbMarketItems = parseVtbMarketItems(provider, html)
   const cards = parseFromCards(provider, html)
   const jsonLd = parseFromJsonLd(provider, html)
+  const stateJson = parseFromEmbeddedState(provider, html)
   const vtbAnchors = parseVtbFromAnchors(provider, html)
-  const merged = dedupe([...vtbMarketItems, ...vtbAnchors, ...cards, ...jsonLd]).slice(0, 40)
+  const merged = dedupe([...vtbMarketItems, ...stateJson, ...vtbAnchors, ...cards, ...jsonLd]).slice(0, 40)
   if (merged.length === 0) {
     throw new Error(`No listings parsed for provider ${provider.id}`)
   }
