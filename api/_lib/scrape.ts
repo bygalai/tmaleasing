@@ -605,7 +605,7 @@ async function fetchDetailImages(
     })
 
     const normalized = normalizeImageList(provider, [...directCandidates, ...galleryCandidates], detailUrl)
-    if (normalized.length > 0) return normalized.slice(0, 18)
+    if (normalized.length > 0) return normalized.slice(0, 1)
 
     const fallback = extractImageCandidate($('body').first(), baseUrl)
     return fallback ? [fallback] : []
@@ -636,7 +636,7 @@ async function enrichImagesFromDetail(items: InternalListing[], provider: Provid
     )
     results.forEach(({ item, images }) => {
       if (images.length > 0) {
-        item.imageUrls = images
+        item.imageUrls = [images[0]]
         item.imageUrl = images[0]
         return
       }

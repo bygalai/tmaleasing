@@ -10,19 +10,23 @@ type ResLike = {
   status: (code: number) => { json: (body: unknown) => void }
 }
 
-function extractKey(req: ReqLike): string | undefined {
+const ALLOWED_PROVIDERS: ProviderId[] = ['vtb', 'europlan', 'ileasing', 'alfaleasing', 'autogpbl']
+const SLOT_MS = 15 * 60 * 1000
+
+function extractCronSecret(req: ReqLike): string | undefined {
   const url = new URL(req.url ?? '', 'http://localhost')
-  const queryKey = url.searchParams.get('key')
+  const queryKey = url.searchParams.get('secret')
   if (queryKey) return queryKey
-  const headerValue = req.headers?.['x-admin-key']
+  const headerValue = req.headers?.['x-cron-secret']
   if (typeof headerValue === 'string') return headerValue
   if (Array.isArray(headerValue)) return headerValue[0]
   return undefined
 }
 
-function isVercelCron(req: ReqLike): boolean {
-  const cronHeader = req.headers?.['x-vercel-cron']
-  return typeof cronHeader === 'string' && cronHeader.length > 0
+function getCurrentSlotProvider(now = Date.now()): ProviderId {
+  const slot = Math.floor(now / SLOT_MS)
+  const index = slot % ALLOWED_PROVIDERS.length
+  return ALLOWED_PROVIDERS[index]
 }
 
 function extractProviders(req: ReqLike): ProviderId[] {
@@ -30,26 +34,40 @@ function extractProviders(req: ReqLike): ProviderId[] {
   const raw = url.searchParams.get('providers')
   if (!raw) return []
 
-  const allowed: ProviderId[] = ['vtb', 'europlan', 'ileasing', 'alfaleasing', 'autogpbl']
   return raw
     .split(',')
     .map((item) => item.trim())
-    .filter((item): item is ProviderId => allowed.includes(item as ProviderId))
+    .filter((item): item is ProviderId => ALLOWED_PROVIDERS.includes(item as ProviderId))
+}
+
+function shouldForceFullSync(req: ReqLike): boolean {
+  const url = new URL(req.url ?? '', 'http://localhost')
+  return url.searchParams.get('full') === '1'
 }
 
 export default async function handler(req: ReqLike, res: ResLike) {
-  const requiredKey = process.env.ADMIN_DEBUG_KEY
-  const providedKey = extractKey(req)
-  const trustedCronCall = isVercelCron(req)
-
-  if (!trustedCronCall && (!requiredKey || providedKey !== requiredKey)) {
+  const requiredSecret = process.env.CRON_SECRET
+  const providedSecret = extractCronSecret(req)
+  if (!requiredSecret) {
+    res.status(500).json({ error: 'CRON_SECRET is not configured' })
+    return
+  }
+  if (providedSecret !== requiredSecret) {
     res.status(401).json({ error: 'Unauthorized' })
     return
   }
 
-  const providers = extractProviders(req)
+  const requestedProviders = extractProviders(req)
+  const forceFullSync = shouldForceFullSync(req)
+  const providers =
+    requestedProviders.length > 0
+      ? requestedProviders
+      : forceFullSync
+        ? ALLOWED_PROVIDERS
+        : [getCurrentSlotProvider()]
+
   const result = await syncListings({
-    providers: providers.length > 0 ? providers : undefined,
+    providers,
   })
 
   const reportSummary = result.report.map((item) => ({
@@ -64,7 +82,8 @@ export default async function handler(req: ReqLike, res: ResLike) {
     ok: true,
     updatedAt: result.bundle.updatedAt,
     total: result.bundle.publicItems.length,
-    providers: providers.length > 0 ? providers : 'all',
+    mode: forceFullSync ? 'full' : 'incremental',
+    providers,
     report: reportSummary,
   })
 }

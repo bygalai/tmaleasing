@@ -144,6 +144,7 @@ function toPublicItem(item: InternalListing, stats?: PriceStats): PublicListing 
     .map((url) => toProxyImageUrl(url, item.source.providerUrl))
     .filter(Boolean)
   const imageUrl = toProxyImageUrl(item.imageUrl, item.source.providerUrl)
+  const primaryImage = normalizedGallery[0] ?? imageUrl
 
   return {
     id: item.id,
@@ -156,8 +157,8 @@ function toPublicItem(item: InternalListing, stats?: PriceStats): PublicListing 
     year: item.year,
     mileageKm: item.mileageKm,
     location: item.location,
-    imageUrl,
-    imageUrls: normalizedGallery.length > 0 ? normalizedGallery : [imageUrl],
+    imageUrl: primaryImage,
+    imageUrls: [primaryImage],
     detailUrl: 'https://t.me/GONKACONFBOT',
     description: item.description,
     badges: item.badges,

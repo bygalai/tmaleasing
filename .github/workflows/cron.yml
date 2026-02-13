@@ -1,0 +1,33 @@
+name: Sync Listings Cron
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  sync-listings:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Trigger incremental sync
+        env:
+          CRON_SYNC_BASE_URL: ${{ secrets.CRON_SYNC_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SYNC_BASE_URL" ]; then
+            echo "CRON_SYNC_BASE_URL secret is missing"
+            exit 1
+          fi
+
+          if [ -z "$CRON_SECRET" ]; then
+            echo "CRON_SECRET secret is missing"
+            exit 1
+          fi
+
+          URL="${CRON_SYNC_BASE_URL%/}/api/internal/sync-listings"
+          echo "Calling $URL"
+          curl --fail --show-error --silent --max-time 25 \
+            -H "x-cron-secret: $CRON_SECRET" \
+            "$URL"
+          echo

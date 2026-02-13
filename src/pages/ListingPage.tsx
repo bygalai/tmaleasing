@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { PriceAnalysisBar } from '../components/listing/PriceAnalysisBar'
 import { formatMileage, formatPriceRub } from '../lib/format'
@@ -13,11 +12,6 @@ type ListingPageProps = {
 export function ListingPage({ items, isFavorite, toggleFavorite }: ListingPageProps) {
   const { id } = useParams()
   const item = items.find((entry) => entry.id === id)
-  const [photoIndex, setPhotoIndex] = useState(0)
-
-  useEffect(() => {
-    setPhotoIndex(0)
-  }, [id])
 
   if (!item) {
     return (
@@ -30,58 +24,9 @@ export function ListingPage({ items, isFavorite, toggleFavorite }: ListingPagePr
     )
   }
 
-  const gallery = item.imageUrls.length > 0 ? item.imageUrls : [item.imageUrl]
-  const currentImage = gallery[Math.min(photoIndex, gallery.length - 1)]
-
-  const toPrevPhoto = () => {
-    setPhotoIndex((value) => (value - 1 + gallery.length) % gallery.length)
-  }
-
-  const toNextPhoto = () => {
-    setPhotoIndex((value) => (value + 1) % gallery.length)
-  }
-
   return (
     <article className="space-y-4 pb-6">
-      <div className="relative">
-        <img src={currentImage} alt={item.title} className="h-56 w-full rounded-2xl object-cover" />
-        <div className="absolute bottom-2 right-2 rounded-full border border-white/20 bg-black/60 px-2 py-1 text-[11px] text-white/90">
-          Фото {photoIndex + 1}/{gallery.length}
-        </div>
-        {gallery.length > 1 ? (
-          <>
-            <button
-              type="button"
-              onClick={toPrevPhoto}
-              className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full border border-white/20 bg-black/55 px-2 py-1 text-sm text-white"
-              aria-label="Предыдущее фото"
-            >
-              ‹
-            </button>
-            <button
-              type="button"
-              onClick={toNextPhoto}
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full border border-white/20 bg-black/55 px-2 py-1 text-sm text-white"
-              aria-label="Следующее фото"
-            >
-              ›
-            </button>
-            <div className="absolute bottom-2 left-1/2 flex -translate-x-1/2 gap-1.5">
-              {gallery.map((_, index) => (
-                <button
-                  type="button"
-                  key={`${item.id}-photo-${index}`}
-                  aria-label={`Фото ${index + 1}`}
-                  onClick={() => setPhotoIndex(index)}
-                  className={`h-1.5 rounded-full transition ${
-                    index === photoIndex ? 'w-5 bg-white' : 'w-2 bg-white/45'
-                  }`}
-                />
-              ))}
-            </div>
-          </>
-        ) : null}
-      </div>
+      <img src={item.imageUrl} alt={item.title} className="h-56 w-full rounded-2xl object-cover" />
 
       <div className="space-y-2">
         <div className="flex items-start justify-between gap-2">

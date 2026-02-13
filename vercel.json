@@ -16,15 +16,9 @@
       "maxDuration": 30
     },
     "api/internal/sync-listings.ts": {
-      "maxDuration": 60
+      "maxDuration": 10
     }
   },
-  "crons": [
-    {
-      "path": "/api/internal/sync-listings",
-      "schedule": "0 3 * * *"
-    }
-  ],
   "rewrites": [
     {
       "source": "/((?!api/).*)",
