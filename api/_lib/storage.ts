@@ -166,79 +166,100 @@ function toPublicItem(item: InternalListing, stats?: PriceStats): PublicListing 
   }
 }
 
-async function saveToDatabase(pool: Pool, items: InternalListing[]) {
+type SaveStats = {
+  total: number
+  saved: number
+  failed: number
+}
+
+async function saveToDatabase(pool: Pool, items: InternalListing[]): Promise<SaveStats> {
   await ensureSchema(pool)
   const client = await pool.connect()
+  let saved = 0
+  let failed = 0
+
   try {
-    await client.query('BEGIN')
+    console.info(`[db-save] start total=${items.length}`)
 
     for (const item of items) {
-      await client.query(
-        `
-        INSERT INTO listings_current (
-          id, title, subtitle, price_rub, year, mileage_km, location,
-          image_url, image_urls, detail_url, description, badges, discount_percent, source, updated_at
-        ) VALUES (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NOW()
+      console.info(
+        `[db-save] item start id=${item.id} provider=${item.source.providerId} price=${item.priceRub}`,
+      )
+      try {
+        await client.query(
+          `
+          INSERT INTO listings_current (
+            id, title, subtitle, price_rub, year, mileage_km, location,
+            image_url, image_urls, detail_url, description, badges, discount_percent, source, updated_at
+          ) VALUES (
+            $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NOW()
+          )
+          ON CONFLICT (id) DO UPDATE SET
+            title = EXCLUDED.title,
+            subtitle = EXCLUDED.subtitle,
+            price_rub = EXCLUDED.price_rub,
+            year = EXCLUDED.year,
+            mileage_km = EXCLUDED.mileage_km,
+            location = EXCLUDED.location,
+            image_url = EXCLUDED.image_url,
+            image_urls = EXCLUDED.image_urls,
+            detail_url = EXCLUDED.detail_url,
+            description = EXCLUDED.description,
+            badges = EXCLUDED.badges,
+            discount_percent = EXCLUDED.discount_percent,
+            source = EXCLUDED.source,
+            updated_at = NOW();
+          `,
+          [
+            item.id,
+            item.title,
+            item.subtitle,
+            item.priceRub,
+            item.year ?? null,
+            item.mileageKm ?? null,
+            item.location ?? null,
+            item.imageUrl,
+            JSON.stringify(item.imageUrls),
+            item.detailUrl,
+            item.description,
+            JSON.stringify(item.badges),
+            item.discountPercent ?? null,
+            JSON.stringify(item.source),
+          ],
         )
-        ON CONFLICT (id) DO UPDATE SET
-          title = EXCLUDED.title,
-          subtitle = EXCLUDED.subtitle,
-          price_rub = EXCLUDED.price_rub,
-          year = EXCLUDED.year,
-          mileage_km = EXCLUDED.mileage_km,
-          location = EXCLUDED.location,
-          image_url = EXCLUDED.image_url,
-          image_urls = EXCLUDED.image_urls,
-          detail_url = EXCLUDED.detail_url,
-          description = EXCLUDED.description,
-          badges = EXCLUDED.badges,
-          discount_percent = EXCLUDED.discount_percent,
-          source = EXCLUDED.source,
-          updated_at = NOW();
-        `,
-        [
-          item.id,
-          item.title,
-          item.subtitle,
-          item.priceRub,
-          item.year ?? null,
-          item.mileageKm ?? null,
-          item.location ?? null,
-          item.imageUrl,
-          JSON.stringify(item.imageUrls),
-          item.detailUrl,
-          item.description,
-          JSON.stringify(item.badges),
-          item.discountPercent ?? null,
-          JSON.stringify(item.source),
-        ],
-      )
+        console.info(`[db-save] item upsert ok id=${item.id}`)
 
-      await client.query(
-        `
-        INSERT INTO listing_price_history (listing_id, price_rub)
-        SELECT $1, $2
-        WHERE COALESCE(
-          (SELECT price_rub
-           FROM listing_price_history
-           WHERE listing_id = $1
-           ORDER BY recorded_at DESC
-           LIMIT 1),
-          -1
-        ) <> $2
-        `,
-        [item.id, item.priceRub],
-      )
+        await client.query(
+          `
+          INSERT INTO listing_price_history (listing_id, price_rub)
+          SELECT $1, $2
+          WHERE COALESCE(
+            (SELECT price_rub
+             FROM listing_price_history
+             WHERE listing_id = $1
+             ORDER BY recorded_at DESC
+             LIMIT 1),
+            -1
+          ) <> $2
+          `,
+          [item.id, item.priceRub],
+        )
+        console.info(`[db-save] item history ok id=${item.id}`)
+        saved += 1
+      } catch (error) {
+        failed += 1
+        const message = error instanceof Error ? error.message : 'Unknown DB write error'
+        console.error(
+          `[db-save] item failed id=${item.id} provider=${item.source.providerId} message=${message}`,
+        )
+      }
     }
-
-    await client.query('COMMIT')
-  } catch (error) {
-    await client.query('ROLLBACK')
-    throw error
   } finally {
     client.release()
   }
+
+  console.info(`[db-save] done total=${items.length} saved=${saved} failed=${failed}`)
+  return { total: items.length, saved, failed }
 }
 
 async function loadFromDatabase(pool: Pool): Promise<CacheBundle | null> {
@@ -344,10 +365,15 @@ export async function writeListings(items: InternalListing[]): Promise<CacheBund
   }
 
   try {
-    await saveToDatabase(pool, items)
+    const saveStats = await saveToDatabase(pool, items)
+    if (saveStats.saved === 0) {
+      console.warn('[db-save] no items persisted, returning memory cache fallback')
+    }
     const fromDb = await loadFromDatabase(pool)
     return fromDb ?? memoryBundle
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown DB persistence error'
+    console.error(`[db-save] fatal error message=${message}`)
     return memoryBundle
   }
 }
@@ -374,7 +400,9 @@ export async function readListings(): Promise<CacheBundle | null> {
     globalState.__gonkaMemoryBundle = fromDb
     globalState.__gonkaCacheExpiresAt = now + CACHE_TTL_MS
     return fromDb
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown DB read error'
+    console.error(`[db-read] failed message=${message}`)
     return globalState.__gonkaMemoryBundle ?? null
   }
 }
