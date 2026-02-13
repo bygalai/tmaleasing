@@ -15,6 +15,7 @@ import {
 
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0 Safari/537.36'
+const FETCH_TIMEOUT_MS = 8000
 
 export type ProviderSyncReport = {
   providerId: ProviderId
@@ -498,13 +499,17 @@ function buildFallback(provider: ProviderConfig, index: number): InternalListing
 async function fetchHtml(url: string): Promise<string> {
   let lastError: unknown
   for (let attempt = 1; attempt <= 3; attempt += 1) {
+    let timeout: ReturnType<typeof setTimeout> | undefined
     try {
+      const controller = new AbortController()
+      timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
       const response = await fetch(url, {
         headers: {
           'user-agent': USER_AGENT,
           accept: 'text/html,application/xhtml+xml',
           'accept-language': 'ru-RU,ru;q=0.9,en;q=0.8',
         },
+        signal: controller.signal,
       })
       if (!response.ok) {
         throw new Error(`Failed to fetch ${url}, status ${response.status}`)
@@ -515,6 +520,8 @@ async function fetchHtml(url: string): Promise<string> {
       if (attempt < 3) {
         await new Promise((resolve) => setTimeout(resolve, attempt * 500))
       }
+    } finally {
+      if (timeout) clearTimeout(timeout)
     }
   }
 
@@ -526,7 +533,10 @@ async function fetchDetailImages(
   detailUrl: string,
   baseUrl: string,
 ): Promise<string[]> {
+  let timeout: ReturnType<typeof setTimeout> | undefined
   try {
+    const controller = new AbortController()
+    timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
     const response = await fetch(detailUrl, {
       headers: {
         'user-agent': USER_AGENT,
@@ -535,6 +545,7 @@ async function fetchDetailImages(
         referer: baseUrl,
       },
       redirect: 'follow',
+      signal: controller.signal,
     })
     if (!response.ok) return []
 
@@ -611,6 +622,8 @@ async function fetchDetailImages(
     return fallback ? [fallback] : []
   } catch {
     return []
+  } finally {
+    if (timeout) clearTimeout(timeout)
   }
 }
 
@@ -652,6 +665,8 @@ async function enrichImagesFromDetail(items: InternalListing[], provider: Provid
 
 export async function scrapeProvider(provider: ProviderConfig): Promise<InternalListing[]> {
   const html = await fetchHtml(provider.url)
+  const htmlPreview = html.replace(/\s+/g, ' ').trim().slice(0, 500)
+  console.info(`[scrape] provider=${provider.id} html_preview=${JSON.stringify(htmlPreview)}`)
   const vtbMarketItems = parseVtbMarketItems(provider, html)
   const cards = parseFromCards(provider, html)
   const jsonLd = parseFromJsonLd(provider, html)

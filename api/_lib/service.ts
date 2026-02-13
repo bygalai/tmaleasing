@@ -99,6 +99,11 @@ export async function getListings(forceRefresh = false): Promise<ListingsBundle>
     return toListingsBundle(stored)
   }
 
-  const synced = await syncAllProvidersWithLock()
-  return synced.bundle
+  // Cold start path: never block user on scraping.
+  void syncAllProvidersWithLock().catch(() => undefined)
+  return {
+    updatedAt: new Date(0).toISOString(),
+    publicItems: [],
+    internalItems: [],
+  }
 }
