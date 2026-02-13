@@ -21,6 +21,7 @@ export type SyncResult = {
 
 export type SyncOptions = {
   providers?: InternalListing['source']['providerId'][]
+  lightweight?: boolean
 }
 
 function toListingsBundle(bundle: CacheBundle): ListingsBundle {
@@ -52,7 +53,7 @@ export async function syncListings(options: SyncOptions = {}): Promise<SyncResul
   console.info(`[sync] start providers=${providerScope}`)
 
   console.info('[sync] stage=collectListings begin')
-  const collected = await collectListings({ providers: options.providers })
+  const collected = await collectListings({ providers: options.providers, lightweight: options.lightweight })
   console.info(
     `[sync] stage=collectListings done items=${collected.items.length} elapsed_ms=${Date.now() - startedAt}`,
   )

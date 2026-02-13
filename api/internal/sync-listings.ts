@@ -80,6 +80,7 @@ export default async function handler(req: ReqLike, res: ResLike) {
 
     const result = await syncListings({
       providers,
+      lightweight: true,
     })
 
     const elapsedMs = Date.now() - startedAt

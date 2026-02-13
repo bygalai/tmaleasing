@@ -14,7 +14,7 @@ import {
 } from './parsing.js'
 
 const USER_AGENT =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0 Safari/537.36'
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36'
 const FETCH_TIMEOUT_MS = 8000
 
 export type ProviderSyncReport = {
@@ -29,6 +29,7 @@ export type ProviderSyncReport = {
 
 export type CollectListingsOptions = {
   providers?: ProviderId[]
+  lightweight?: boolean
 }
 
 export type CollectListingsResult = {
@@ -113,6 +114,22 @@ function normalizeImageList(
     out.push(normalized)
   }
   return out
+}
+
+function detectProtectionSignature(html: string): string | undefined {
+  const normalized = html.toLowerCase()
+  const signatures = [
+    'cloudflare',
+    'cf-browser-verification',
+    'just a moment',
+    'attention required',
+    'access denied',
+    'captcha',
+    'bot protection',
+    'ddos-guard',
+  ]
+
+  return signatures.find((signature) => normalized.includes(signature))
 }
 
 function extractImageCandidate(el: any, baseUrl: string): string | undefined {
@@ -508,13 +525,27 @@ async function fetchHtml(url: string): Promise<string> {
           'user-agent': USER_AGENT,
           accept: 'text/html,application/xhtml+xml',
           'accept-language': 'ru-RU,ru;q=0.9,en;q=0.8',
+          'sec-fetch-dest': 'document',
+          'sec-fetch-mode': 'navigate',
+          'sec-fetch-site': 'none',
+          'upgrade-insecure-requests': '1',
         },
         signal: controller.signal,
       })
       if (!response.ok) {
         throw new Error(`Failed to fetch ${url}, status ${response.status}`)
       }
-      return response.text()
+      const html = await response.text()
+      const preview = html.replace(/\s+/g, ' ').trim().slice(0, 500)
+      console.info(
+        `[scrape-fetch] url=${url} attempt=${attempt} status=${response.status} html_preview=${JSON.stringify(preview)}`,
+      )
+      const protection = detectProtectionSignature(preview)
+      if (protection) {
+        console.warn(`[scrape-fetch] protection_detected url=${url} signature=${protection}`)
+        throw new Error(`Protection detected: ${protection}`)
+      }
+      return html
     } catch (error) {
       lastError = error
       if (attempt < 3) {
@@ -543,6 +574,8 @@ async function fetchDetailImages(
         accept: 'text/html,application/xhtml+xml',
         'accept-language': 'ru-RU,ru;q=0.9,en;q=0.8',
         referer: baseUrl,
+        'sec-fetch-dest': 'document',
+        'sec-fetch-mode': 'navigate',
       },
       redirect: 'follow',
       signal: controller.signal,
@@ -663,7 +696,10 @@ async function enrichImagesFromDetail(items: InternalListing[], provider: Provid
   }
 }
 
-export async function scrapeProvider(provider: ProviderConfig): Promise<InternalListing[]> {
+export async function scrapeProvider(
+  provider: ProviderConfig,
+  options: CollectListingsOptions = {},
+): Promise<InternalListing[]> {
   const html = await fetchHtml(provider.url)
   const htmlPreview = html.replace(/\s+/g, ' ').trim().slice(0, 500)
   console.info(`[scrape] provider=${provider.id} html_preview=${JSON.stringify(htmlPreview)}`)
@@ -675,16 +711,24 @@ export async function scrapeProvider(provider: ProviderConfig): Promise<Internal
   if (merged.length === 0) {
     throw new Error(`No listings parsed for provider ${provider.id}`)
   }
-  await enrichImagesFromDetail(merged, provider)
+  if (!options.lightweight) {
+    await enrichImagesFromDetail(merged, provider)
+  }
   return merged
 }
 
 async function scrapeProviderDetailed(
   provider: ProviderConfig,
   fallbackSeed: number,
+  options: CollectListingsOptions,
 ): Promise<{ items: InternalListing[]; report: ProviderSyncReport }> {
   try {
-    const items = await scrapeProvider(provider)
+    const items = await scrapeProvider(provider, options)
+    if (options.lightweight) {
+      items.forEach((item) => {
+        item.imageUrls = [item.imageUrl]
+      })
+    }
     const fallbackCount = items.filter((item) => item.source.fallback).length
     return {
       items,
@@ -723,7 +767,7 @@ export async function collectListings(
       : PROVIDERS
 
   const settled = await Promise.all(
-    selectedProviders.map((provider, index) => scrapeProviderDetailed(provider, index)),
+    selectedProviders.map((provider, index) => scrapeProviderDetailed(provider, index, options)),
   )
 
   const collected = settled
