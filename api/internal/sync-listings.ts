@@ -74,7 +74,7 @@ export default async function handler(req: ReqLike, res: ResLike) {
       requestedProviders.length > 0
         ? requestedProviders
         : !hasExistingItems
-          ? ['vtb']
+          ? (['vtb'] as ProviderId[])
         : forceFullSync
           ? ALLOWED_PROVIDERS
           : [getCurrentSlotProvider()]
