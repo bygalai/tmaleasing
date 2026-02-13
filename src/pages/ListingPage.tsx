@@ -45,6 +45,9 @@ export function ListingPage({ items, isFavorite, toggleFavorite }: ListingPagePr
     <article className="space-y-4 pb-6">
       <div className="relative">
         <img src={currentImage} alt={item.title} className="h-56 w-full rounded-2xl object-cover" />
+        <div className="absolute bottom-2 right-2 rounded-full border border-white/20 bg-black/60 px-2 py-1 text-[11px] text-white/90">
+          Фото {photoIndex + 1}/{gallery.length}
+        </div>
         {gallery.length > 1 ? (
           <>
             <button
