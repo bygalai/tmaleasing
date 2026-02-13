@@ -81,13 +81,31 @@ function hasImageExtension(url: string): boolean {
   return /\.(jpg|jpeg|png|webp|avif)(\?|#|$)/i.test(url)
 }
 
-function normalizeImageList(candidates: Array<string | undefined>, baseUrl: string): string[] {
+function isProviderListingImage(provider: ProviderConfig, url: string): boolean {
+  if (provider.id !== 'vtb') return true
+  const normalized = url.toLowerCase()
+  if (!normalized.includes('vtb-leasing.ru')) return false
+  if (normalized.includes('/sprint.editor/')) return false
+  if (normalized.includes('/local/templates/')) return false
+  const allowedPath =
+    normalized.includes('/upload/iblock/') || normalized.includes('/upload/resize_cache/iblock/')
+  if (!allowedPath) return false
+  if (!hasImageExtension(normalized)) return false
+  return true
+}
+
+function normalizeImageList(
+  provider: ProviderConfig,
+  candidates: Array<string | undefined>,
+  baseUrl: string,
+): string[] {
   const seen = new Set<string>()
   const out: string[] = []
   for (const candidate of candidates) {
     const normalized = normalizeOptionalUrl(candidate, baseUrl)
     if (!isRealImage(normalized)) continue
     if (!normalized) continue
+    if (!isProviderListingImage(provider, normalized)) continue
     const key = normalized.replace(/[?#].*$/, '').toLowerCase()
     if (seen.has(key)) continue
     seen.add(key)
@@ -503,7 +521,11 @@ async function fetchHtml(url: string): Promise<string> {
   throw lastError instanceof Error ? lastError : new Error(`Failed to fetch ${url}`)
 }
 
-async function fetchDetailImages(detailUrl: string, baseUrl: string): Promise<string[]> {
+async function fetchDetailImages(
+  provider: ProviderConfig,
+  detailUrl: string,
+  baseUrl: string,
+): Promise<string[]> {
   try {
     const response = await fetch(detailUrl, {
       headers: {
@@ -582,7 +604,7 @@ async function fetchDetailImages(detailUrl: string, baseUrl: string): Promise<st
       if (styleMatch?.[2]) galleryCandidates.push(styleMatch[2])
     })
 
-    const normalized = normalizeImageList([...directCandidates, ...galleryCandidates], detailUrl)
+    const normalized = normalizeImageList(provider, [...directCandidates, ...galleryCandidates], detailUrl)
     if (normalized.length > 0) return normalized.slice(0, 18)
 
     const fallback = extractImageCandidate($('body').first(), baseUrl)
@@ -609,7 +631,7 @@ async function enrichImagesFromDetail(items: InternalListing[], provider: Provid
     const results = await Promise.all(
       chunk.map(async (item) => ({
         item,
-        images: await fetchDetailImages(item.detailUrl, provider.url),
+        images: await fetchDetailImages(provider, item.detailUrl, provider.url),
       })),
     )
     results.forEach(({ item, images }) => {
