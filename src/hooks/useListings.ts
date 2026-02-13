@@ -17,6 +17,7 @@ const mockListings: Listing[] = [
     mileageKm: 267000,
     location: 'Москва',
     imageUrl: FALLBACK_IMAGE,
+    imageUrls: [FALLBACK_IMAGE],
     detailUrl: 'https://t.me/GONKACONFBOT',
     description: 'Конфискованная техника от лизинговой компании.',
     badges: ['in_stock', 'leasing', 'discount'],

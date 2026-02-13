@@ -12,6 +12,7 @@ export type Listing = {
   mileageKm?: number
   location?: string
   imageUrl: string
+  imageUrls: string[]
   detailUrl: string
   description: string
   badges: ListingBadge[]

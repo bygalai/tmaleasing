@@ -77,6 +77,25 @@ function isRealImage(url: string | undefined): boolean {
   return true
 }
 
+function hasImageExtension(url: string): boolean {
+  return /\.(jpg|jpeg|png|webp|avif)(\?|#|$)/i.test(url)
+}
+
+function normalizeImageList(candidates: Array<string | undefined>, baseUrl: string): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const candidate of candidates) {
+    const normalized = normalizeOptionalUrl(candidate, baseUrl)
+    if (!isRealImage(normalized)) continue
+    if (!normalized) continue
+    const key = normalized.replace(/[?#].*$/, '').toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(normalized)
+  }
+  return out
+}
+
 function extractImageCandidate(el: any, baseUrl: string): string | undefined {
   const primary = el.find('img, source').first()
   const directCandidate = IMAGE_ATTRS.map((attr) => primary.attr(attr)).find(Boolean)
@@ -146,6 +165,7 @@ function parseFromJsonLd(provider: ProviderConfig, html: string): InternalListin
           priceRub,
           ...estimateMarket(priceRub),
           imageUrl: image || FALLBACK_IMAGE,
+          imageUrls: image ? [image] : [],
           detailUrl: url,
           description,
           badges: ['in_stock', 'leasing'],
@@ -226,6 +246,7 @@ function parseFromCards(provider: ProviderConfig, html: string): InternalListing
         mileageKm,
         location: location || undefined,
         imageUrl: image ?? FALLBACK_IMAGE,
+        imageUrls: image ? [image] : [],
         detailUrl: link,
         description:
           'Позиция автоматически собрана и доступна для заявки. Технические детали подтверждаются менеджером перед сделкой.',
@@ -307,6 +328,7 @@ function parseVtbMarketItems(provider: ProviderConfig, html: string): InternalLi
       mileageKm,
       location: location || undefined,
       imageUrl: preview ?? FALLBACK_IMAGE,
+      imageUrls: preview ? [preview] : [],
       detailUrl: link,
       description:
         'Позиция автоматически собрана и доступна для заявки. Подробные характеристики подтверждаются менеджером.',
@@ -389,6 +411,7 @@ function parseVtbFromAnchors(provider: ProviderConfig, html: string): InternalLi
       mileageKm,
       location: location || undefined,
       imageUrl: image ?? FALLBACK_IMAGE,
+      imageUrls: image ? [image] : [],
       detailUrl: link,
       description:
         'Позиция автоматически собрана и доступна для заявки. Подробные характеристики подтверждаются менеджером.',
@@ -419,6 +442,12 @@ function dedupe(items: InternalListing[]): InternalListing[] {
   return out
 }
 
+function hasUsableImage(item: InternalListing): boolean {
+  if (!isRealImage(item.imageUrl)) return false
+  if (item.imageUrls.length === 0) return false
+  return item.imageUrls.some((url) => isRealImage(url))
+}
+
 function buildFallback(provider: ProviderConfig, index: number): InternalListing {
   const price = 3000000 + index * 420000
   const titleByIndex = ['Грузовой тягач', 'Самосвал', 'Экскаватор', 'Автокран', 'Погрузчик']
@@ -432,6 +461,7 @@ function buildFallback(provider: ProviderConfig, index: number): InternalListing
     mileageKm: 110000 + index * 13000,
     location: ['Москва', 'Санкт-Петербург', 'Казань', 'Екатеринбург', 'Новосибирск'][index % 5],
     imageUrl: FALLBACK_IMAGE,
+    imageUrls: [],
     detailUrl: 'https://t.me/GONKACONFBOT',
     description:
       'Позиция доступна для заявки. Актуальность наличия и комплектация уточняются у менеджера.',
@@ -473,7 +503,7 @@ async function fetchHtml(url: string): Promise<string> {
   throw lastError instanceof Error ? lastError : new Error(`Failed to fetch ${url}`)
 }
 
-async function fetchDetailImage(detailUrl: string, baseUrl: string): Promise<string | undefined> {
+async function fetchDetailImages(detailUrl: string, baseUrl: string): Promise<string[]> {
   try {
     const response = await fetch(detailUrl, {
       headers: {
@@ -484,74 +514,116 @@ async function fetchDetailImage(detailUrl: string, baseUrl: string): Promise<str
       },
       redirect: 'follow',
     })
-    if (!response.ok) return undefined
+    if (!response.ok) return []
 
     const html = await response.text()
     const $ = load(html)
-    const imageFromJsonLd = (() => {
-      let fromJsonLd: string | undefined
-      $('script[type="application/ld+json"]').each((_, node) => {
-        if (fromJsonLd) return
-        const raw = $(node).html()
-        if (!raw) return
-        try {
-          const parsed = JSON.parse(raw)
-          const blocks = Array.isArray(parsed) ? parsed : [parsed]
-          for (const block of blocks) {
-            const imageValue = Array.isArray(block?.image) ? block.image[0] : block?.image
-            const normalized = normalizeOptionalUrl(imageValue, detailUrl)
-            if (isRealImage(normalized)) {
-              fromJsonLd = normalized
-              return
-            }
+    const fromJsonLd: string[] = []
+    $('script[type="application/ld+json"]').each((_, node) => {
+      const raw = $(node).html()
+      if (!raw) return
+      try {
+        const parsed = JSON.parse(raw)
+        const blocks = Array.isArray(parsed) ? parsed : [parsed]
+        for (const block of blocks) {
+          const imageValue = Array.isArray(block?.image) ? block.image : [block?.image]
+          for (const image of imageValue) {
+            if (typeof image === 'string') fromJsonLd.push(image)
           }
-        } catch {
-          // Ignore malformed JSON-LD blocks.
         }
+      } catch {
+        // Ignore malformed JSON-LD blocks.
+      }
+    })
+
+    const directCandidates: Array<string | undefined> = [
+      $('meta[property="og:image"]').attr('content'),
+      $('meta[name="twitter:image"]').attr('content'),
+      $('meta[property="twitter:image"]').attr('content'),
+      $('meta[property="og:image:url"]').attr('content'),
+      ...fromJsonLd,
+      extractImageCandidate($('main').first(), detailUrl),
+      extractImageCandidate($('article').first(), detailUrl),
+      $('img[itemprop="image"]').first().attr('src'),
+      $('img[itemprop="image"]').first().attr('data-src'),
+      firstSrcsetUrl($('img[itemprop="image"]').first().attr('srcset')),
+      $('picture source').first().attr('srcset'),
+      $('img').first().attr('src'),
+    ]
+
+    const galleryCandidates: string[] = []
+    $('img, source, a[href], market-item-image').each((_, node) => {
+      const el = $(node)
+      const nodeName = String((node as { tagName?: string }).tagName ?? '').toLowerCase()
+      if (nodeName === 'a') {
+        const href = el.attr('href')
+        if (href && hasImageExtension(href)) galleryCandidates.push(href)
+      }
+
+      IMAGE_ATTRS.forEach((attr) => {
+        const value = el.attr(attr)
+        if (value) galleryCandidates.push(value)
       })
-      return fromJsonLd
-    })()
 
-    const og =
-      $('meta[property="og:image"]').attr('content') ??
-      $('meta[name="twitter:image"]').attr('content') ??
-      $('meta[property="twitter:image"]').attr('content') ??
-      $('meta[property="og:image:url"]').attr('content') ??
-      imageFromJsonLd ??
-      extractImageCandidate($('main').first(), detailUrl) ??
-      extractImageCandidate($('article').first(), detailUrl) ??
-      $('img[itemprop="image"]').first().attr('src') ??
-      $('img[itemprop="image"]').first().attr('data-src') ??
-      firstSrcsetUrl($('img[itemprop="image"]').first().attr('srcset')) ??
-      $('picture source').first().attr('srcset') ??
-      $('img').first().attr('src')
+      const srcset =
+        el.attr('srcset') ??
+        el.attr('data-srcset') ??
+        el.attr('data-large-image') ??
+        el.attr('data-full')
+      if (srcset) {
+        srcset
+          .split(',')
+          .map((part) => part.trim().split(' ')[0])
+          .filter(Boolean)
+          .forEach((value) => galleryCandidates.push(value))
+      }
 
-    const normalized = normalizeOptionalUrl(og, detailUrl)
-    if (isRealImage(normalized)) return normalized
-    return undefined
+      const styleMatch = (el.attr('style') ?? '').match(/url\((['"]?)(.+?)\1\)/i)
+      if (styleMatch?.[2]) galleryCandidates.push(styleMatch[2])
+    })
+
+    const normalized = normalizeImageList([...directCandidates, ...galleryCandidates], detailUrl)
+    if (normalized.length > 0) return normalized.slice(0, 18)
+
+    const fallback = extractImageCandidate($('body').first(), baseUrl)
+    return fallback ? [fallback] : []
   } catch {
-    return undefined
+    return []
   }
 }
 
 async function enrichImagesFromDetail(items: InternalListing[], provider: ProviderConfig): Promise<void> {
-  const missing = items.filter((item) => item.imageUrl === FALLBACK_IMAGE).slice(0, 16)
-  if (missing.length === 0) return
+  const target =
+    provider.id === 'vtb'
+      ? items.slice(0, 50)
+      : items.filter((item) => item.imageUrl === FALLBACK_IMAGE).slice(0, 16)
+
+  if (target.length === 0) return
 
   const chunks: InternalListing[][] = []
-  for (let i = 0; i < missing.length; i += 4) {
-    chunks.push(missing.slice(i, i + 4))
+  for (let i = 0; i < target.length; i += 3) {
+    chunks.push(target.slice(i, i + 3))
   }
 
   for (const chunk of chunks) {
     const results = await Promise.all(
       chunk.map(async (item) => ({
         item,
-        image: await fetchDetailImage(item.detailUrl, provider.url),
+        images: await fetchDetailImages(item.detailUrl, provider.url),
       })),
     )
-    results.forEach(({ item, image }) => {
-      if (image) item.imageUrl = image
+    results.forEach(({ item, images }) => {
+      if (images.length > 0) {
+        item.imageUrls = images
+        item.imageUrl = images[0]
+        return
+      }
+
+      if (isRealImage(item.imageUrl)) {
+        item.imageUrls = [item.imageUrl]
+      } else {
+        item.imageUrls = []
+      }
     })
   }
 }
@@ -619,6 +691,7 @@ export async function collectListings(
 
   const collected = settled
     .flatMap((entry) => entry.items)
+    .filter((item) => hasUsableImage(item))
     .sort((a, b) => b.priceRub - a.priceRub)
     .slice(0, 100)
 

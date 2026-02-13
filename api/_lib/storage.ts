@@ -82,6 +82,7 @@ async function ensureSchema(pool: Pool) {
       mileage_km INTEGER NULL,
       location TEXT NULL,
       image_url TEXT NOT NULL,
+      image_urls JSONB NOT NULL DEFAULT '[]'::jsonb,
       detail_url TEXT NOT NULL,
       description TEXT NOT NULL,
       badges JSONB NOT NULL,
@@ -104,6 +105,30 @@ async function ensureSchema(pool: Pool) {
     CREATE INDEX IF NOT EXISTS idx_listing_price_history_listing_time
     ON listing_price_history(listing_id, recorded_at DESC);
   `)
+
+  await pool.query(`
+    ALTER TABLE listings_current
+    ADD COLUMN IF NOT EXISTS image_urls JSONB NOT NULL DEFAULT '[]'::jsonb;
+  `)
+}
+
+function toProxyImageUrl(rawUrl: string | undefined, providerUrl: string): string {
+  const normalized = (() => {
+    const raw = rawUrl?.trim()
+    if (!raw) return undefined
+    if (raw.startsWith('http://') || raw.startsWith('https://')) return raw
+    if (raw.startsWith('//')) return `https:${raw}`
+    if (raw.startsWith('/')) {
+      try {
+        return new URL(raw, providerUrl).toString()
+      } catch {
+        return undefined
+      }
+    }
+    return undefined
+  })()
+
+  return normalized ? `/api/image?src=${encodeURIComponent(normalized)}` : '/api/image'
 }
 
 function toPublicItem(item: InternalListing, stats?: PriceStats): PublicListing {
@@ -115,20 +140,10 @@ function toPublicItem(item: InternalListing, stats?: PriceStats): PublicListing 
       }
     : estimateMarket(item.priceRub)
 
-  const normalizedImageUrl = (() => {
-    const raw = item.imageUrl?.trim()
-    if (!raw) return undefined
-    if (raw.startsWith('http://') || raw.startsWith('https://')) return raw
-    if (raw.startsWith('//')) return `https:${raw}`
-    if (raw.startsWith('/')) {
-      try {
-        return new URL(raw, item.source.providerUrl).toString()
-      } catch {
-        return undefined
-      }
-    }
-    return undefined
-  })()
+  const normalizedGallery = item.imageUrls
+    .map((url) => toProxyImageUrl(url, item.source.providerUrl))
+    .filter(Boolean)
+  const imageUrl = toProxyImageUrl(item.imageUrl, item.source.providerUrl)
 
   return {
     id: item.id,
@@ -141,9 +156,8 @@ function toPublicItem(item: InternalListing, stats?: PriceStats): PublicListing 
     year: item.year,
     mileageKm: item.mileageKm,
     location: item.location,
-    imageUrl: normalizedImageUrl
-      ? `/api/image?src=${encodeURIComponent(normalizedImageUrl)}`
-      : '/api/image',
+    imageUrl,
+    imageUrls: normalizedGallery.length > 0 ? normalizedGallery : [imageUrl],
     detailUrl: 'https://t.me/GONKACONFBOT',
     description: item.description,
     badges: item.badges,
@@ -162,9 +176,9 @@ async function saveToDatabase(pool: Pool, items: InternalListing[]) {
         `
         INSERT INTO listings_current (
           id, title, subtitle, price_rub, year, mileage_km, location,
-          image_url, detail_url, description, badges, discount_percent, source, updated_at
+          image_url, image_urls, detail_url, description, badges, discount_percent, source, updated_at
         ) VALUES (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW()
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NOW()
         )
         ON CONFLICT (id) DO UPDATE SET
           title = EXCLUDED.title,
@@ -174,6 +188,7 @@ async function saveToDatabase(pool: Pool, items: InternalListing[]) {
           mileage_km = EXCLUDED.mileage_km,
           location = EXCLUDED.location,
           image_url = EXCLUDED.image_url,
+          image_urls = EXCLUDED.image_urls,
           detail_url = EXCLUDED.detail_url,
           description = EXCLUDED.description,
           badges = EXCLUDED.badges,
@@ -190,6 +205,7 @@ async function saveToDatabase(pool: Pool, items: InternalListing[]) {
           item.mileageKm ?? null,
           item.location ?? null,
           item.imageUrl,
+          JSON.stringify(item.imageUrls),
           item.detailUrl,
           item.description,
           JSON.stringify(item.badges),
@@ -235,6 +251,7 @@ async function loadFromDatabase(pool: Pool): Promise<CacheBundle | null> {
     mileage_km: number | null
     location: string | null
     image_url: string
+    image_urls: unknown
     detail_url: string
     description: string
     badges: string[]
@@ -245,7 +262,7 @@ async function loadFromDatabase(pool: Pool): Promise<CacheBundle | null> {
     `
     SELECT
       id, title, subtitle, price_rub, year, mileage_km, location,
-      image_url, detail_url, description, badges, discount_percent, source, updated_at
+      image_url, image_urls, detail_url, description, badges, discount_percent, source, updated_at
     FROM listings_current
     ORDER BY price_rub DESC
     LIMIT 150;
@@ -290,6 +307,9 @@ async function loadFromDatabase(pool: Pool): Promise<CacheBundle | null> {
     mileageKm: row.mileage_km ?? undefined,
     location: row.location ?? undefined,
     imageUrl: row.image_url,
+    imageUrls: Array.isArray(row.image_urls)
+      ? row.image_urls.filter((value): value is string => typeof value === 'string')
+      : [],
     detailUrl: row.detail_url,
     description: row.description,
     badges: row.badges,
