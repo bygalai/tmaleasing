@@ -44,7 +44,7 @@ export function CatalogPage({
       ) : null}
 
       {isLoading ? (
-        <p className="text-sm text-white/70">Загружаем предложения...</p>
+        <p className="text-sm text-white/70">Загружаем лучшие предложения...</p>
       ) : (
         <div className="grid gap-4 pb-4">
           {filtered.map((item) => (
