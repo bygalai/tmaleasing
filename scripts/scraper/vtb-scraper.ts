@@ -1070,9 +1070,14 @@ async function closeUnexpectedPages(browser: Awaited<ReturnType<typeof puppeteer
 }
 
 async function scrapeListings(): Promise<ScrapedListing[]> {
+  const isCI = !!process.env.CI
   const browser = await puppeteer.launch({
-    headless: false,
-    args: ['--no-sandbox'],
+    headless: isCI,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      ...(isCI ? ['--disable-dev-shm-usage', '--disable-gpu'] : []),
+    ],
   })
 
   const page = await browser.newPage()
