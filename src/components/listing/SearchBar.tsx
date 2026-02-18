@@ -1,12 +1,36 @@
+import { useRef, useCallback } from 'react'
+
 type SearchBarProps = {
   value: string
   onChange: (value: string) => void
 }
 
 export function SearchBar({ value, onChange }: SearchBarProps) {
+  const glassRef = useRef<HTMLDivElement>(null)
+
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    const rect = glassRef.current?.getBoundingClientRect()
+    if (!rect) return
+    const x = ((e.clientX - rect.left) / rect.width) * 100
+    const y = ((e.clientY - rect.top) / rect.height) * 100
+    glassRef.current!.style.setProperty('--mx', `${x}%`)
+    glassRef.current!.style.setProperty('--my', `${y}%`)
+  }, [])
+
+  const handlePointerLeave = useCallback(() => {
+    glassRef.current?.style.setProperty('--mx', '50%')
+    glassRef.current?.style.setProperty('--my', '50%')
+  }, [])
+
   return (
     <label className="mx-auto block w-full max-w-[560px]">
-      <div className="liquid-glass rounded-2xl">
+      <div
+        ref={glassRef}
+        className="liquid-glass rounded-2xl"
+        onPointerMove={handlePointerMove}
+        onPointerLeave={handlePointerLeave}
+      >
+        <span className="liquid-glass-shimmer" aria-hidden="true" />
         <input
           type="search"
           value={value}

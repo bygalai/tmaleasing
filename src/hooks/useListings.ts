@@ -48,6 +48,8 @@ function normalizeEngine(value: string | null): string | null {
   out = out.replace(/^\d+\s*\/\s*/i, '')
   out = out.replace(/^\d+\s*(см3|см\^?3|cc)\s*\/\s*/i, '')
 
+  out = out.replace(/\s*\/\s*/g, ', ')
+
   return out || null
 }
 

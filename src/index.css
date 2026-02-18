@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,15 +6,11 @@
 
 :root {
   font-family:
-    'Inter',
     -apple-system,
     BlinkMacSystemFont,
-    'Segoe UI',
-    Roboto,
-    Oxygen,
-    Ubuntu,
-    Cantarell,
-    'Open Sans',
+    'SF Pro Text',
+    system-ui,
+    'Inter',
     'Helvetica Neue',
     sans-serif;
   font-synthesis: none;
@@ -42,54 +38,142 @@ body {
   background: #ffffff;
 }
 
+/* ── Liquid Glass ────────────────────────────────────────── */
+
 .liquid-glass {
+  --mx: 50%;
+  --my: 50%;
+
   position: relative;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.55);
-  border: 1px solid rgba(15, 23, 42, 0.12);
+
+  background: linear-gradient(
+    168deg,
+    rgba(255, 255, 255, 0.82) 0%,
+    rgba(255, 255, 255, 0.52) 45%,
+    rgba(255, 255, 255, 0.64) 100%
+  );
+
+  border: 1px solid rgba(255, 255, 255, 0.70);
+
   box-shadow:
-    0 14px 35px rgba(15, 23, 42, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.75),
-    inset 0 -1px 0 rgba(15, 23, 42, 0.06);
-  -webkit-backdrop-filter: blur(18px) saturate(170%) contrast(110%);
-  backdrop-filter: blur(18px) saturate(170%) contrast(110%);
+    0 0 0 0.5px rgba(15, 23, 42, 0.06),
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 4px 12px rgba(15, 23, 42, 0.05),
+    0 14px 36px rgba(15, 23, 42, 0.09),
+    inset 0 0.5px 0 rgba(255, 255, 255, 1),
+    inset 0 -0.5px 0 rgba(15, 23, 42, 0.04);
+
+  -webkit-backdrop-filter: blur(40px) saturate(190%) brightness(108%);
+  backdrop-filter: blur(40px) saturate(190%) brightness(108%);
+
   transition:
-    border-color 160ms ease,
-    box-shadow 160ms ease,
-    background-color 160ms ease;
+    border-color 320ms cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 320ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* Specular highlight — tracks pointer position */
 .liquid-glass::before {
   content: '';
   pointer-events: none;
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background:
-    radial-gradient(700px 160px at 20% 0%, rgba(255, 255, 255, 0.90), transparent 60%),
-    radial-gradient(520px 260px at 90% 115%, rgba(255, 92, 52, 0.16), transparent 68%),
-    radial-gradient(420px 220px at -10% 80%, rgba(59, 130, 246, 0.10), transparent 70%);
-  opacity: 0.55;
+  background: radial-gradient(
+    ellipse 260px 140px at var(--mx) var(--my),
+    rgba(255, 255, 255, 0.95) 0%,
+    rgba(255, 255, 255, 0.30) 30%,
+    transparent 68%
+  );
+  opacity: 0.45;
+  transition: opacity 500ms cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 2;
 }
 
+/* Top-edge refraction + subtle warm / cool accents */
 .liquid-glass::after {
   content: '';
   pointer-events: none;
   position: absolute;
-  inset: 1px;
+  inset: 0;
   border-radius: inherit;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.70), rgba(255, 255, 255, 0.10));
+  background:
+    linear-gradient(
+      178deg,
+      rgba(255, 255, 255, 0.72) 0%,
+      transparent 35%
+    ),
+    radial-gradient(
+      500px 180px at 90% 120%,
+      rgba(255, 92, 52, 0.07),
+      transparent 65%
+    ),
+    radial-gradient(
+      400px 200px at -10% 100%,
+      rgba(59, 130, 246, 0.05),
+      transparent 65%
+    );
   mix-blend-mode: overlay;
-  opacity: 0.35;
+  opacity: 0.70;
+  z-index: 2;
 }
 
+.liquid-glass:hover::before {
+  opacity: 0.82;
+}
+
+/* Focus — brand-accent glow ring */
 .liquid-glass:focus-within {
-  border-color: rgba(255, 92, 52, 0.35);
+  border-color: rgba(255, 92, 52, 0.28);
   box-shadow:
-    0 14px 35px rgba(15, 23, 42, 0.12),
-    0 0 0 1px rgba(255, 92, 52, 0.22),
-    inset 0 1px 0 rgba(255, 255, 255, 0.75),
-    inset 0 -1px 0 rgba(15, 23, 42, 0.06);
+    0 0 0 0.5px rgba(255, 92, 52, 0.18),
+    0 0 0 3px rgba(255, 92, 52, 0.08),
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 4px 12px rgba(15, 23, 42, 0.05),
+    0 14px 36px rgba(15, 23, 42, 0.09),
+    inset 0 0.5px 0 rgba(255, 255, 255, 1),
+    inset 0 -0.5px 0 rgba(15, 23, 42, 0.04);
+}
+
+.liquid-glass:focus-within::before {
+  opacity: 0.68;
+}
+
+/* Shimmer sweep */
+.liquid-glass-shimmer {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  z-index: 3;
+  overflow: hidden;
+}
+
+.liquid-glass-shimmer::before {
+  content: '';
+  position: absolute;
+  top: -20%;
+  left: -60%;
+  width: 38%;
+  height: 140%;
+  background: linear-gradient(
+    105deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.50) 47%,
+    rgba(255, 255, 255, 0.78) 50%,
+    rgba(255, 255, 255, 0.50) 53%,
+    transparent 70%
+  );
+  transform: skewX(-18deg);
+  animation: liquid-shimmer 7s 1.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  opacity: 0;
+}
+
+@keyframes liquid-shimmer {
+  0%   { left: -60%; opacity: 0; }
+  4%   { opacity: 0.7; }
+  28%  { left: 140%; opacity: 0; }
+  100% { left: 140%; opacity: 0; }
 }
 
 .liquid-glass-apple-dark {
@@ -133,5 +217,12 @@ body {
 h1,
 h2,
 h3 {
-  font-family: 'Manrope', 'Inter', sans-serif;
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    'SF Pro Display',
+    system-ui,
+    'Inter',
+    'Helvetica Neue',
+    sans-serif;
 }
