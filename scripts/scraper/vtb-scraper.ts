@@ -615,25 +615,54 @@ async function configurePageForStealth(page: Page): Promise<void> {
   })
 }
 
+function getCurrentPageNumber(url: string): number {
+  try {
+    const parsed = new URL(url, TARGET_URL)
+    const value = parsed.searchParams.get('PAGEN_1')
+    const pageNumber = value ? Number(value) : 1
+    return Number.isFinite(pageNumber) && pageNumber > 0 ? pageNumber : 1
+  } catch {
+    return 1
+  }
+}
+
+function buildNextPageUrl(currentUrl: string): string {
+  const currentPage = getCurrentPageNumber(currentUrl)
+  const parsed = new URL(currentUrl, TARGET_URL)
+  parsed.searchParams.set('PAGEN_1', String(currentPage + 1))
+  return parsed.toString()
+}
+
 async function extractNextPageUrl(page: Page, currentUrl: string): Promise<string | null> {
-  const nextUrl = await page.evaluate((activeUrl) => {
+  const currentPage = getCurrentPageNumber(currentUrl)
+
+  const nextUrl = await page.evaluate((ctx: { activeUrl: string; currentPage: number }) => {
     const candidateAnchors = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href]'))
     const patterns = [/next/i, /след/i, />/, /»/, /›/]
-    const currentPage = (() => {
-      try {
-        const parsed = new URL(activeUrl, window.location.origin)
-        const value = parsed.searchParams.get('PAGEN_1')
-        const pageNumber = value ? Number(value) : 1
-        return Number.isFinite(pageNumber) && pageNumber > 0 ? pageNumber : 1
-      } catch {
-        return 1
-      }
-    })()
     const pagedCandidates: Array<{ page: number; url: string }> = []
 
     for (const a of candidateAnchors) {
       const href = a.getAttribute('href')
       if (!href) continue
+
+      let absolute: string
+      try {
+        absolute = new URL(href, window.location.origin).toString()
+      } catch {
+        continue
+      }
+      if (!absolute.includes('vtb-leasing.ru')) continue
+      if (!absolute.includes('/auto-market/')) continue
+
+      const parsedAbsolute = new URL(absolute, window.location.origin)
+      const pageParam = parsedAbsolute.searchParams.get('PAGEN_1')
+      if (pageParam) {
+        const pageNum = Number(pageParam)
+        if (Number.isFinite(pageNum) && pageNum > ctx.currentPage) {
+          pagedCandidates.push({ page: pageNum, url: absolute })
+        }
+      }
+
       const text = (a.textContent ?? '').trim()
       const rel = a.getAttribute('rel') ?? ''
       const cls = a.className ?? ''
@@ -645,36 +674,23 @@ async function extractNextPageUrl(page: Page, currentUrl: string): Promise<strin
         /next|след/i.test(cls) ||
         /next|след/i.test(ariaLabel)
 
-      if (!looksLikeNext) continue
-
-      try {
-        const absolute = new URL(href, window.location.origin).toString()
-        if (!absolute.includes('vtb-leasing.ru')) continue
-        if (!absolute.includes('/auto-market/')) continue
-        const parsedAbsolute = new URL(absolute, window.location.origin)
-        const pageParam = parsedAbsolute.searchParams.get('PAGEN_1')
-        if (pageParam) {
-          const pageNum = Number(pageParam)
-          if (Number.isFinite(pageNum) && pageNum > currentPage) {
-            pagedCandidates.push({ page: pageNum, url: absolute })
-          }
-        }
-        if (absolute !== activeUrl) return absolute
-      } catch {
-        // ignore malformed URL candidates
+      if (looksLikeNext && absolute !== ctx.activeUrl) {
+        pagedCandidates.push({ page: ctx.currentPage + 1, url: absolute })
       }
     }
 
     if (pagedCandidates.length > 0) {
       pagedCandidates.sort((a, b) => a.page - b.page)
-      const exactNext = pagedCandidates.find((item) => item.page === currentPage + 1)
+      const exactNext = pagedCandidates.find((item) => item.page === ctx.currentPage + 1)
       return exactNext?.url ?? pagedCandidates[0].url
     }
 
     return null
-  }, currentUrl)
+  }, { activeUrl: currentUrl, currentPage })
 
-  return nextUrl
+  if (nextUrl) return nextUrl
+
+  return buildNextPageUrl(currentUrl)
 }
 
 function extractJsonLdBlocks(html: string): unknown[] {
@@ -1129,6 +1145,8 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
     const maxPagesRaw = Number(process.env.VTB_MAX_PAGES ?? '20')
     const maxPages = Number.isFinite(maxPagesRaw) && maxPagesRaw > 0 ? Math.floor(maxPagesRaw) : 20
 
+    let emptyPagesInARow = 0
+
     while (currentUrl && pageIndex < maxPages) {
       if (!isAutoMarketUrl(currentUrl)) {
         throw new Error(`Blocked non-target URL before navigation: ${currentUrl}`)
@@ -1138,6 +1156,7 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
       pageIndex += 1
 
       const navigationUrl = pageIndex === 1 ? TARGET_URL : currentUrl
+      console.log(`\n--- Page ${pageIndex}/${maxPages}: ${navigationUrl} ---`)
       await page.goto(navigationUrl, { waitUntil: 'domcontentloaded' })
       const finalUrl = page.url()
       console.log(`Final URL after goto: ${finalUrl}`)
@@ -1147,7 +1166,6 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
       }
       await closeUnexpectedPages(browser, page)
       await sleep(10_000)
-      // Provide scroll override to the page context without page.evaluate args (avoid __name issues).
       await page.evaluate(
         `window.__VTB_SCROLL_PASSES = ${JSON.stringify(process.env.VTB_SCROLL_PASSES ?? '')}`
       )
@@ -1155,9 +1173,9 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
       console.log('HTML length:', html.length)
       try {
         await waitForListingContainer(page)
-      } catch (error) {
-        await page.screenshot({ path: 'debug-vtb.png', fullPage: true })
-        throw error
+      } catch {
+        console.log(`No listings found on page ${pageIndex}, stopping pagination`)
+        break
       }
       await humanReadDelay()
       await randomDelay(800, 1800)
@@ -1195,6 +1213,7 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
         }
       }
 
+      const sizeBefore = collected.size
       const domCards = await extractRawCardsFromPage(page)
       const rawCards = dedupeRawCards([
         ...interceptedApiRawCards.values(),
@@ -1208,6 +1227,19 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
           `Found: ${mapped.title} | Price: ${mapped.price ?? 'NULL'} | Image: ${mapped.images[0] ?? 'NULL'} | URL: ${mapped.listing_url}`
         )
         collected.set(mapped.external_id, mapped)
+      }
+
+      const newOnThisPage = collected.size - sizeBefore
+      console.log(`Page ${pageIndex}: +${newOnThisPage} new (${collected.size} total)`)
+
+      if (newOnThisPage === 0) {
+        emptyPagesInARow += 1
+        if (emptyPagesInARow >= 3) {
+          console.log('3 consecutive pages with no new listings, stopping')
+          break
+        }
+      } else {
+        emptyPagesInARow = 0
       }
 
       const nextUrl = await extractNextPageUrl(page, currentUrl)
