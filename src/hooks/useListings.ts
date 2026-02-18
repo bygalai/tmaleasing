@@ -44,9 +44,10 @@ function normalizeEngine(value: string | null): string | null {
   let out = value.replace(/\s+/g, ' ').trim()
   if (!out) return null
 
-  // Common format from VTB: "1494 / 181 л.с. / Бензин" -> remove the first number.
   out = out.replace(/^\d+\s*\/\s*/i, '')
   out = out.replace(/^\d+\s*(см3|см\^?3|cc)\s*\/\s*/i, '')
+
+  out = out.replace(/\s*[/,]?\s*\b(трансмиссия|кпп|привод|передний|задний|полный|акпп|мкпп|робот|вариатор|cvt)\b.*/i, '')
 
   out = out.replace(/\s*\/\s*/g, ', ')
 
