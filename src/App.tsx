@@ -20,14 +20,14 @@ function Header() {
     else navigate('/', { replace: true })
   }
 
-  return (
-    <div className="relative flex w-full items-center justify-center">
-      {isListing ? (
+  if (isListing) {
+    return (
+      <div className="relative flex w-full items-center justify-center">
         <button
           type="button"
           onClick={goBack}
           aria-label="Назад в каталог"
-          className="absolute left-0 flex h-10 w-10 items-center justify-center rounded-full border border-black/10 bg-black/5 text-slate-900 shadow-[0_10px_30px_rgba(15,23,42,0.10)] backdrop-blur-xl"
+          className="absolute left-0 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/10 bg-black/5 text-slate-900 shadow-[0_10px_30px_rgba(15,23,42,0.10)] backdrop-blur-xl"
         >
           <svg
             aria-hidden="true"
@@ -42,8 +42,16 @@ function Header() {
             <path d="M15 18l-6-6 6-6" />
           </svg>
         </button>
-      ) : null}
-      <h1 className="min-w-0 whitespace-nowrap text-[38px] font-bold leading-[1] tracking-tight text-[#FF5C34] [font-family:Helvetica,Arial,sans-serif]">
+        <h1 className="whitespace-nowrap font-bold leading-[1] tracking-tight text-[#FF5C34] [font-family:Helvetica,Arial,sans-serif] [font-size:clamp(22px,6vw,32px)]">
+          "GONKA"
+        </h1>
+      </div>
+    )
+  }
+
+  return (
+    <div className="relative flex w-full items-center justify-center">
+      <h1 className="whitespace-nowrap font-bold leading-[1] tracking-tight text-[#FF5C34] [font-family:Helvetica,Arial,sans-serif] [font-size:clamp(24px,7vw,38px)]">
         "GONKA" MARKETPLACE
       </h1>
     </div>

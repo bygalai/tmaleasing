@@ -70,6 +70,13 @@ function normalizeDrivetrain(value: string | null): string | null {
   return raw
 }
 
+function lowercaseFirstLetter(value: string | null): string | null {
+  if (!value) return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  return trimmed[0].toLowerCase() + trimmed.slice(1)
+}
+
 function mapRowToListing(row: ListingsRow): Listing {
   const priceRub = Math.round(toNumber(row.price) ?? 0)
   const mileageKm = toNumber(row.mileage)
@@ -84,14 +91,17 @@ function mapRowToListing(row: ListingsRow): Listing {
     (part): part is string => Boolean(part && part.trim()),
   )
 
+  const bodyColorForDescription = lowercaseFirstLetter(row.body_color)
+  const drivetrainForDescription = lowercaseFirstLetter(drivetrain)
+
   const descriptionParts = [
     row.city ? `Город: ${row.city}` : null,
     year ? `Год: ${year}` : null,
     mileageKm !== undefined ? `Пробег: ${Math.round(mileageKm)} км` : null,
     engine ? `Двигатель: ${engine}` : null,
     row.transmission ? `КПП: ${row.transmission}` : null,
-    drivetrain ? `Привод: ${drivetrain}` : null,
-    row.body_color ? `Цвет: ${row.body_color}` : null,
+    drivetrainForDescription ? `Привод: ${drivetrainForDescription}` : null,
+    bodyColorForDescription ? `Цвет: ${bodyColorForDescription}` : null,
     row.vin ? `VIN: ${row.vin}` : null,
   ].filter((part): part is string => Boolean(part))
 

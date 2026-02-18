@@ -64,7 +64,7 @@ export function ListingPage({ items, isFavorite, toggleFavorite }: ListingPagePr
 
       <div className="rounded-2xl border border-black/10 bg-black/5 p-4 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur-xl">
         <p className="mb-2 text-sm font-medium text-slate-900">Описание</p>
-        <p className="text-sm leading-relaxed text-slate-700">{item.description}</p>
+        <p className="whitespace-pre-line text-sm leading-relaxed text-slate-700">{item.description}</p>
       </div>
 
       <a
