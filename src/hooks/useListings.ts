@@ -39,6 +39,37 @@ function isBadImageUrl(url: string): boolean {
   return false
 }
 
+function normalizeEngine(value: string | null): string | null {
+  if (!value) return null
+  let out = value.replace(/\s+/g, ' ').trim()
+  if (!out) return null
+
+  // Common format from VTB: "1494 / 181 л.с. / Бензин" -> remove the first number.
+  out = out.replace(/^\d+\s*\/\s*/i, '')
+  out = out.replace(/^\d+\s*(см3|см\^?3|cc)\s*\/\s*/i, '')
+
+  return out || null
+}
+
+function normalizeDrivetrain(value: string | null): string | null {
+  if (!value) return null
+  const raw = value.replace(/\s+/g, ' ').trim()
+  if (!raw) return null
+
+  // Schema.org enums sometimes leak into data as plain strings.
+  const lowered = raw.toLowerCase()
+  if (lowered.includes('frontwheeldriveconfiguration')) return 'Передний привод'
+  if (lowered.includes('rearwheeldriveconfiguration')) return 'Задний привод'
+  if (lowered.includes('fourwheeldriveconfiguration')) return 'Полный привод'
+  if (lowered.includes('allwheeldriveconfiguration')) return 'Полный привод'
+
+  // Drop other english-ish technical leftovers.
+  if (/[A-Za-z]/.test(raw) && /configuration$/i.test(raw)) return null
+  if (/[A-Za-z]/.test(raw) && raw.length > 18) return null
+
+  return raw
+}
+
 function mapRowToListing(row: ListingsRow): Listing {
   const priceRub = Math.round(toNumber(row.price) ?? 0)
   const mileageKm = toNumber(row.mileage)
@@ -47,7 +78,9 @@ function mapRowToListing(row: ListingsRow): Listing {
   const imageUrls = (row.images ?? []).filter((url): url is string => Boolean(url && !isBadImageUrl(url)))
   const imageUrl = imageUrls[0] ?? FALLBACK_IMAGE
 
-  const subtitleParts = [row.body_color, row.engine, row.transmission, row.drivetrain].filter(
+  const engine = normalizeEngine(row.engine)
+  const drivetrain = normalizeDrivetrain(row.drivetrain)
+  const subtitleParts = [row.body_color, engine, row.transmission, drivetrain].filter(
     (part): part is string => Boolean(part && part.trim()),
   )
 
@@ -55,9 +88,9 @@ function mapRowToListing(row: ListingsRow): Listing {
     row.city ? `Город: ${row.city}` : null,
     year ? `Год: ${year}` : null,
     mileageKm !== undefined ? `Пробег: ${Math.round(mileageKm)} км` : null,
-    row.engine ? `Двигатель: ${row.engine}` : null,
+    engine ? `Двигатель: ${engine}` : null,
     row.transmission ? `КПП: ${row.transmission}` : null,
-    row.drivetrain ? `Привод: ${row.drivetrain}` : null,
+    drivetrain ? `Привод: ${drivetrain}` : null,
     row.body_color ? `Цвет: ${row.body_color}` : null,
     row.vin ? `VIN: ${row.vin}` : null,
   ].filter((part): part is string => Boolean(part))

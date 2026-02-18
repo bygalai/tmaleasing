@@ -1,8 +1,6 @@
-import { useState } from 'react'
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { AppLayout } from './components/layout/AppLayout'
-import { MenuButton } from './components/navigation/MenuButton'
-import { MenuDrawer } from './components/navigation/MenuDrawer'
+import { BottomNav } from './components/navigation/BottomNav'
 import { useFavorites } from './hooks/useFavorites'
 import { useListings } from './hooks/useListings'
 import { AboutPage } from './pages/AboutPage'
@@ -13,35 +11,53 @@ import { ProfilePage } from './pages/ProfilePage'
 
 function Header() {
   const location = useLocation()
-  const pageTitle =
-    location.pathname === '/'
-      ? 'Маркетплейс техники'
-      : location.pathname.startsWith('/listing/')
-        ? 'Карточка техники'
-        : location.pathname === '/favorites'
-          ? 'Избранное'
-          : location.pathname === '/profile'
-            ? 'Профиль'
-            : 'О нас'
+  const navigate = useNavigate()
+  const isListing = location.pathname.startsWith('/listing/')
+
+  const goBack = () => {
+    // In Mini Apps the history stack can be empty, so keep a safe fallback.
+    if (window.history.length > 1) navigate(-1)
+    else navigate('/', { replace: true })
+  }
 
   return (
-    <div className="space-y-1">
-      <p className="text-xs tracking-[0.2em] text-white/60">GONKA</p>
-      <h1 className="text-xl font-semibold text-[#F2F3F5]">{pageTitle}</h1>
+    <div className="relative flex w-full items-center justify-center">
+      {isListing ? (
+        <button
+          type="button"
+          onClick={goBack}
+          aria-label="Назад в каталог"
+          className="absolute left-0 flex h-10 w-10 items-center justify-center rounded-full border border-black/10 bg-black/5 text-slate-900 shadow-[0_10px_30px_rgba(15,23,42,0.10)] backdrop-blur-xl"
+        >
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            className="h-6 w-6"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+        </button>
+      ) : null}
+      <h1 className="min-w-0 whitespace-nowrap text-[38px] font-bold leading-[1] tracking-tight text-[#FF5C34] [font-family:Helvetica,Arial,sans-serif]">
+        "GONKA" MARKETPLACE
+      </h1>
     </div>
   )
 }
 
 function App() {
-  const [menuOpen, setMenuOpen] = useState(false)
   const { items, isLoading, error } = useListings()
   const { isFavorite, toggleFavorite } = useFavorites()
 
   return (
     <AppLayout>
-      <header className="mb-5 flex items-center justify-between gap-4">
+      <header className="mb-5 flex items-center justify-center">
         <Header />
-        <MenuButton onClick={() => setMenuOpen(true)} />
       </header>
 
       <Routes>
@@ -74,7 +90,7 @@ function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
 
-      <MenuDrawer isOpen={menuOpen} onClose={() => setMenuOpen(false)} />
+      <BottomNav />
     </AppLayout>
   )
 }

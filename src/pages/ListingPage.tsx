@@ -30,24 +30,27 @@ export function ListingPage({ items, isFavorite, toggleFavorite }: ListingPagePr
 
       <div className="space-y-2">
         <div className="flex items-start justify-between gap-2">
-          <h1 className="text-2xl font-semibold text-[#F2F3F5]">{item.title}</h1>
+          <h1 className="text-2xl font-semibold text-slate-900">{item.title}</h1>
           <button
             type="button"
             onClick={() => toggleFavorite(item.id)}
-            className="rounded-full border border-white/15 bg-black/20 px-3 py-1 text-sm text-white/90"
+            aria-label={isFavorite(item.id) ? 'Убрать из избранного' : 'Добавить в избранное'}
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-black/10 bg-black/5 text-2xl leading-none text-slate-900 shadow-[0_10px_30px_rgba(15,23,42,0.10)] backdrop-blur-xl"
           >
-            {isFavorite(item.id) ? '♥ В избранном' : '♡ В избранное'}
+            {isFavorite(item.id) ? '♥' : '♡'}
           </button>
         </div>
-        <p className="text-sm text-white/70">{item.subtitle}</p>
+        <p className="text-sm text-slate-600">{item.subtitle}</p>
       </div>
 
-      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-        <p className="text-lg font-semibold text-[#FF5C34]">{formatPriceRub(item.priceRub)}</p>
-        <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-white/70">
+      <div className="rounded-2xl border border-black/10 bg-black/5 p-4 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur-xl">
+        <p className="text-3xl font-bold tabular-nums tracking-tight text-[#FF5C34]">
+          {formatPriceRub(item.priceRub)}
+        </p>
+        <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-600">
           <span>Год: {item.year ?? '—'}</span>
-          <span>{formatMileage(item.mileageKm)}</span>
-          <span>Город: {item.location ?? '—'}</span>
+          <span>Пробег: {formatMileage(item.mileageKm)}</span>
+          <span>{item.location ?? '—'}</span>
           <span>Юридическая проверка</span>
         </div>
       </div>
@@ -59,9 +62,9 @@ export function ListingPage({ items, isFavorite, toggleFavorite }: ListingPagePr
         marketHighRub={item.marketHighRub}
       />
 
-      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-        <p className="mb-2 text-sm font-medium text-[#F2F3F5]">Описание</p>
-        <p className="text-sm leading-relaxed text-white/75">{item.description}</p>
+      <div className="rounded-2xl border border-black/10 bg-black/5 p-4 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur-xl">
+        <p className="mb-2 text-sm font-medium text-slate-900">Описание</p>
+        <p className="text-sm leading-relaxed text-slate-700">{item.description}</p>
       </div>
 
       <a

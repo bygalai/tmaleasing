@@ -5,15 +5,29 @@ type SearchBarProps = {
 
 export function SearchBar({ value, onChange }: SearchBarProps) {
   return (
-    <label className="block">
-      <span className="mb-2 block text-xs tracking-[0.14em] text-white/65">ПОИСК ТЕХНИКИ</span>
-      <input
-        type="search"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder="Марка, модель, город, год"
-        className="w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-[#F2F3F5] outline-none placeholder:text-white/45 focus:border-[#FF5C34]"
-      />
+    <label className="mx-auto block w-full max-w-[560px]">
+      <div className="liquid-glass rounded-2xl">
+        <input
+          type="search"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder="Марка, модель, город, год..."
+          className="relative z-10 w-full bg-transparent px-4 py-3 pr-11 text-sm text-slate-900 outline-none placeholder:italic placeholder:text-slate-500"
+        />
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 24 24"
+          className="pointer-events-none absolute right-4 top-1/2 z-10 h-5 w-5 -translate-y-1/2 text-slate-400"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <circle cx="11" cy="11" r="7" />
+          <path d="M20 20l-3.5-3.5" />
+        </svg>
+      </div>
     </label>
   )
 }

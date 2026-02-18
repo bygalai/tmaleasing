@@ -38,13 +38,13 @@ export function CatalogPage({
       <SearchBar value={query} onChange={setQuery} />
 
       {error ? (
-        <div className="rounded-xl border border-[#FF5C34]/40 bg-[#FF5C34]/10 px-3 py-2 text-xs text-[#FFD1C7]">
+        <div className="mx-auto max-w-[560px] rounded-xl border border-[#FF5C34]/40 bg-[#FF5C34]/10 px-3 py-2 text-xs text-[#9A3412]">
           {error}
         </div>
       ) : null}
 
       {isLoading ? (
-        <p className="text-sm text-white/70">Загружаем лучшие предложения...</p>
+        <p className="text-center text-sm text-slate-600">Загружаем лучшие предложения...</p>
       ) : (
         <div className="grid gap-4 pb-4">
           {filtered.map((item) => (
@@ -56,7 +56,7 @@ export function CatalogPage({
             />
           ))}
           {filtered.length === 0 ? (
-            <div className="rounded-2xl border border-white/10 bg-black/20 p-6 text-sm text-white/70">
+            <div className="mx-auto w-full max-w-[560px] rounded-2xl border border-black/10 bg-black/5 p-6 text-center text-sm text-slate-600">
               По вашему запросу ничего не найдено.
             </div>
           ) : null}

@@ -38,8 +38,96 @@ body,
 
 body {
   min-width: 320px;
-  color: #f2f3f5;
-  background: #11141a;
+  color: #0f172a;
+  background: #ffffff;
+}
+
+.liquid-glass {
+  position: relative;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  box-shadow:
+    0 14px 35px rgba(15, 23, 42, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75),
+    inset 0 -1px 0 rgba(15, 23, 42, 0.06);
+  -webkit-backdrop-filter: blur(18px) saturate(170%) contrast(110%);
+  backdrop-filter: blur(18px) saturate(170%) contrast(110%);
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    background-color 160ms ease;
+}
+
+.liquid-glass::before {
+  content: '';
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(700px 160px at 20% 0%, rgba(255, 255, 255, 0.90), transparent 60%),
+    radial-gradient(520px 260px at 90% 115%, rgba(255, 92, 52, 0.16), transparent 68%),
+    radial-gradient(420px 220px at -10% 80%, rgba(59, 130, 246, 0.10), transparent 70%);
+  opacity: 0.55;
+}
+
+.liquid-glass::after {
+  content: '';
+  pointer-events: none;
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.70), rgba(255, 255, 255, 0.10));
+  mix-blend-mode: overlay;
+  opacity: 0.35;
+}
+
+.liquid-glass:focus-within {
+  border-color: rgba(255, 92, 52, 0.35);
+  box-shadow:
+    0 14px 35px rgba(15, 23, 42, 0.12),
+    0 0 0 1px rgba(255, 92, 52, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75),
+    inset 0 -1px 0 rgba(15, 23, 42, 0.06);
+}
+
+.liquid-glass-apple-dark {
+  position: relative;
+  overflow: hidden;
+  /* Lighter / more transparent "iOS-like" glass on white background */
+  background: rgba(255, 255, 255, 0.30);
+  border: 1px solid rgba(15, 23, 42, 0.10);
+  box-shadow:
+    0 22px 60px rgba(15, 23, 42, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.75),
+    inset 0 -1px 0 rgba(15, 23, 42, 0.08);
+  -webkit-backdrop-filter: blur(24px) saturate(185%) contrast(110%);
+  backdrop-filter: blur(24px) saturate(185%) contrast(110%);
+}
+
+.liquid-glass-apple-dark::before {
+  content: '';
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(900px 220px at 25% 0%, rgba(255, 255, 255, 0.70), transparent 68%),
+    radial-gradient(560px 320px at 110% 130%, rgba(255, 92, 52, 0.14), transparent 72%),
+    radial-gradient(560px 340px at -20% 140%, rgba(59, 130, 246, 0.12), transparent 74%);
+  opacity: 0.75;
+}
+
+.liquid-glass-apple-dark::after {
+  content: '';
+  pointer-events: none;
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.08));
+  mix-blend-mode: overlay;
+  opacity: 0.55;
 }
 
 h1,

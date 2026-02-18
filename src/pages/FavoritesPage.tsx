@@ -12,7 +12,7 @@ export function FavoritesPage({ items, isFavorite, toggleFavorite }: FavoritesPa
 
   if (favorites.length === 0) {
     return (
-      <section className="rounded-2xl border border-white/10 bg-black/20 p-6 text-sm text-white/70">
+      <section className="rounded-2xl border border-black/10 bg-black/5 p-6 text-sm text-slate-600">
         Здесь появится техника, которую вы лайкнули.
       </section>
     )
