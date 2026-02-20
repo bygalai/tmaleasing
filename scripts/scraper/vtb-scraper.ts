@@ -1342,6 +1342,7 @@ async function run(): Promise<void> {
     } else {
       const deletedCount = deleted?.length ?? 0
       console.log(`Cleaned up ${deletedCount} unenriched skeleton rows`)
+    }
   } catch (error) {
     console.error('Scraper failed:', error)
     process.exitCode = 1
