@@ -1004,11 +1004,9 @@ async function enrichListingsFromDetailsViaBrowserPage(
   listingsMap: Map<string, ScrapedListing>
 ): Promise<void> {
   const listings = [...listingsMap.values()].filter((l) => isListingDetailUrl(l.listing_url))
-  const limit = Number(process.env.VTB_ENRICH_LIMIT ?? '50')
-  const target = Number.isFinite(limit) && limit > 0 ? Math.min(limit, listings.length) : listings.length
 
   let enrichedCount = 0
-  for (let i = 0; i < target; i += 1) {
+  for (let i = 0; i < listings.length; i += 1) {
     const listing = listings[i]
     const needsEnrichment =
       listing.price == null ||
@@ -1070,7 +1068,7 @@ async function enrichListingsFromDetailsViaBrowserPage(
       Number.isFinite(delayMax) && delayMax >= 0 ? delayMax : 900
     )
   }
-  console.log(`Detail enrichment completed (browser): ${enrichedCount} rows processed (limit=${target})`)
+  console.log(`Detail enrichment completed: ${enrichedCount} / ${listings.length} rows enriched`)
 }
 
 async function closeUnexpectedPages(browser: Awaited<ReturnType<typeof puppeteer.launch>>, mainPage: Page): Promise<void> {

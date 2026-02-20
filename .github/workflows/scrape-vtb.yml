@@ -8,13 +8,9 @@ on:
   workflow_dispatch:
     inputs:
       max_pages:
-        description: 'Max catalogue pages to scrape'
+        description: 'Max catalogue pages to scrape (each page ≈ 25 cars)'
         required: false
         default: '20'
-      enrich_limit:
-        description: 'Max detail pages to enrich'
-        required: false
-        default: '50'
 
 concurrency:
   group: vtb-scraper
@@ -29,7 +25,6 @@ jobs:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
       VTB_MAX_PAGES: ${{ github.event.inputs.max_pages || '20' }}
-      VTB_ENRICH_LIMIT: ${{ github.event.inputs.enrich_limit || '50' }}
 
     steps:
       - name: Checkout repository
