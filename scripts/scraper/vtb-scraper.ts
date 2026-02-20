@@ -1280,74 +1280,76 @@ async function run(): Promise<void> {
       return
     }
 
-    // Step 1: Insert skeleton rows for newly discovered listings.
-    // ignoreDuplicates ensures existing rows are NOT overwritten, preserving
-    // previously enriched data (images, price, etc.) from earlier runs.
-    const skeletons = listings.map((l) => ({
-      external_id: l.external_id,
-      title: l.title,
-      listing_url: l.listing_url,
-      source: l.source,
-      images: l.images.length > 0 ? l.images : [],
-    }))
+    // Only persist enriched listings (ones that have real images).
+    // Unenriched catalog skeletons are discarded — they'll be re-discovered
+    // on the next run and have a chance to be enriched then.
+    const enriched = listings.filter((l) => l.images.length > 0)
+    console.log(`Enriched listings to upsert: ${enriched.length} / ${listings.length} total`)
 
-    const BATCH_SIZE = 500
-    for (let i = 0; i < skeletons.length; i += BATCH_SIZE) {
-      const batch = skeletons.slice(i, i + BATCH_SIZE)
-      const { error: skelErr } = await supabase
-        .from('listings')
-        .upsert(batch, { onConflict: 'external_id', ignoreDuplicates: true })
-      if (skelErr) {
-        console.error('Skeleton insert error:', skelErr)
-        throw skelErr
-      }
-    }
-    console.log(`Skeleton rows ensured for ${listings.length} listings`)
-
-    // Step 2: Update enriched listings with full data.
-    // Only rows that have real data are updated; omitted fields keep existing values.
-    const enrichedRows = listings
-      .filter((l) => l.price != null || l.images.length > 0)
-      .map((l) => {
+    if (enriched.length > 0) {
+      const upsertPayload = enriched.map((listing) => {
         const row: Record<string, unknown> = {
-          external_id: l.external_id,
-          title: l.title,
-          listing_url: l.listing_url,
-          source: l.source,
+          external_id: listing.external_id,
+          title: listing.title,
+          listing_url: listing.listing_url,
+          source: listing.source,
+          images: listing.images,
         }
-        if (l.price != null) row.price = l.price
-        if (l.mileage != null) row.mileage = l.mileage
-        if (l.year != null) row.year = l.year
-        if (l.images.length > 0) row.images = l.images
-        if (l.city != null) row.city = l.city
-        if (l.vin != null) row.vin = l.vin
-        if (l.engine != null) row.engine = l.engine
-        if (l.transmission != null) row.transmission = l.transmission
-        if (l.drivetrain != null) row.drivetrain = l.drivetrain
-        if (l.body_color != null) row.body_color = l.body_color
+
+        if (listing.price != null) row.price = listing.price
+        if (listing.mileage != null) row.mileage = listing.mileage
+        if (listing.year != null) row.year = listing.year
+        if (listing.city != null) row.city = listing.city
+        if (listing.vin != null) row.vin = listing.vin
+        if (listing.engine != null) row.engine = listing.engine
+        if (listing.transmission != null) row.transmission = listing.transmission
+        if (listing.drivetrain != null) row.drivetrain = listing.drivetrain
+        if (listing.body_color != null) row.body_color = listing.body_color
+
         return row
       })
 
-    if (enrichedRows.length > 0) {
-      for (let i = 0; i < enrichedRows.length; i += BATCH_SIZE) {
-        const batch = enrichedRows.slice(i, i + BATCH_SIZE)
-        const { error: enrichErr } = await supabase
+      const BATCH_SIZE = 500
+      for (let i = 0; i < upsertPayload.length; i += BATCH_SIZE) {
+        const batch = upsertPayload.slice(i, i + BATCH_SIZE)
+        const { error } = await supabase
           .from('listings')
           .upsert(batch, { onConflict: 'external_id' })
-        if (enrichErr) {
-          if ((enrichErr as { code?: string }).code === 'PGRST204') {
+
+        if (error) {
+          if ((error as { code?: string }).code === 'PGRST204') {
             console.error(
               "Supabase schema cache doesn't include new columns yet. Apply the migration " +
                 "`supabase/migrations/202602150002_add_listing_specs.sql` in Supabase SQL editor " +
                 "and then reload the PostgREST schema (Dashboard: Project Settings -> API -> Reload schema)."
             )
           }
-          throw enrichErr
+          throw error
         }
       }
+      console.log(`Upserted ${enriched.length} enriched listings`)
     }
 
-    console.log(`Upserted ${listings.length} total (${enrichedRows.length} enriched)`)
+    // Cleanup: remove skeleton rows that were never enriched (no price, empty/null images).
+    // These accumulate from previous runs that inserted catalog data without detail info.
+    const { data: deleted, error: cleanupErr } = await supabase
+      .from('listings')
+      .delete()
+      .eq('source', SOURCE)
+      .is('price', null)
+      .or('images.eq.{},images.is.null')
+      .select('id')
+
+    if (cleanupErr) {
+      console.error('Cleanup warning (non-fatal):', cleanupErr.message)
+    } else {
+      const deletedCount = deleted?.length ?? 0
+      if (deletedCount > 0) {
+        console.log(`Cleaned up ${deletedCount} unenriched skeleton rows`)
+      } else {
+        console.log('No unenriched skeleton rows to clean up')
+      }
+    }
   } catch (error) {
     console.error('Scraper failed:', error)
     process.exitCode = 1
