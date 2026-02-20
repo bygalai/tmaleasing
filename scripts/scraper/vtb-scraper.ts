@@ -1330,26 +1330,20 @@ async function run(): Promise<void> {
       console.log(`Upserted ${enriched.length} enriched listings`)
     }
 
-    // Cleanup: remove skeleton rows that were never enriched (no price, empty/null images).
-    // These accumulate from previous runs that inserted catalog data without detail info.
+    // Cleanup: remove skeleton rows that were never enriched.
+    // Unenriched rows always have price=NULL — enrichment always resolves a price.
     const { data: deleted, error: cleanupErr } = await supabase
       .from('listings')
       .delete()
       .eq('source', SOURCE)
       .is('price', null)
-      .or('images.eq.{},images.is.null')
       .select('id')
 
     if (cleanupErr) {
       console.error('Cleanup warning (non-fatal):', cleanupErr.message)
     } else {
       const deletedCount = deleted?.length ?? 0
-      if (deletedCount > 0) {
-        console.log(`Cleaned up ${deletedCount} unenriched skeleton rows`)
-      } else {
-        console.log('No unenriched skeleton rows to clean up')
-      }
-    }
+      console.log(`Cleaned up ${deletedCount} unenriched skeleton rows`)
   } catch (error) {
     console.error('Scraper failed:', error)
     process.exitCode = 1

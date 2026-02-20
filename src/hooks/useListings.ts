@@ -163,6 +163,7 @@ export function useListings() {
           .select(
             'id,title,price,mileage,year,images,listing_url,created_at,city,vin,engine,transmission,drivetrain,body_color',
           )
+          .not('price', 'is', null)
           .order('created_at', { ascending: false })
 
         if (supabaseError) throw supabaseError
