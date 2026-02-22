@@ -284,6 +284,23 @@ function isVtbCatalogUrl(value: string | null | undefined): boolean {
   }
 }
 
+/**
+ * True only for catalog LIST pages (pagination targets), not detail/lot pages.
+ * Rejects /market/vehicle-slug/ and /auto/probeg/vehicle-slug/ (detail pages).
+ */
+function isCatalogListUrl(value: string | null | undefined): boolean {
+  if (!isVtbCatalogUrl(value)) return false
+  if (!value) return false
+  try {
+    const path = new URL(value, VTB_BASE_URL).pathname
+    if (path.includes('/auto/probeg/')) return false
+    if (path.includes('/market/') && !path.includes('/market/f/')) return false
+    return true
+  } catch {
+    return false
+  }
+}
+
 /** Ensure nextUrl stays within the same section (auto-market vs market). */
 function isSameSection(nextUrl: string, sectionStartUrl: string): boolean {
   try {
@@ -1359,9 +1376,11 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
         emptyPagesInARow = 0
       }
 
-        const nextUrl = await extractNextPageUrl(page, currentUrl)
-        if (!nextUrl || visitedPageUrls.has(nextUrl)) break
-        if (!isVtbCatalogUrl(nextUrl) || !isSameSection(nextUrl, currentSection.startUrl)) break
+        let nextUrl = await extractNextPageUrl(page, currentUrl)
+        if (!nextUrl || !isCatalogListUrl(nextUrl) || !isSameSection(nextUrl, currentSection.startUrl)) {
+          nextUrl = buildNextPageUrl(currentUrl)
+        }
+        if (!isCatalogListUrl(nextUrl) || visitedPageUrls.has(nextUrl)) break
 
         currentUrl = nextUrl
         const pageDelayMin = process.env.CI ? 500 : 1200
