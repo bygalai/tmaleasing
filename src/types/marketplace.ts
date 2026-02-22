@@ -2,6 +2,7 @@ export type ListingBadge = 'in_stock' | 'leasing' | 'discount'
 
 export type Listing = {
   id: string
+  category?: string
   title: string
   subtitle: string
   priceRub: number

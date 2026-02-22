@@ -1,7 +1,16 @@
 import { useMemo, useState } from 'react'
+import { useParams } from 'react-router-dom'
 import { ListingCard } from '../components/listing/ListingCard'
 import { SearchBar } from '../components/listing/SearchBar'
 import type { Listing } from '../types/marketplace'
+import type { CategoryId } from './CategorySelectionPage'
+
+const CATEGORY_LABELS: Record<CategoryId, string> = {
+  legkovye: 'Легковые',
+  gruzovye: 'Грузовые',
+  speztechnika: 'Спецтехника',
+  pricepy: 'Прицепы',
+}
 
 type CatalogPageProps = {
   items: Listing[]
@@ -18,23 +27,38 @@ export function CatalogPage({
   isFavorite,
   toggleFavorite,
 }: CatalogPageProps) {
+  const { category } = useParams<{ category?: string }>()
+  const categoryId = category as CategoryId | undefined
+  const categoryLabel =
+    categoryId && categoryId in CATEGORY_LABELS
+      ? CATEGORY_LABELS[categoryId as CategoryId]
+      : null
+
   const [query, setQuery] = useState('')
 
   const filtered = useMemo(() => {
+    let result = items
+    if (categoryId) {
+      result = result.filter((item) => (item.category ?? 'legkovye') === categoryId)
+    }
     const normalized = query.trim().toLowerCase()
-    if (!normalized) return items
-
-    return items.filter((item) =>
+    if (!normalized) return result
+    return result.filter((item) =>
       [item.title, item.subtitle, item.location]
         .filter(Boolean)
         .join(' ')
         .toLowerCase()
         .includes(normalized),
     )
-  }, [items, query])
+  }, [items, query, categoryId])
 
   return (
     <section className="space-y-4">
+      {categoryLabel ? (
+        <p className="text-center text-sm font-medium text-[#FF5C34] [font-family:Inter,system-ui,sans-serif]">
+          {categoryLabel}
+        </p>
+      ) : null}
       <SearchBar value={query} onChange={setQuery} />
 
       {error ? (

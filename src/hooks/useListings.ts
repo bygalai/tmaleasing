@@ -7,6 +7,7 @@ const FALLBACK_IMAGE =
 
 type ListingsRow = {
   id: string
+  category: string | null
   title: string
   price: string | number | null
   mileage: string | number | null
@@ -110,6 +111,7 @@ function mapRowToListing(row: ListingsRow): Listing {
 
   return {
     id: row.id,
+    category: row.category ?? undefined,
     title: row.title,
     subtitle: subtitleParts.length ? subtitleParts.join(' • ') : 'Проверенный лот',
     priceRub,
@@ -161,7 +163,7 @@ export function useListings() {
         const { data, error: supabaseError } = await supabase
           .from('listings')
           .select(
-            'id,title,price,mileage,year,images,listing_url,created_at,city,vin,engine,transmission,drivetrain,body_color',
+            'id,category,title,price,mileage,year,images,listing_url,created_at,city,vin,engine,transmission,drivetrain,body_color',
           )
           .not('price', 'is', null)
           .order('created_at', { ascending: false })

@@ -73,7 +73,7 @@ export function BottomNav() {
   const location = useLocation()
 
   const isActive = (to: string) => {
-    if (to === '/') return location.pathname === '/' || location.pathname.startsWith('/listing/')
+    if (to === '/') return location.pathname === '/'
     return location.pathname === to
   }
 

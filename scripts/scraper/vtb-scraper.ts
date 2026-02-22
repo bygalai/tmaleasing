@@ -11,11 +11,40 @@ import type { Page } from 'puppeteer'
 dotenv.config({ path: resolve(process.cwd(), '.env') })
 puppeteer.use(StealthPlugin())
 
-const TARGET_URL = 'https://www.vtb-leasing.ru/auto-market/'
+let shutdownRequested = false
+
+process.on('SIGTERM', () => {
+  shutdownRequested = true
+  console.log('Received SIGTERM, will finish current work and save partial results')
+})
+process.on('SIGINT', () => {
+  shutdownRequested = true
+  console.log('Received SIGINT, will finish current work and save partial results')
+})
+
+function isShutdownError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err ?? '')
+  const s = msg.toLowerCase()
+  return (
+    s.includes('canceled') ||
+    s.includes('cancelled') ||
+    s.includes('target closed') ||
+    s.includes('target has been closed') ||
+    s.includes('protocol error') ||
+    s.includes('session closed')
+  )
+}
+
 const SOURCE = 'vtb'
 const ALLOWED_DOMAIN = 'vtb-leasing.ru'
-const AUTO_MARKET_PATH = '/auto-market/'
+const VTB_BASE_URL = 'https://www.vtb-leasing.ru/'
 const LISTING_DETAIL_PATH_PATTERNS = ['/auto/probeg/', '/auto-market/details/']
+
+/** VTB catalog sections. Each section has its own URL and category slug for Mini App filtering. */
+const VTB_SECTIONS: Array<{ startUrl: string; category: string }> = [
+  { startUrl: 'https://www.vtb-leasing.ru/auto-market/', category: 'legkovye' },
+  { startUrl: 'https://www.vtb-leasing.ru/market/f/type-is-2/?filter=1&PAGEN_1=1', category: 'gruzovye' },
+]
 const BAD_IMAGE_SUBSTRINGS = [
   'logo',
   'favicon',
@@ -72,6 +101,7 @@ type ScrapedListing = {
   images: string[]
   listing_url: string
   source: string
+  category: string
   city: string | null
   vin: string | null
   engine: string | null
@@ -91,6 +121,7 @@ type RawCard = {
 
 const TITLE_BLOCKLIST = new Set([
   'легковые автомобили',
+  'грузовые автомобили',
   'автомобили',
   'автомаркет',
   'каталог',
@@ -197,7 +228,10 @@ async function randomDelay(minMs = 500, maxMs = 1400): Promise<void> {
 }
 
 async function humanReadDelay(): Promise<void> {
-  await sleep(Math.floor(Math.random() * 3000) + 2000)
+  const isCI = !!process.env.CI
+  const minMs = isCI ? 300 : 2000
+  const maxMs = isCI ? 600 : 5000
+  await sleep(Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs)
 }
 
 function normalizeNumber(input: string | null | undefined): number | null {
@@ -221,7 +255,7 @@ function parseYear(input: string | null | undefined): number | null {
 function toAbsoluteUrl(value: string | null): string | null {
   if (!value) return null
   try {
-    const absolute = new URL(value, TARGET_URL)
+    const absolute = new URL(value, VTB_BASE_URL)
     if (!absolute.hostname.includes(ALLOWED_DOMAIN)) return null
     return absolute.toString()
   } catch {
@@ -232,18 +266,32 @@ function toAbsoluteUrl(value: string | null): string | null {
 function isAllowedVtbUrl(value: string | null | undefined): boolean {
   if (!value) return false
   try {
-    const parsed = new URL(value, TARGET_URL)
+    const parsed = new URL(value, VTB_BASE_URL)
     return parsed.hostname.includes(ALLOWED_DOMAIN)
   } catch {
     return false
   }
 }
 
-function isAutoMarketUrl(value: string | null | undefined): boolean {
+/** Allows /auto-market/ and /market/ catalog URLs (cars, trucks, etc.). */
+function isVtbCatalogUrl(value: string | null | undefined): boolean {
   if (!isAllowedVtbUrl(value)) return false
   try {
-    const parsed = new URL(value as string, TARGET_URL)
-    return parsed.pathname.includes(AUTO_MARKET_PATH)
+    const path = new URL(value as string, VTB_BASE_URL).pathname
+    return path.includes('/auto-market/') || path.includes('/market/')
+  } catch {
+    return false
+  }
+}
+
+/** Ensure nextUrl stays within the same section (auto-market vs market). */
+function isSameSection(nextUrl: string, sectionStartUrl: string): boolean {
+  try {
+    const nextPath = new URL(nextUrl, VTB_BASE_URL).pathname
+    const startPath = new URL(sectionStartUrl, VTB_BASE_URL).pathname
+    if (startPath.includes('/auto-market/')) return nextPath.includes('/auto-market/')
+    if (startPath.includes('/market/')) return nextPath.includes('/market/')
+    return true
   } catch {
     return false
   }
@@ -252,7 +300,7 @@ function isAutoMarketUrl(value: string | null | undefined): boolean {
 function isListingDetailUrl(value: string | null | undefined): boolean {
   if (!isAllowedVtbUrl(value)) return false
   try {
-    const parsed = new URL(value as string, TARGET_URL)
+    const parsed = new URL(value as string, VTB_BASE_URL)
     return LISTING_DETAIL_PATH_PATTERNS.some((pattern) => parsed.pathname.includes(pattern))
   } catch {
     return false
@@ -314,12 +362,24 @@ function toTextValue(value: unknown): string | null {
   return null
 }
 
-function dedupeRawCards(cards: RawCard[]): RawCard[] {
+function mergeRawCards(cards: RawCard[]): RawCard[] {
   const map = new Map<string, RawCard>()
   for (const card of cards) {
     if (!card.link) continue
     if (!isListingDetailUrl(card.link)) continue
-    map.set(card.link, card)
+    const existing = map.get(card.link)
+    if (!existing) {
+      map.set(card.link, card)
+    } else {
+      map.set(card.link, {
+        link: card.link,
+        title: card.title ?? existing.title,
+        priceText: card.priceText ?? existing.priceText,
+        mileageText: card.mileageText ?? existing.mileageText,
+        yearText: card.yearText ?? existing.yearText,
+        imageUrl: card.imageUrl ?? existing.imageUrl,
+      })
+    }
   }
   return [...map.values()]
 }
@@ -352,25 +412,50 @@ function extractRawCardsFromUnknownPayload(payload: unknown): RawCard[] {
       toTextValue(obj.model) ??
       toTextValue(obj.car_name)
 
+    const offers = obj.offers ?? obj.offer
     const priceRaw =
       toTextValue(obj.price) ??
       toTextValue(obj.cost) ??
       toTextValue(obj.amount) ??
-      toTextValue(obj.price_rub)
+      toTextValue(obj.price_rub) ??
+      (offers && typeof offers === 'object' ? toTextValue((offers as Record<string, unknown>).price) : null)
 
     const mileageRaw =
       toTextValue(obj.mileage) ??
       toTextValue(obj.run) ??
       toTextValue(obj.km) ??
-      toTextValue(obj.odometer)
+      toTextValue(obj.odometer) ??
+      toTextValue(obj.mileage_km)
 
-    const yearRaw = toTextValue(obj.year) ?? toTextValue(obj.production_year)
+    const yearRaw =
+      toTextValue(obj.year) ??
+      toTextValue(obj.production_year) ??
+      toTextValue(obj.vehicleModelDate)
 
+    const imageFromField = (img: unknown): string | null => {
+      if (typeof img === 'string') return img
+      if (img && typeof img === 'object') {
+        const o = img as Record<string, unknown>
+        return (
+          toTextValue(o.url) ??
+          toTextValue(o.src) ??
+          toTextValue(o.href) ??
+          (Array.isArray(o) && o[0] ? imageFromField(o[0]) : null)
+        )
+      }
+      return null
+    }
     const imageRaw =
-      toTextValue(obj.image) ??
+      imageFromField(obj.image) ??
       toTextValue(obj.image_url) ??
+      toTextValue(obj.imageUrl) ??
       toTextValue(obj.photo) ??
-      toTextValue(obj.preview)
+      toTextValue(obj.preview) ??
+      toTextValue(obj.thumbnail) ??
+      toTextValue(obj.thumbnailUrl) ??
+      toTextValue(obj.mainImage) ??
+      toTextValue(obj.picture) ??
+      (Array.isArray(obj.images) && obj.images[0] ? imageFromField(obj.images[0]) : null)
 
     if (link && isListingDetailUrl(link) && isRealCarTitle(title)) {
       results.push({
@@ -387,10 +472,10 @@ function extractRawCardsFromUnknownPayload(payload: unknown): RawCard[] {
   }
 
   walk(payload)
-  return dedupeRawCards(results)
+  return mergeRawCards(results)
 }
 
-function mapRawCardToListing(raw: RawCard): ScrapedListing | null {
+function mapRawCardToListing(raw: RawCard, category: string): ScrapedListing | null {
   const listingUrl = toAbsoluteUrl(raw.link)
   if (!listingUrl) return null
 
@@ -411,6 +496,7 @@ function mapRawCardToListing(raw: RawCard): ScrapedListing | null {
     images: imageUrl ? [imageUrl] : [],
     listing_url: listingUrl,
     source: SOURCE,
+    category,
     city: null,
     vin: null,
     engine: null,
@@ -422,12 +508,18 @@ function mapRawCardToListing(raw: RawCard): ScrapedListing | null {
 
 async function autoScrollUntilStable(page: Page): Promise<void> {
   await page.evaluate(async () => {
-    // Allow overriding scroll passes for speed/debug.
     const raw = Number((window as unknown as { __VTB_SCROLL_PASSES?: string }).__VTB_SCROLL_PASSES ?? 'NaN')
-    const passes = Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : Math.floor(Math.random() * 6) + 5
+    const isCI = typeof (window as unknown as { __CI?: boolean }).__CI === 'boolean'
+    const passes =
+      Number.isFinite(raw) && raw > 0
+        ? Math.floor(raw)
+        : isCI
+          ? 2
+          : Math.floor(Math.random() * 6) + 5
+    const delayMs = isCI ? 800 : 2000
     for (let i = 0; i < passes; i += 1) {
       window.scrollBy(0, 500)
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+      await new Promise((resolve) => setTimeout(resolve, delayMs))
     }
     window.scrollTo({ top: 0, behavior: 'auto' })
   })
@@ -479,7 +571,8 @@ async function extractRawCardsFromPage(page: Page): Promise<RawCard[]> {
         .replace(/\s+/g, ' ')
         .trim()
       if (!titleText) continue
-      if (titleText.toLowerCase() === 'легковые автомобили') continue
+      const lowerTitle = titleText.toLowerCase()
+      if (lowerTitle === 'легковые автомобили' || lowerTitle === 'грузовые автомобили') continue
 
       // The page contains many UI images (logos/icons). Prefer card/gallery images.
       const badParts = [
@@ -542,7 +635,8 @@ async function extractRawCardsFromPage(page: Page): Promise<RawCard[]> {
         if (!/\d/.test(areaText)) continue
 
         const title = (anchor.textContent ?? '').replace(/\s+/g, ' ').trim()
-        if (!title || title.toLowerCase() === 'легковые автомобили') continue
+        const lowerTitle = (title ?? '').toLowerCase()
+        if (!title || lowerTitle === 'легковые автомобили' || lowerTitle === 'грузовые автомобили') continue
 
         const price = areaText.match(/(\d[\d\s\u00A0]{3,})\s*₽/i)?.[1] ?? null
         const priceFallback = areaText.match(/(\d[\d\s\u00A0]{5,})\s*(руб|р\.?)/i)?.[1] ?? null
@@ -617,7 +711,7 @@ async function configurePageForStealth(page: Page): Promise<void> {
 
 function getCurrentPageNumber(url: string): number {
   try {
-    const parsed = new URL(url, TARGET_URL)
+    const parsed = new URL(url, VTB_BASE_URL)
     const value = parsed.searchParams.get('PAGEN_1')
     const pageNumber = value ? Number(value) : 1
     return Number.isFinite(pageNumber) && pageNumber > 0 ? pageNumber : 1
@@ -628,7 +722,7 @@ function getCurrentPageNumber(url: string): number {
 
 function buildNextPageUrl(currentUrl: string): string {
   const currentPage = getCurrentPageNumber(currentUrl)
-  const parsed = new URL(currentUrl, TARGET_URL)
+  const parsed = new URL(currentUrl, VTB_BASE_URL)
   parsed.searchParams.set('PAGEN_1', String(currentPage + 1))
   return parsed.toString()
 }
@@ -652,7 +746,7 @@ async function extractNextPageUrl(page: Page, currentUrl: string): Promise<strin
         continue
       }
       if (!absolute.includes('vtb-leasing.ru')) continue
-      if (!absolute.includes('/auto-market/')) continue
+      if (!absolute.includes('/auto-market/') && !absolute.includes('/market/')) continue
 
       const parsedAbsolute = new URL(absolute, window.location.origin)
       const pageParam = parsedAbsolute.searchParams.get('PAGEN_1')
@@ -1007,17 +1101,16 @@ async function enrichListingsFromDetailsViaBrowserPage(
 
   let enrichedCount = 0
   for (let i = 0; i < listings.length; i += 1) {
-    const listing = listings[i]
-    const needsEnrichment =
-      listing.price == null ||
-      listing.mileage == null ||
-      listing.year == null ||
-      listing.images.length === 0
-    if (!needsEnrichment) continue
+    if (shutdownRequested) {
+      console.log(`Shutdown requested, stopping enrichment after ${enrichedCount} listings`)
+      break
+    }
 
+    const listing = listings[i]
+    // Always visit detail page: get fresh price (track changes), authoritative photos (filter logos/bad images).
     try {
       await page.goto(listing.listing_url, { waitUntil: 'domcontentloaded' })
-      await sleep(1200)
+      await sleep(process.env.CI ? 800 : 1200)
       const html = await page.content()
 
       const jsonLd = extractJsonLdBlocks(html)
@@ -1058,6 +1151,10 @@ async function enrichListingsFromDetailsViaBrowserPage(
         `Enriched: ${listing.title} | Price: ${listing.price ?? 'NULL'} | Mileage: ${listing.mileage ?? 'NULL'} | Year: ${listing.year ?? 'NULL'} | City: ${listing.city ?? 'NULL'} | Color: ${listing.body_color ?? 'NULL'} | VIN: ${listing.vin ?? 'NULL'} | Image: ${listing.images[0] ?? 'NULL'}`
       )
     } catch (error) {
+      if (isShutdownError(error)) {
+        console.log(`Shutdown/cancel detected during enrichment, saving ${enrichedCount} enriched listings`)
+        break
+      }
       console.log(`Detail enrichment failed for ${listing.listing_url}:`, error)
     }
 
@@ -1115,7 +1212,7 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
     try {
       const responseUrl = response.url()
       if (!isAllowedVtbUrl(responseUrl)) return
-      if (!/api|graphql|auto-market|catalog|cars/i.test(responseUrl)) return
+      if (!/api|graphql|auto-market|market|catalog|cars/i.test(responseUrl)) return
 
       const contentType = response.headers()['content-type'] ?? ''
       if (!contentType.includes('application/json') && !/api|graphql/i.test(responseUrl)) return
@@ -1138,34 +1235,56 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
   page.on('response', onResponse)
 
   try {
-    let currentUrl: string | null = TARGET_URL
-    let pageIndex = 0
-    const maxPagesRaw = Number(process.env.VTB_MAX_PAGES ?? '20')
-    const maxPages = Number.isFinite(maxPagesRaw) && maxPagesRaw > 0 ? Math.floor(maxPagesRaw) : 20
+    const maxPagesRaw = Number(process.env.VTB_MAX_PAGES ?? '5')
+    const maxPages = Number.isFinite(maxPagesRaw) && maxPagesRaw > 0 ? Math.floor(maxPagesRaw) : 5
 
-    let emptyPagesInARow = 0
-
-    while (currentUrl && pageIndex < maxPages) {
-      if (!isAutoMarketUrl(currentUrl)) {
-        throw new Error(`Blocked non-target URL before navigation: ${currentUrl}`)
+    for (let sectionIndex = 0; sectionIndex < VTB_SECTIONS.length; sectionIndex += 1) {
+      const currentSection = VTB_SECTIONS[sectionIndex]!
+      if (shutdownRequested) {
+        console.log('Shutdown requested, proceeding to enrichment')
+        break
       }
-      if (visitedPageUrls.has(currentUrl)) break
-      visitedPageUrls.add(currentUrl)
-      pageIndex += 1
+      console.log(
+        `\n========== SECTION ${sectionIndex + 1}/${VTB_SECTIONS.length}: ${currentSection.category.toUpperCase()} ==========`,
+      )
+      console.log(`Start URL: ${currentSection.startUrl}`)
+      interceptedApiRawCards.clear()
+      const visitedPageUrls = new Set<string>()
+      let currentUrl: string | null = currentSection.startUrl
+      let pageIndex = 0
+      let emptyPagesInARow = 0
 
-      const navigationUrl = pageIndex === 1 ? TARGET_URL : currentUrl
+      while (currentUrl && pageIndex < maxPages) {
+        if (shutdownRequested) break
+        if (!isVtbCatalogUrl(currentUrl)) {
+          throw new Error(`Blocked non-target URL before navigation: ${currentUrl}`)
+        }
+        if (visitedPageUrls.has(currentUrl)) break
+        visitedPageUrls.add(currentUrl)
+        pageIndex += 1
+
+        const navigationUrl = pageIndex === 1 ? currentSection.startUrl : currentUrl
       console.log(`\n--- Page ${pageIndex}/${maxPages}: ${navigationUrl} ---`)
-      await page.goto(navigationUrl, { waitUntil: 'domcontentloaded' })
+      try {
+        await page.goto(navigationUrl, { waitUntil: 'domcontentloaded' })
+      } catch (navErr) {
+        if (isShutdownError(navErr)) {
+          console.log('Navigation canceled (shutdown), proceeding to enrichment')
+          break
+        }
+        throw navErr
+      }
       const finalUrl = page.url()
       console.log(`Final URL after goto: ${finalUrl}`)
-      if (!isAutoMarketUrl(finalUrl)) {
+      if (!isVtbCatalogUrl(finalUrl)) {
         await page.screenshot({ path: 'debug-vtb.png', fullPage: true })
         throw new Error(`Blocked redirect outside target area: ${finalUrl}`)
       }
       await closeUnexpectedPages(browser, page)
-      await sleep(10_000)
+      const catalogWaitMs = process.env.CI ? 3000 : 10_000
+      await sleep(catalogWaitMs)
       await page.evaluate(
-        `window.__VTB_SCROLL_PASSES = ${JSON.stringify(process.env.VTB_SCROLL_PASSES ?? '')}`
+        `window.__VTB_SCROLL_PASSES = ${JSON.stringify(process.env.VTB_SCROLL_PASSES ?? '')}; window.__CI = ${!!process.env.CI}`
       )
       const html = await page.content()
       console.log('HTML length:', html.length)
@@ -1213,13 +1332,13 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
 
       const sizeBefore = collected.size
       const domCards = await extractRawCardsFromPage(page)
-      const rawCards = dedupeRawCards([
+      const rawCards = mergeRawCards([
         ...interceptedApiRawCards.values(),
         ...hiddenCards,
         ...domCards,
       ])
       for (const rawCard of rawCards) {
-        const mapped = mapRawCardToListing(rawCard)
+        const mapped = mapRawCardToListing(rawCard, currentSection.category)
         if (!mapped) continue
         console.log(
           `Found: ${mapped.title} | Price: ${mapped.price ?? 'NULL'} | Image: ${mapped.images[0] ?? 'NULL'} | URL: ${mapped.listing_url}`
@@ -1228,7 +1347,7 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
       }
 
       const newOnThisPage = collected.size - sizeBefore
-      console.log(`Page ${pageIndex}: +${newOnThisPage} new (${collected.size} total)`)
+      console.log(`Page ${pageIndex}: +${newOnThisPage} unique on page (${collected.size} total; may overlap with DB)`)
 
       if (newOnThisPage === 0) {
         emptyPagesInARow += 1
@@ -1240,14 +1359,19 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
         emptyPagesInARow = 0
       }
 
-      const nextUrl = await extractNextPageUrl(page, currentUrl)
-      if (!nextUrl || visitedPageUrls.has(nextUrl)) break
-      if (!isAutoMarketUrl(nextUrl)) break
+        const nextUrl = await extractNextPageUrl(page, currentUrl)
+        if (!nextUrl || visitedPageUrls.has(nextUrl)) break
+        if (!isVtbCatalogUrl(nextUrl) || !isSameSection(nextUrl, currentSection.startUrl)) break
 
-      currentUrl = nextUrl
-      await randomDelay(1200, 2500)
+        currentUrl = nextUrl
+        const pageDelayMin = process.env.CI ? 500 : 1200
+        const pageDelayMax = process.env.CI ? 900 : 2500
+        await randomDelay(pageDelayMin, pageDelayMax)
+      }
+      console.log(`Section ${currentSection.category} complete. Total unique listings so far: ${collected.size}`)
     }
 
+    console.log(`\nAll sections done. Enriching ${collected.size} listings...`)
     await enrichListingsFromDetailsViaBrowserPage(page, collected)
     return [...collected.values()]
   } finally {
@@ -1271,7 +1395,7 @@ async function run(): Promise<void> {
 
   try {
     const listings = await scrapeListings()
-    console.log(`Found ${listings.length} cars`)
+    console.log(`Found ${listings.length} unique listings from catalog (same URLs = same DB rows, upsert will update)`)
 
     if (listings.length === 0) {
       console.log('Upserted 0 cars')
@@ -1285,12 +1409,23 @@ async function run(): Promise<void> {
     console.log(`Enriched listings to upsert: ${enriched.length} / ${listings.length} total`)
 
     if (enriched.length > 0) {
+      const existingIds = new Set<string>()
+      const { data: existingRows } = await supabase
+        .from('listings')
+        .select('external_id')
+        .eq('source', SOURCE)
+      for (const row of existingRows ?? []) {
+        const id = (row as { external_id?: string }).external_id
+        if (id) existingIds.add(id)
+      }
+
       const upsertPayload = enriched.map((listing) => {
         const row: Record<string, unknown> = {
           external_id: listing.external_id,
           title: listing.title,
           listing_url: listing.listing_url,
           source: listing.source,
+          category: listing.category,
           images: listing.images,
         }
 
@@ -1317,15 +1452,20 @@ async function run(): Promise<void> {
         if (error) {
           if ((error as { code?: string }).code === 'PGRST204') {
             console.error(
-              "Supabase schema cache doesn't include new columns yet. Apply the migration " +
-                "`supabase/migrations/202602150002_add_listing_specs.sql` in Supabase SQL editor " +
-                "and then reload the PostgREST schema (Dashboard: Project Settings -> API -> Reload schema)."
+              "Supabase schema cache doesn't include new columns yet. Apply migrations " +
+                "`202602150002_add_listing_specs.sql` and `202602220001_add_listing_category.sql` " +
+                "in Supabase SQL editor, then reload PostgREST schema (Dashboard: Settings -> API -> Reload schema)."
             )
           }
           throw error
         }
       }
-      console.log(`Upserted ${enriched.length} enriched listings`)
+
+      const updated = enriched.filter((l) => existingIds.has(l.external_id)).length
+      const inserted = enriched.length - updated
+      console.log(
+        `Upserted ${enriched.length} listings: ${updated} updated (already in DB), ${inserted} inserted (new). Total rows in DB unchanged when all are updates.`
+      )
     }
 
     // Cleanup: remove skeleton rows that were never enriched.

@@ -216,11 +216,13 @@ body {
 
 h1,
 h2,
-h3 {
+h3,
+.font-sf {
   font-family:
     -apple-system,
     BlinkMacSystemFont,
     'SF Pro Display',
+    'SF Pro Text',
     system-ui,
     'Inter',
     'Helvetica Neue',
