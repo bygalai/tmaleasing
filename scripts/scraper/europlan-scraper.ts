@@ -803,15 +803,13 @@ async function enrichAndCollectListing(
       return null
     }
 
-    let absoluteImage = toAbsoluteUrl(pickBestImageCandidate([imageUrl]))
-    if (!absoluteImage && fromDom.imageUrl) {
-      absoluteImage = toAbsoluteUrl(fromDom.imageUrl)
-    }
+    // Собираем все кандидатные URL и пропускаем их через единый фильтр,
+    // чтобы SVG-иконки (hamb.svg и пр.) не проходили даже если пришли из DOM.
+    const chosenImage = pickBestImageCandidate([imageUrl, fromDom.imageUrl])
     const FALLBACK_IMAGE = 'https://dummyimage.com/1200x800/1f2937/e5e7eb&text=Vehicle+Photo+Pending'
+    let absoluteImage = toAbsoluteUrl(chosenImage)
     if (!absoluteImage || absoluteImage === FALLBACK_IMAGE) {
-      if (!absoluteImage) {
-        console.warn(`  skip (no image): ${title.slice(0, 40)}...`)
-      }
+      console.warn(`  skip (no real image): ${title.slice(0, 40)}...`)
       return null
     }
 
