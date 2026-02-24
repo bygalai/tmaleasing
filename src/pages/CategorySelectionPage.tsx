@@ -151,8 +151,8 @@ export function CategorySelectionPage() {
           className="col-start-2 row-span-3 row-start-1"
         />
         <CategoryCard category={CATEGORIES.find((c) => c.id === 'legkovye')!} />
-        <CategoryCard category={CATEGORIES.find((c) => c.id === 'pricepy')!} />
         <CategoryCard category={CATEGORIES.find((c) => c.id === 'speztechnika')!} />
+        <CategoryCard category={CATEGORIES.find((c) => c.id === 'pricepy')!} />
       </div>
     </section>
   )
