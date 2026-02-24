@@ -597,7 +597,7 @@ async function configurePageForStealth(page: Page): Promise<void> {
   await page.setRequestInterception(true)
   page.on('request', (request) => {
     const type = request.resourceType()
-    if (type === 'image' || type === 'font' || type === 'stylesheet') {
+    if (type === 'font' || type === 'stylesheet') {
       request.abort()
       return
     }
@@ -707,26 +707,41 @@ const EXTRACT_DOM_SCRIPT = `
   var yearMatch = bodyText.match(/\\\\b(20\\\\d{2}|19\\\\d{2})\\\\b/);
   var year = yearMatch ? parseInt(yearMatch[1], 10) : null;
   if (year !== null && isNaN(year)) year = null;
+  function getImgUrl(img) {
+    var u = (img.getAttribute('data-src') || img.getAttribute('data-lazy-src') || img.getAttribute('data-original') || img.getAttribute('src') || '').trim();
+    if (!u || u.indexOf('data:') === 0) return null;
+    var srcset = (img.getAttribute('srcset') || '').trim();
+    if (!u && srcset) {
+      var first = srcset.split(',')[0];
+      if (first) u = first.trim().split(/\\\\s+/)[0] || first.trim();
+    }
+    if (!u || isBadImg(u)) return null;
+    return u;
+  }
+  function looksLikePhoto(url) {
+    if (!url) return false;
+    var lower = url.toLowerCase();
+    return /\\\\.(jpe?g|png|webp)(\\\\?|#|$)/i.test(lower) || lower.indexOf('/upload') >= 0 || lower.indexOf('/image') >= 0 || lower.indexOf('/photo') >= 0 || lower.indexOf('/media') >= 0;
+  }
   var imageUrl = null;
-  var imgs = document.querySelectorAll('img[src]');
+  var imgs = document.querySelectorAll('img');
+  var candidates = [];
   for (var j = 0; j < imgs.length; j++) {
     var img = imgs[j];
-    var src = (img.getAttribute('src') || '').trim();
-    if (!src || src.indexOf('data:') === 0) continue;
-    if (isBadImg(src)) continue;
+    var u = getImgUrl(img);
+    if (!u) continue;
     var rect = img.getBoundingClientRect();
-    if (rect.width >= 200 && rect.height >= 150) {
-      imageUrl = src;
-      break;
-    }
+    var isBig = rect.width >= 200 && rect.height >= 150;
+    var isPhoto = looksLikePhoto(u);
+    candidates.push({ url: u, isBig: isBig, isPhoto: isPhoto });
   }
-  if (!imageUrl && imgs.length > 0) {
-    for (var k = 0; k < imgs.length; k++) {
-      var src2 = (imgs[k].getAttribute('src') || '').trim();
-      if (!src2 || src2.indexOf('data:') === 0 || isBadImg(src2)) continue;
-      imageUrl = src2;
-      break;
-    }
+  if (candidates.length > 0) {
+    candidates.sort(function(a, b) {
+      if (a.isBig !== b.isBig) return a.isBig ? -1 : 1;
+      if (a.isPhoto !== b.isPhoto) return a.isPhoto ? -1 : 1;
+      return 0;
+    });
+    imageUrl = candidates[0].url;
   }
   return { title: title, price: price, mileage: mileage, year: year, imageUrl: imageUrl };
 })();
@@ -758,8 +773,8 @@ async function enrichAndCollectListing(
 ): Promise<ScrapedListing | null> {
   try {
     await page.goto(detailUrl, { waitUntil: 'domcontentloaded' })
-    // SPA: даём время на отрисовку контента (React/Vue)
-    await sleep(process.env.CI ? 2000 : 4000)
+    // SPA + картинки: даём время на отрисовку и загрузку фото (теперь image не блокируем)
+    await sleep(process.env.CI ? 3000 : 5000)
     const html = await page.content()
 
     const jsonLd = extractJsonLdBlocks(html)
@@ -793,8 +808,11 @@ async function enrichAndCollectListing(
       absoluteImage = toAbsoluteUrl(fromDom.imageUrl)
     }
     const FALLBACK_IMAGE = 'https://dummyimage.com/1200x800/1f2937/e5e7eb&text=Vehicle+Photo+Pending'
-    if (!absoluteImage) {
-      absoluteImage = FALLBACK_IMAGE
+    if (!absoluteImage || absoluteImage === FALLBACK_IMAGE) {
+      if (!absoluteImage) {
+        console.warn(`  skip (no image): ${title.slice(0, 40)}...`)
+      }
+      return null
     }
 
     const listing: ScrapedListing = {
