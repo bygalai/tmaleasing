@@ -1,0 +1,46 @@
+name: Scrape Europlan Leasing (trucks)
+
+on:
+  schedule:
+    # Run after VTB to mix listings: 01:00, 05:30, 10:00, 14:30, 19:00, 23:30 UTC
+    - cron: '0 1,10,19 * * *'
+    - cron: '30 5,14,23 * * *'
+  workflow_dispatch:
+    inputs:
+      max_pages:
+        description: 'Max catalog pages to scrape'
+        required: false
+        default: '3'
+
+concurrency:
+  group: europlan-scraper
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+      EUROPLAN_MAX_PAGES: ${{ github.event.inputs.max_pages || '3' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium for Puppeteer
+        run: npx puppeteer browsers install chrome
+
+      - name: Run Europlan scraper (trucks)
+        run: npm run scrape:europlan
