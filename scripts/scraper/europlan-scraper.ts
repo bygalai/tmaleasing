@@ -62,6 +62,9 @@ const BAD_IMAGE_SUBSTRINGS = [
   'button',
   'banner',
   'europlan.ru/local/',
+  '/img/menu/',
+  'hamb.svg',
+  '/icons/',
   'telegram',
 ]
 
@@ -726,6 +729,7 @@ const EXTRACT_DOM_SCRIPT = `
   var imageUrl = null;
   var imgs = document.querySelectorAll('img');
   var candidates = [];
+  // Кандидаты из <img>
   for (var j = 0; j < imgs.length; j++) {
     var img = imgs[j];
     var u = getImgUrl(img);
@@ -734,6 +738,18 @@ const EXTRACT_DOM_SCRIPT = `
     var isBig = rect.width >= 200 && rect.height >= 150;
     var isPhoto = looksLikePhoto(u);
     candidates.push({ url: u, isBig: isBig, isPhoto: isPhoto });
+  }
+  // Кандидаты из <picture><source srcset=\"...\">
+  var sources = document.querySelectorAll('picture source[srcset]');
+  for (var si = 0; si < sources.length; si++) {
+    var srcset = (sources[si].getAttribute('srcset') || '').trim();
+    if (!srcset) continue;
+    var firstSrc = srcset.split(',')[0];
+    if (!firstSrc) continue;
+    var su = firstSrc.trim().split(/\\\\s+/)[0] || firstSrc.trim();
+    if (!su || isBadImg(su)) continue;
+    var isPhoto2 = looksLikePhoto(su);
+    candidates.push({ url: su, isBig: true, isPhoto: isPhoto2 });
   }
   if (candidates.length > 0) {
     candidates.sort(function(a, b) {
