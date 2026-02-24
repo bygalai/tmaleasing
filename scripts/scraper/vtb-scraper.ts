@@ -48,6 +48,8 @@ const VTB_SECTIONS: Array<{ startUrl: string; category: string }> = [
   { startUrl: 'https://www.vtb-leasing.ru/market/f/type-is-2/?filter=1&PAGEN_1=1', category: 'gruzovye' },
   // Спецтехника
   { startUrl: 'https://www.vtb-leasing.ru/market/f/type-is-6/?filter=1&PAGEN_1=1', category: 'speztechnika' },
+  // Прицепы и полуприцепы
+  { startUrl: 'https://www.vtb-leasing.ru/market/f/type-is-5/?filter=1&PAGEN_1=1', category: 'pricepy' },
 ]
 const BAD_IMAGE_SUBSTRINGS = [
   'logo',
