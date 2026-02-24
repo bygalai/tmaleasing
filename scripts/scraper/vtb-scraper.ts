@@ -42,8 +42,12 @@ const LISTING_DETAIL_PATH_PATTERNS = ['/auto/probeg/', '/auto-market/details/']
 
 /** VTB catalog sections. Each section has its own URL and category slug for Mini App filtering. */
 const VTB_SECTIONS: Array<{ startUrl: string; category: string }> = [
+  // Легковые автомобили
   { startUrl: 'https://www.vtb-leasing.ru/auto-market/', category: 'legkovye' },
+  // Грузовые автомобили
   { startUrl: 'https://www.vtb-leasing.ru/market/f/type-is-2/?filter=1&PAGEN_1=1', category: 'gruzovye' },
+  // Спецтехника
+  { startUrl: 'https://www.vtb-leasing.ru/market/f/type-is-6/?filter=1&PAGEN_1=1', category: 'speztechnika' },
 ]
 const BAD_IMAGE_SUBSTRINGS = [
   'logo',
