@@ -1,7 +1,7 @@
 /**
- * Europlan Leasing scraper — грузовая техника с https://europlan.ru/auto/stock/truck
- * Пишет в ту же таблицу listings (source='europlan', category='gruzovye').
- * В Mini App объявления смешиваются с другими источниками, источник не отображается.
+ * Europlan Leasing scraper — грузовая и легковая техника с europlan.ru.
+ * Секции: грузовые (truck), легковые (cars). Пишет в таблицу listings (source='europlan', category='gruzovye'|'legkovye').
+ * В Mini App объявления отображаются в разделах «Грузовые» и «Легковые» вместе с другими источниками.
  */
 
 import { createHash } from 'node:crypto'
@@ -42,15 +42,26 @@ function isShutdownError(err: unknown): boolean {
 }
 
 const SOURCE = 'europlan'
-const CATEGORY = 'gruzovye'
 const EUROPLAN_BASE_URL = 'https://europlan.ru'
-const TRUCK_CATALOG_URL = 'https://europlan.ru/auto/stock/truck'
 const ALLOWED_DOMAIN = 'europlan.ru'
 
-/** Path prefix for truck catalog (list pages). */
-const TRUCK_DETAIL_PATH_PREFIX = '/auto/stock/truck/'
-/** Only these are real listing pages; e.g. /auto/stock/truck/details/139397. Brand pages like /truck/kamaz are skipped. */
-const TRUCK_DETAILS_LISTING_PREFIX = '/auto/stock/truck/details/'
+/** Секции каталога Europlan: грузовые и легковые. Каждая имеет свой URL и category для Mini App. */
+const EUROPLAN_SECTIONS: Array<{
+  catalogUrl: string
+  category: string
+  detailsListingPrefix: string
+}> = [
+  {
+    catalogUrl: 'https://europlan.ru/auto/stock/truck',
+    category: 'gruzovye',
+    detailsListingPrefix: '/auto/stock/truck/details/',
+  },
+  {
+    catalogUrl: 'https://europlan.ru/auto/stock/cars',
+    category: 'legkovye',
+    detailsListingPrefix: '/auto/stock/cars/details/',
+  },
+]
 
 const BAD_IMAGE_SUBSTRINGS = [
   'logo',
@@ -70,6 +81,7 @@ const BAD_IMAGE_SUBSTRINGS = [
 
 const TITLE_BLOCKLIST = new Set([
   'грузовые автомобили',
+  'легковые автомобили',
   'каталог',
   'автомобили',
   'техника',
@@ -263,13 +275,33 @@ function isEuroplanUrl(value: string | null | undefined): boolean {
   }
 }
 
-/** True only for real listing detail pages: /auto/stock/truck/details/<id>. Brand/filter pages like /truck/kamaz are false. */
-function isTruckDetailUrl(url: string): boolean {
+/**
+ * Для URL API картинок Европлана (/auto/api/image/auto?i=...&n=...) возвращает оценку:
+ * выше = скорее главное фото (вид снаружи), ниже = салон/руль/интерьер.
+ * По имени файла (n) понижаем приоритет интерьера и повышаем — внешних видов.
+ */
+function europlanMainPhotoScore(url: string): number {
+  try {
+    const parsed = new URL(url)
+    if (!parsed.pathname.includes('/auto/api/image/auto')) return 0
+    const n = parsed.searchParams.get('n')
+    if (!n) return 0
+    const decoded = decodeURIComponent(n).toLowerCase()
+    if (/салон|руль|интерьер|внутри|кабина|приборн|сидень/i.test(decoded)) return -2
+    if (/спереди|сзади|сбоку|вид|кузов|наруж|_1\.|1\.jpg/i.test(decoded)) return 2
+    return 0
+  } catch {
+    return 0
+  }
+}
+
+/** True only for real listing detail pages: e.g. /auto/stock/truck/details/<id> or /auto/stock/cars/details/<id>. */
+function isDetailUrl(url: string, detailsListingPrefix: string): boolean {
   if (!isEuroplanUrl(url)) return false
   try {
     const path = new URL(url, EUROPLAN_BASE_URL).pathname
-    if (!path.startsWith(TRUCK_DETAILS_LISTING_PREFIX)) return false
-    const after = path.slice(TRUCK_DETAILS_LISTING_PREFIX.length).trim()
+    if (!path.startsWith(detailsListingPrefix)) return false
+    const after = path.slice(detailsListingPrefix.length).trim()
     return after.length > 0 && !after.includes('?') && /^\d+$/.test(after)
   } catch {
     return false
@@ -611,13 +643,16 @@ async function configurePageForStealth(page: Page): Promise<void> {
   })
 }
 
-/** Extract only real listing detail URLs (/truck/details/<id>) from the catalog. Skips brand pages like /truck/kamaz. */
-async function extractDetailUrlsFromPage(page: Page): Promise<string[]> {
-  const detailsPrefix = TRUCK_DETAILS_LISTING_PREFIX
+/** Extract only real listing detail URLs (e.g. /auto/stock/truck/details/<id> or /auto/stock/cars/details/<id>) from the catalog. */
+async function extractDetailUrlsFromPage(
+  page: Page,
+  detailsListingPrefix: string
+): Promise<string[]> {
   const urls = await page.evaluate(
     (ctx: { detailsPrefix: string; baseUrl: string }) => {
       const out = new Set<string>()
-      const anchors = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href*="/auto/stock/truck/details/"]'))
+      const selector = `a[href*="${ctx.detailsPrefix}"]`
+      const anchors = Array.from(document.querySelectorAll<HTMLAnchorElement>(selector))
       for (const a of anchors) {
         const href = a.getAttribute('href')
         if (!href) continue
@@ -635,10 +670,10 @@ async function extractDetailUrlsFromPage(page: Page): Promise<string[]> {
       }
       return [...out]
     },
-    { detailsPrefix, baseUrl: EUROPLAN_BASE_URL }
+    { detailsPrefix: detailsListingPrefix, baseUrl: EUROPLAN_BASE_URL }
   )
 
-  return urls.filter((u) => isTruckDetailUrl(u))
+  return urls.filter((u) => isDetailUrl(u, detailsListingPrefix))
 }
 
 /** Optional: try to get next page URL (e.g. ?page=2). */
@@ -792,7 +827,8 @@ async function extractDetailFromLiveDom(page: Page): Promise<{
 
 async function enrichAndCollectListing(
   page: Page,
-  detailUrl: string
+  detailUrl: string,
+  category: string
 ): Promise<ScrapedListing | null> {
   try {
     // ID объявления из URL (например 509423 из .../details/509423) — берём только картинки этого объявления.
@@ -836,8 +872,16 @@ async function enrichAndCollectListing(
     const fromHtml = extractDetailFromHtmlFallback(html)
     const fromDom = await extractDetailFromLiveDom(page)
 
-    // Пытаемся выбрать лучший URL фото из API картинок (если они вызывались).
-    const fromApiImage = imageApiUrls.length > 0 ? pickBestImageCandidate(imageApiUrls) : null
+    // Из API картинок берём главное фото: приоритет — вид снаружи, не салон/руль.
+    const fromApiImage =
+      imageApiUrls.length > 0
+        ? (() => {
+            const valid = imageApiUrls.filter((u) => !isBadImageCandidate(u))
+            if (valid.length === 0) return pickBestImageCandidate(imageApiUrls)
+            valid.sort((a, b) => europlanMainPhotoScore(b) - europlanMainPhotoScore(a))
+            return valid[0] ?? null
+          })()
+        : null
 
     const title = fromLd.title ?? fromHtml.title ?? fromDom.title ?? null
     const price = fromLd.price ?? fromHtml.price ?? fromDom.price ?? null
@@ -860,9 +904,15 @@ async function enrichAndCollectListing(
       return null
     }
 
-    // Собираем все кандидатные URL (HTML/DOM/API) и пропускаем через единый фильтр,
-    // чтобы SVG-иконки (hamb.svg и пр.) и пустые значения не проходили.
-    const chosenImage = pickBestImageCandidate([imageUrl, fromDom.imageUrl, fromApiImage])
+    // Если из API выбрано главное фото (вид снаружи), используем его; иначе — лучший из всех источников.
+    const mainApiImage =
+      fromApiImage &&
+      europlanMainPhotoScore(fromApiImage) >= 2 &&
+      !isBadImageCandidate(fromApiImage)
+        ? fromApiImage
+        : null
+    const chosenImage =
+      mainApiImage ?? pickBestImageCandidate([imageUrl, fromDom.imageUrl, fromApiImage])
     const FALLBACK_IMAGE = 'https://dummyimage.com/1200x800/1f2937/e5e7eb&text=Vehicle+Photo+Pending'
     let absoluteImage = toAbsoluteUrl(chosenImage)
     if (!absoluteImage || absoluteImage === FALLBACK_IMAGE) {
@@ -886,7 +936,7 @@ async function enrichAndCollectListing(
       images: [absoluteImage],
       listing_url: detailUrl,
       source: SOURCE,
-      category: CATEGORY,
+      category,
       city: city && isPlausibleCity(city) ? city : null,
       vin: vin || null,
       engine: engineNormalized,
@@ -926,46 +976,48 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
   )
 
   try {
-    let pageIndex = 0
-
-    while (pageIndex < maxPages) {
+    for (const section of EUROPLAN_SECTIONS) {
       if (shutdownRequested) break
-      pageIndex += 1
-      const currentUrl =
-        pageIndex === 1 ? TRUCK_CATALOG_URL : `${TRUCK_CATALOG_URL}?page=${pageIndex}`
-      console.log(`\n--- Page ${pageIndex}/${maxPages}: ${currentUrl} ---`)
+      console.log(`\n=== Section: ${section.category} (${section.catalogUrl}) ===`)
 
-      try {
-        await page.goto(currentUrl, { waitUntil: 'domcontentloaded' })
-      } catch (navErr) {
-        if (isShutdownError(navErr)) break
-        throw navErr
-      }
-
-      await sleep(process.env.CI ? 2000 : 4000)
-      await scrollToLoadMore(page)
-      await randomDelay(500, 1200)
-
-      const detailUrls = await extractDetailUrlsFromPage(page)
-      console.log(`Found ${detailUrls.length} detail links on page`)
-
-      for (const url of detailUrls) {
+      for (let pageIndex = 1; pageIndex <= maxPages; pageIndex++) {
         if (shutdownRequested) break
-        if (collected.has(buildExternalId(url))) continue
+        const currentUrl =
+          pageIndex === 1 ? section.catalogUrl : `${section.catalogUrl}?page=${pageIndex}`
+        console.log(`\n--- Page ${pageIndex}/${maxPages}: ${currentUrl} ---`)
 
-        const listing = await enrichAndCollectListing(page, url)
-        if (listing) {
-          collected.set(listing.external_id, listing)
-          console.log(
-            `+ ${listing.title} | ${listing.price ?? '?'} ₽ | ${listing.year ?? '?'} г. | ${listing.images[0] ? 'img' : 'no img'}`
-          )
+        try {
+          await page.goto(currentUrl, { waitUntil: 'domcontentloaded' })
+        } catch (navErr) {
+          if (isShutdownError(navErr)) break
+          throw navErr
         }
-        await randomDelay(400, 900)
+
+        await sleep(process.env.CI ? 2000 : 4000)
+        await scrollToLoadMore(page)
+        await randomDelay(500, 1200)
+
+        const detailUrls = await extractDetailUrlsFromPage(page, section.detailsListingPrefix)
+        console.log(`Found ${detailUrls.length} detail links on page`)
+
+        for (const url of detailUrls) {
+          if (shutdownRequested) break
+          if (collected.has(buildExternalId(url))) continue
+
+          const listing = await enrichAndCollectListing(page, url, section.category)
+          if (listing) {
+            collected.set(listing.external_id, listing)
+            console.log(
+              `+ [${section.category}] ${listing.title} | ${listing.price ?? '?'} ₽ | ${listing.year ?? '?'} г. | ${listing.images[0] ? 'img' : 'no img'}`
+            )
+          }
+          await randomDelay(400, 900)
+        }
+        await randomDelay(800, 1800)
       }
-      await randomDelay(800, 1800)
     }
 
-    console.log(`\nScraped ${collected.size} unique listings from Europlan (trucks).`)
+    console.log(`\nScraped ${collected.size} unique listings from Europlan (trucks + cars).`)
     return [...collected.values()]
   } finally {
     await page.close()
