@@ -540,6 +540,7 @@ function extractDetailFromHtmlFallback(html: string): {
       'аванс',
       'срок лизинга',
       'сумма договора',
+      'цвет',
     ]
     const lowered = out.toLowerCase()
     let cutIndex = out.length
@@ -794,11 +795,12 @@ async function enrichAndCollectListing(
   detailUrl: string
 ): Promise<ScrapedListing | null> {
   try {
-    // Собираем URL всех запросов к API картинок во время загрузки страницы.
+    // ID объявления из URL (например 509423 из .../details/509423) — берём только картинки этого объявления.
+    const listingId = detailUrl.match(/\/details\/(\d+)(?:\?|$)/)?.[1] ?? null
+
     const imageApiUrls: string[] = []
     const onResponse = (response: unknown): void => {
       try {
-        // Puppeteer HTTPResponse имеет метод url(); используем безопасный доступ.
         const url =
           typeof response === 'object' &&
           response !== null &&
@@ -806,8 +808,16 @@ async function enrichAndCollectListing(
           typeof (response as { url: () => string }).url === 'function'
             ? (response as { url: () => string }).url()
             : ''
-        if (!url) return
-        if (!url.includes('/auto/api/image/auto')) return
+        if (!url || !url.includes('/auto/api/image/auto')) return
+        // Только картинки текущего объявления: в API параметр i = id объявления.
+        if (listingId) {
+          try {
+            const parsed = new URL(url)
+            if (parsed.searchParams.get('i') !== listingId) return
+          } catch {
+            return
+          }
+        }
         imageApiUrls.push(url)
       } catch {
         // Игнорируем сбои при парсинге единичных ответов.
@@ -863,6 +873,10 @@ async function enrichAndCollectListing(
     // После того как всё извлекли, можно отписаться от слушателя ответов.
     page.off('response', onResponse as never)
 
+    // Нормализация: убрать «Объем » в начале описания двигателя и лишнюю «В»/«B» после цвета
+    const engineNormalized = (engine ?? '').replace(/^Объем\s*/gi, '').trim() || null
+    const bodyColorNormalized = (bodyColor ?? '').replace(/\s+[ВB]\s*$/gi, '').trim() || null
+
     const listing: ScrapedListing = {
       external_id: buildExternalId(detailUrl),
       title: sanitizeTitle(title),
@@ -875,10 +889,10 @@ async function enrichAndCollectListing(
       category: CATEGORY,
       city: city && isPlausibleCity(city) ? city : null,
       vin: vin || null,
-      engine: engine || null,
+      engine: engineNormalized,
       transmission: transmission || null,
       drivetrain: drivetrain || null,
-      body_color: bodyColor || null,
+      body_color: bodyColorNormalized,
     }
 
     return listing
