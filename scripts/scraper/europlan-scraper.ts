@@ -567,7 +567,9 @@ function extractDetailFromHtmlFallback(html: string): {
   const engine =
     plainText.match(/Двигатель\s*[:-]\s*([A-Za-zА-Яа-яЁё0-9.,/ -]{2,80})/i)?.[1]?.trim() ?? null
 
+  // На сайте Европлана город указан в блоке «Характеристики» как «Местонахождение: Ростов-на-Дону»
   const city =
+    plainText.match(/Местонахождение\s*[:-]\s*([А-Яа-яЁё0-9\-\s]{2,50})/i)?.[1]?.trim() ??
     plainText.match(/\b20\d{2}\s*г\.?\s*\/\s*[\d\s\u00A0]{2,}\s*(?:км|km)\s*\/\s*([А-Яа-яЁё -]{2,40})/i)?.[1]?.trim() ??
     plainText.match(/\b[\d\s\u00A0]{2,}\s*(?:км|km)\s*\/\s*([А-Яа-яЁё -]{2,40})/i)?.[1]?.trim() ??
     titleTag?.match(/в\s*г\.?\s*([А-Яа-яЁё -]{2,40})/i)?.[1]?.trim() ??
@@ -710,6 +712,8 @@ const EXTRACT_DOM_SCRIPT = `
   var yearMatch = bodyText.match(/\\\\b(20\\\\d{2}|19\\\\d{2})\\\\b/);
   var year = yearMatch ? parseInt(yearMatch[1], 10) : null;
   if (year !== null && isNaN(year)) year = null;
+  var cityMatch = bodyText.match(/Местонахождение\\\\s*[:-]\\\\s*([А-Яа-яЁё0-9\\\\-\\\\s]{2,50})/i);
+  var city = cityMatch && cityMatch[1] ? cityMatch[1].trim() : null;
   function getImgUrl(img) {
     var u = (img.getAttribute('data-src') || img.getAttribute('data-lazy-src') || img.getAttribute('data-original') || img.getAttribute('src') || '').trim();
     if (!u || u.indexOf('data:') === 0) return null;
@@ -759,7 +763,7 @@ const EXTRACT_DOM_SCRIPT = `
     });
     imageUrl = candidates[0].url;
   }
-  return { title: title, price: price, mileage: mileage, year: year, imageUrl: imageUrl };
+  return { title: title, price: price, mileage: mileage, year: year, imageUrl: imageUrl, city: city };
 })();
 `
 
@@ -769,6 +773,7 @@ async function extractDetailFromLiveDom(page: Page): Promise<{
   mileage: number | null
   year: number | null
   imageUrl: string | null
+  city: string | null
 }> {
   const raw = await page.evaluate(EXTRACT_DOM_SCRIPT)
 
@@ -778,6 +783,7 @@ async function extractDetailFromLiveDom(page: Page): Promise<{
     mileage: raw?.mileage != null && Number.isFinite(raw.mileage) ? raw.mileage : null,
     year: raw?.year != null && raw.year >= 1990 && raw.year <= 2030 ? raw.year : null,
     imageUrl: raw?.imageUrl ?? null,
+    city: typeof raw?.city === 'string' && raw.city.trim() ? raw.city.trim() : null,
   }
 }
 
@@ -828,7 +834,7 @@ async function enrichAndCollectListing(
     const mileage = fromLd.mileage ?? fromHtml.mileage ?? fromDom.mileage ?? null
     const year = fromLd.year ?? fromHtml.year ?? fromDom.year ?? null
     const imageUrl = fromLd.imageUrl ?? fromHtml.imageUrl ?? fromDom.imageUrl ?? fromApiImage ?? null
-    const city = fromHtml.city
+    const city = fromHtml.city ?? fromDom.city ?? null
     const vin = fromLd.vin ?? fromHtml.vin
     const engine = fromLd.engine ?? fromHtml.engine
     const transmission = fromLd.transmission ?? fromHtml.transmission
