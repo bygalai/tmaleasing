@@ -878,12 +878,13 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
   )
 
   try {
-    let currentUrl: string | null = TRUCK_CATALOG_URL
     let pageIndex = 0
 
-    while (currentUrl && pageIndex < maxPages) {
+    while (pageIndex < maxPages) {
       if (shutdownRequested) break
       pageIndex += 1
+      const currentUrl =
+        pageIndex === 1 ? TRUCK_CATALOG_URL : `${TRUCK_CATALOG_URL}?page=${pageIndex}`
       console.log(`\n--- Page ${pageIndex}/${maxPages}: ${currentUrl} ---`)
 
       try {
@@ -913,10 +914,6 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
         }
         await randomDelay(400, 900)
       }
-
-      const nextUrl = await extractNextPageUrl(page, currentUrl)
-      if (!nextUrl || nextUrl === currentUrl) break
-      currentUrl = nextUrl
       await randomDelay(800, 1800)
     }
 
