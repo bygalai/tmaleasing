@@ -788,6 +788,28 @@ async function enrichAndCollectListing(
   detailUrl: string
 ): Promise<ScrapedListing | null> {
   try {
+    // Собираем URL всех запросов к API картинок во время загрузки страницы.
+    const imageApiUrls: string[] = []
+    const onResponse = (response: unknown): void => {
+      try {
+        // Puppeteer HTTPResponse имеет метод url(); используем безопасный доступ.
+        const url =
+          typeof response === 'object' &&
+          response !== null &&
+          'url' in response &&
+          typeof (response as { url: () => string }).url === 'function'
+            ? (response as { url: () => string }).url()
+            : ''
+        if (!url) return
+        if (!url.includes('/auto/api/image/auto')) return
+        imageApiUrls.push(url)
+      } catch {
+        // Игнорируем сбои при парсинге единичных ответов.
+      }
+    }
+
+    page.on('response', onResponse as never)
+
     await page.goto(detailUrl, { waitUntil: 'domcontentloaded' })
     // SPA + картинки: даём время на отрисовку и загрузку фото (теперь image не блокируем)
     await sleep(process.env.CI ? 3000 : 5000)
@@ -798,11 +820,14 @@ async function enrichAndCollectListing(
     const fromHtml = extractDetailFromHtmlFallback(html)
     const fromDom = await extractDetailFromLiveDom(page)
 
+    // Пытаемся выбрать лучший URL фото из API картинок (если они вызывались).
+    const fromApiImage = imageApiUrls.length > 0 ? pickBestImageCandidate(imageApiUrls) : null
+
     const title = fromLd.title ?? fromHtml.title ?? fromDom.title ?? null
     const price = fromLd.price ?? fromHtml.price ?? fromDom.price ?? null
     const mileage = fromLd.mileage ?? fromHtml.mileage ?? fromDom.mileage ?? null
     const year = fromLd.year ?? fromHtml.year ?? fromDom.year ?? null
-    const imageUrl = fromLd.imageUrl ?? fromHtml.imageUrl ?? fromDom.imageUrl ?? null
+    const imageUrl = fromLd.imageUrl ?? fromHtml.imageUrl ?? fromDom.imageUrl ?? fromApiImage ?? null
     const city = fromHtml.city
     const vin = fromLd.vin ?? fromHtml.vin
     const engine = fromLd.engine ?? fromHtml.engine
@@ -819,15 +844,18 @@ async function enrichAndCollectListing(
       return null
     }
 
-    // Собираем все кандидатные URL и пропускаем их через единый фильтр,
-    // чтобы SVG-иконки (hamb.svg и пр.) не проходили даже если пришли из DOM.
-    const chosenImage = pickBestImageCandidate([imageUrl, fromDom.imageUrl])
+    // Собираем все кандидатные URL (HTML/DOM/API) и пропускаем через единый фильтр,
+    // чтобы SVG-иконки (hamb.svg и пр.) и пустые значения не проходили.
+    const chosenImage = pickBestImageCandidate([imageUrl, fromDom.imageUrl, fromApiImage])
     const FALLBACK_IMAGE = 'https://dummyimage.com/1200x800/1f2937/e5e7eb&text=Vehicle+Photo+Pending'
     let absoluteImage = toAbsoluteUrl(chosenImage)
     if (!absoluteImage || absoluteImage === FALLBACK_IMAGE) {
       console.warn(`  skip (no real image): ${title.slice(0, 40)}...`)
       return null
     }
+
+    // После того как всё извлекли, можно отписаться от слушателя ответов.
+    page.off('response', onResponse as never)
 
     const listing: ScrapedListing = {
       external_id: buildExternalId(detailUrl),
