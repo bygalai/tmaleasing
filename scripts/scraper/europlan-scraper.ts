@@ -491,9 +491,11 @@ function extractDetailFromJsonLd(payloads: unknown[]): {
     return filtered.length > 0 ? Math.max(...filtered) : null
   }
 
+  /** Минимальная реалистичная цена ТС — 100k; иначе ловим ежемесячный платёж/аванс (11k и т.п.). */
+  const MIN_VEHICLE_PRICE = 100_000
   return {
     title: bestTitle,
-    price: pickBestPrice(prices, 10_000, 100_000_000),
+    price: pickBestPrice(prices, MIN_VEHICLE_PRICE, 100_000_000),
     mileage: pickBest(mileages, 1),
     year: pickBest(years, 1900),
     imageUrl: pickBestImageCandidate(images) ?? null,
@@ -535,8 +537,8 @@ function extractDetailFromHtmlFallback(html: string): {
   const priceMatches = [...html.matchAll(/(\d[\d\s\u00A0]{3,})\s*(?:₽|&#8381;|руб|р\.?)/gi)]
     .map((m) => normalizeNumber(m[1]))
     .filter((v): v is number => v != null)
-    .filter((v) => v >= 10_000 && v <= 100_000_000)
-  /** Минимальная цена = обычно акционная/итоговая; на странице могут быть зачёркнутая и сумма договора. */
+    .filter((v) => v >= 100_000 && v <= 100_000_000)
+  /** Минимальная цена = обычно акционная/итоговая; отсекаем ежемесячный платёж/аванс. */
   const price = priceMatches.length > 0 ? Math.min(...priceMatches) : null
 
   const mileageText =
@@ -734,7 +736,7 @@ const EXTRACT_DOM_SCRIPT = `
     var text = el ? (el.textContent || '').trim().replace(/\\s+/g, ' ') : '';
     if (text && text.length > 5 && text.length < 200 && /[0-9A-Za-zА-Яа-я]/.test(text)) {
       var t = text.toLowerCase();
-      if (!/^каталог$/i.test(t) && !/^грузовые\\s/i.test(t) && !/\\sевроплан\\s*$/i.test(t)) {
+      if (!/^каталог$/i.test(t) && !/^грузовые\\s/i.test(t) && !/^легковые\\s/i.test(t) && !/\\sевроплан\\s*$/i.test(t)) {
         title = text;
         break;
       }
@@ -749,7 +751,7 @@ const EXTRACT_DOM_SCRIPT = `
   var m;
   while ((m = priceRe.exec(bodyText)) !== null) {
     var num = parseInt((m[1] || '').replace(/\\\\s/g, ''), 10);
-    if (!isNaN(num) && num >= 10000 && num <= 100000000) priceMatches.push(num);
+    if (!isNaN(num) && num >= 100000 && num <= 100000000) priceMatches.push(num);
   }
   var price = priceMatches.length > 0 ? Math.min.apply(null, priceMatches) : null;
   var mileageMatch = bodyText.match(/(\\\\d[\\\\d\\\\s\\\\u00A0]{2,})\\\\s*(?:км|km)/i);
@@ -912,24 +914,28 @@ async function enrichAndCollectListing(
       console.warn(`  skip (no title): ${detailUrl}`)
       return null
     }
-    if (!price || price < 10_000) {
-      console.warn(`  skip (no price): ${title.slice(0, 40)}...`)
+    const MIN_VEHICLE_PRICE = 100_000
+    if (!price || price < MIN_VEHICLE_PRICE) {
+      console.warn(`  skip (no/implausible price): ${title.slice(0, 40)}...`)
       return null
     }
 
-    // Если из API выбрано главное фото (вид снаружи), используем его; иначе — лучший из всех источников.
+    // Легковые: только фото из API этого объявления (i=listingId), иначе — сток/чужая машина.
+    // Грузовые: можно подставлять лучшее из API / HTML / DOM.
     const mainApiImage =
       fromApiImage &&
-      europlanMainPhotoScore(fromApiImage) >= 2 &&
+      europlanMainPhotoScore(fromApiImage) >= 0 &&
       !isBadImageCandidate(fromApiImage)
         ? fromApiImage
         : null
-    const chosenImage =
-      mainApiImage ?? pickBestImageCandidate([imageUrl, fromDom.imageUrl, fromApiImage])
+    const useOnlyApiImage = category === 'legkovye'
+    const chosenImage = useOnlyApiImage
+      ? mainApiImage ?? null
+      : mainApiImage ?? pickBestImageCandidate([imageUrl, fromDom.imageUrl, fromApiImage])
     const FALLBACK_IMAGE = 'https://dummyimage.com/1200x800/1f2937/e5e7eb&text=Vehicle+Photo+Pending'
-    let absoluteImage = toAbsoluteUrl(chosenImage)
+    let absoluteImage = chosenImage ? toAbsoluteUrl(chosenImage) : null
     if (!absoluteImage || absoluteImage === FALLBACK_IMAGE) {
-      console.warn(`  skip (no real image): ${title.slice(0, 40)}...`)
+      console.warn(`  skip (no real image${useOnlyApiImage ? ', legkovye require API image' : ''}): ${title.slice(0, 40)}...`)
       return null
     }
 
