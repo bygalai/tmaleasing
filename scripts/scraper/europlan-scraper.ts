@@ -287,7 +287,7 @@ function europlanMainPhotoScore(url: string): number {
     const n = parsed.searchParams.get('n')
     if (!n) return 0
     const decoded = decodeURIComponent(n).toLowerCase()
-    if (/салон|руль|интерьер|внутри|кабина|приборн|сидень/i.test(decoded)) return -2
+    if (/салон|руль|интерьер|внутри|кабина|приборн|сидень|торпедо|консоль|панель|вид изнутри/i.test(decoded)) return -2
     if (/спереди|сзади|сбоку|вид|кузов|наруж|_1\.|1\.jpg/i.test(decoded)) return 2
     return 0
   } catch {
@@ -466,9 +466,10 @@ function extractDetailFromJsonLd(payloads: unknown[]): {
 
   for (const payload of payloads) walk(payload)
 
-  const pickBest = (values: number[], min: number): number | null => {
-    const filtered = values.filter((v) => Number.isFinite(v) && v >= min)
-    return filtered.length > 0 ? Math.max(...filtered) : null
+  /** Цену берём минимальную из разумного диапазона: на сайте часто показывают акционную (ниже), а не «от» или сумму договора. */
+  const pickBestPrice = (values: number[], minVal: number, maxVal: number): number | null => {
+    const filtered = values.filter((v) => Number.isFinite(v) && v >= minVal && v <= maxVal)
+    return filtered.length > 0 ? Math.min(...filtered) : null
   }
   const pickFirstText = (values: string[]): string | null => {
     for (const v of values) {
@@ -485,9 +486,14 @@ function extractDetailFromJsonLd(payloads: unknown[]): {
     return filtered[0]
   })()
 
+  const pickBest = (values: number[], min: number): number | null => {
+    const filtered = values.filter((v) => Number.isFinite(v) && v >= min)
+    return filtered.length > 0 ? Math.max(...filtered) : null
+  }
+
   return {
     title: bestTitle,
-    price: pickBest(prices, 10_000),
+    price: pickBestPrice(prices, 10_000, 100_000_000),
     mileage: pickBest(mileages, 1),
     year: pickBest(years, 1900),
     imageUrl: pickBestImageCandidate(images) ?? null,
@@ -529,8 +535,9 @@ function extractDetailFromHtmlFallback(html: string): {
   const priceMatches = [...html.matchAll(/(\d[\d\s\u00A0]{3,})\s*(?:₽|&#8381;|руб|р\.?)/gi)]
     .map((m) => normalizeNumber(m[1]))
     .filter((v): v is number => v != null)
-    .filter((v) => v >= 10_000)
-  const price = priceMatches.length > 0 ? Math.max(...priceMatches) : null
+    .filter((v) => v >= 10_000 && v <= 100_000_000)
+  /** Минимальная цена = обычно акционная/итоговая; на странице могут быть зачёркнутая и сумма договора. */
+  const price = priceMatches.length > 0 ? Math.min(...priceMatches) : null
 
   const mileageText =
     plainText.match(/(\d[\d\s\u00A0]{2,})\s*(?:км|km)/i)?.[1] ??
@@ -737,10 +744,14 @@ const EXTRACT_DOM_SCRIPT = `
     title = document.title.replace(/\\s*\\|\\s*Европлан.*$/i, '').replace(/\\s*\\|\\s*Europlan.*$/i, '').replace(/\\s*-\\s*лизинг.*$/i, '').trim();
   }
   var bodyText = (document.body && document.body.innerText) || '';
-  var priceMatch = bodyText.match(/(\\\\d[\\\\d\\\\s\\\\u00A0]{3,})\\\\s*₽/) || bodyText.match(/(\\\\d[\\\\d\\\\s\\\\u00A0]{5,})\\\\s*(?:руб|р\\\\.?)/i);
-  var priceStr = priceMatch && priceMatch[1] ? priceMatch[1].replace(/\\\\s/g, '') : null;
-  var price = priceStr ? parseInt(priceStr, 10) : null;
-  if (price !== null && isNaN(price)) price = null;
+  var priceRe = /(\\\\d[\\\\d\\\\s\\\\u00A0]{3,})\\\\s*(?:₽|руб|р\\\\.?)/gi;
+  var priceMatches = [];
+  var m;
+  while ((m = priceRe.exec(bodyText)) !== null) {
+    var num = parseInt((m[1] || '').replace(/\\\\s/g, ''), 10);
+    if (!isNaN(num) && num >= 10000 && num <= 100000000) priceMatches.push(num);
+  }
+  var price = priceMatches.length > 0 ? Math.min.apply(null, priceMatches) : null;
   var mileageMatch = bodyText.match(/(\\\\d[\\\\d\\\\s\\\\u00A0]{2,})\\\\s*(?:км|km)/i);
   var mileageStr = mileageMatch && mileageMatch[1] ? mileageMatch[1].replace(/\\\\s/g, '') : null;
   var mileage = mileageStr ? parseInt(mileageStr, 10) : null;
@@ -872,14 +883,16 @@ async function enrichAndCollectListing(
     const fromHtml = extractDetailFromHtmlFallback(html)
     const fromDom = await extractDetailFromLiveDom(page)
 
-    // Из API картинок берём главное фото: приоритет — вид снаружи, не салон/руль.
+    // Из API картинок берём главное фото: только вид снаружи; интерьер не ставим в главные.
     const fromApiImage =
       imageApiUrls.length > 0
         ? (() => {
             const valid = imageApiUrls.filter((u) => !isBadImageCandidate(u))
             if (valid.length === 0) return pickBestImageCandidate(imageApiUrls)
-            valid.sort((a, b) => europlanMainPhotoScore(b) - europlanMainPhotoScore(a))
-            return valid[0] ?? null
+            const exterior = valid.filter((u) => europlanMainPhotoScore(u) >= 0)
+            const candidates = exterior.length > 0 ? exterior : valid
+            candidates.sort((a, b) => europlanMainPhotoScore(b) - europlanMainPhotoScore(a))
+            return candidates[0] ?? null
           })()
         : null
 
