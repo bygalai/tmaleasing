@@ -1,0 +1,45 @@
+name: Scrape Interleasing (ileasing.ru)
+
+on:
+  schedule:
+    # Каждые 3 часа: 00:00, 03:00, 06:00, 09:00, 12:00, 15:00, 18:00, 21:00 UTC
+    - cron: '0 0,3,6,9,12,15,18,21 * * *'
+  workflow_dispatch:
+    inputs:
+      max_pages:
+        description: 'Max catalog pages to scrape'
+        required: false
+        default: '5'
+
+concurrency:
+  group: ileasing-scraper
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+      ILEASING_MAX_PAGES: ${{ github.event.inputs.max_pages || '5' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium for Puppeteer
+        run: npx puppeteer browsers install chrome
+
+      - name: Run Interleasing scraper (speztechnika)
+        run: npm run scrape:ileasing
