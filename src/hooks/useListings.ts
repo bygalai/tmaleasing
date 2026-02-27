@@ -21,6 +21,7 @@ type ListingsRow = {
   transmission: string | null
   drivetrain: string | null
   body_color: string | null
+  source: string | null
 }
 
 function toNumber(value: string | number | null | undefined): number | undefined {
@@ -44,6 +45,12 @@ function normalizeEngine(value: string | null): string | null {
   if (!value) return null
   let out = value.replace(/\s+/g, ' ').trim()
   if (!out) return null
+
+  // Приводим тип топлива к единому виду (как в VTB): бензин / дизель вместо Бензиновый / Дизельный
+  out = out.replace(/\bБензиновый\b/gi, 'бензин')
+  out = out.replace(/\bДизельный\b/gi, 'дизель')
+  out = out.replace(/\bГибридный\b/gi, 'гибрид')
+  out = out.replace(/\bЭлектрический\b/gi, 'электро')
 
   out = out.replace(/^\d+\s*\/\s*/i, '')
   out = out.replace(/^\d+\s*(см3|см\^?3|cc)\s*\/\s*/i, '')
@@ -72,6 +79,40 @@ function normalizeDrivetrain(value: string | null): string | null {
   if (/[A-Za-z]/.test(raw) && raw.length > 18) return null
 
   return raw
+}
+
+/** Fisher-Yates shuffle. */
+function shuffle<T>(arr: T[]): T[] {
+  const out = [...arr]
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]]
+  }
+  return out
+}
+
+/** Перемешивает объявления по source: случайный порядок в каждой группе, затем хаотичный выбор (рандомно тянем из оставшихся источников). */
+function interleaveBySource<T extends { source?: string | null }>(rows: T[]): T[] {
+  const bySource = new Map<string, T[]>()
+  for (const row of rows) {
+    const key = row.source?.trim() || 'unknown'
+    if (!bySource.has(key)) bySource.set(key, [])
+    bySource.get(key)!.push(row)
+  }
+  const groups = Array.from(bySource.values()).map((g) => shuffle(g))
+  if (groups.length <= 1) return groups[0] ?? rows
+  const out: T[] = []
+  const indices = groups.map(() => 0)
+  const total = rows.length
+  while (out.length < total) {
+    const available = groups
+      .map((g, i) => i)
+      .filter((i) => indices[i] < groups[i].length)
+    if (available.length === 0) break
+    const pick = available[Math.floor(Math.random() * available.length)]
+    out.push(groups[pick][indices[pick]++])
+  }
+  return out
 }
 
 function lowercaseFirstLetter(value: string | null): string | null {
@@ -163,7 +204,7 @@ export function useListings() {
         const { data, error: supabaseError } = await supabase
           .from('listings')
           .select(
-            'id,category,title,price,mileage,year,images,listing_url,created_at,city,vin,engine,transmission,drivetrain,body_color',
+            'id,category,title,price,mileage,year,images,listing_url,created_at,city,vin,engine,transmission,drivetrain,body_color,source',
           )
           .not('price', 'is', null)
           .order('created_at', { ascending: false })
@@ -185,7 +226,9 @@ export function useListings() {
           dedupedRows.push(row)
         }
 
-        const mapped = dedupedRows.map(mapRowToListing)
+        // Чередуем по источнику (vtb / europlan), чтобы в начале были и те и другие
+        const interleaved = interleaveBySource(dedupedRows)
+        const mapped = interleaved.map(mapRowToListing)
 
         if (!cancelled) {
           setItems(mapped)
