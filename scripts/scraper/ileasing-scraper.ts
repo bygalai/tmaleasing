@@ -46,7 +46,7 @@ const SOURCE = 'ileasing'
 const ILEASING_BASE_URL = 'https://www.ileasing.ru'
 const ALLOWED_DOMAIN = 'ileasing.ru'
 
-const CATALOG_URL = 'https://www.ileasing.ru/bu_tehnika/spetstekhnika/'
+const CATALOG_URL = 'https://www.ileasing.ru/bu_tehnika/spetstekhnika/?SIZEN_1=15'
 const CATEGORY = 'speztechnika'
 const DETAILS_PREFIX = '/bu_tehnika/spetstekhnika/'
 
@@ -324,6 +324,24 @@ function extractJsonLdBlocks(html: string): unknown[] {
   return blocks
 }
 
+function isProductLikeType(obj: Record<string, unknown>): boolean {
+  const typeRaw = obj['@type']
+  if (!typeRaw) return false
+  const types = Array.isArray(typeRaw) ? typeRaw : [typeRaw]
+  const productTypes = ['Product', 'Vehicle', 'Car', 'Auto', 'Automobile']
+  const raw = types.map((t) => String(t).toLowerCase()).join(' ')
+  return productTypes.some((pt) => raw.includes(pt.toLowerCase()))
+}
+
+function isOrganizationLikeType(obj: Record<string, unknown>): boolean {
+  const typeRaw = obj['@type']
+  if (!typeRaw) return false
+  const types = Array.isArray(typeRaw) ? typeRaw : [typeRaw]
+  const orgTypes = ['Organization', 'WebSite', 'LocalBusiness', 'Corporation']
+  const raw = types.map((t) => String(t).toLowerCase()).join(' ')
+  return orgTypes.some((ot) => raw.includes(ot.toLowerCase()))
+}
+
 function extractDetailFromJsonLd(payloads: unknown[]): {
   title: string | null
   price: number | null
@@ -339,21 +357,22 @@ function extractDetailFromJsonLd(payloads: unknown[]): {
 } {
   const seen = new Set<object>()
   const prices: number[] = []
+  const productPrices: number[] = []
   const mileages: number[] = []
   const years: number[] = []
   const titles: string[] = []
   const images: string[] = []
+  const productImages: string[] = []
   const vins: string[] = []
   const engines: string[] = []
   const transmissions: string[] = []
   const drivetrains: string[] = []
   const bodyColors: string[] = []
   const cities: string[] = []
+  const productCities: string[] = []
 
   const pickBestPrice = (values: number[], minVal: number, maxVal: number): number | null => {
     const filtered = values.filter((v) => Number.isFinite(v) && v >= minVal && v <= maxVal)
-    // Для Интерлизинга берём максимальную цену: на странице может быть помесячный платёж (меньше),
-    // а нам нужна полная стоимость техники (7 170 000 руб и т.п.).
     return filtered.length > 0 ? Math.max(...filtered) : null
   }
   const pickFirstText = (values: string[]): string | null => {
@@ -374,6 +393,8 @@ function extractDetailFromJsonLd(payloads: unknown[]): {
     if (seen.has(node as object)) return
     seen.add(node as object)
     const obj = node as Record<string, unknown>
+    const isProduct = isProductLikeType(obj)
+    const isOrg = isOrganizationLikeType(obj)
 
     const maybeName =
       toTextValue(obj.name) ??
@@ -383,22 +404,29 @@ function extractDetailFromJsonLd(payloads: unknown[]): {
     if (maybeName && isRealTitle(maybeName)) titles.push(maybeName)
 
     const imageField = obj.image
-    if (typeof imageField === 'string') images.push(imageField)
+    const collectImage = (url: string) => {
+      images.push(url)
+      if (isProduct) productImages.push(url)
+    }
+    if (typeof imageField === 'string') collectImage(imageField)
     if (Array.isArray(imageField)) {
       for (const item of imageField) {
-        if (typeof item === 'string') images.push(item)
+        if (typeof item === 'string') collectImage(item)
         if (item && typeof item === 'object') {
           const maybeUrl = toTextValue((item as Record<string, unknown>).url)
-          if (maybeUrl) images.push(maybeUrl)
+          if (maybeUrl) collectImage(maybeUrl)
         }
       }
     }
     const maybeThumb = toTextValue(obj.thumbnailUrl)
-    if (maybeThumb) images.push(maybeThumb)
+    if (maybeThumb) collectImage(maybeThumb)
 
     const priceRaw = obj.price ?? (obj.offers as Record<string, unknown> | undefined)?.price
     const priceNum = normalizeNumber(toTextValue(priceRaw))
-    if (priceNum != null) prices.push(priceNum)
+    if (priceNum != null) {
+      prices.push(priceNum)
+      if (isProduct) productPrices.push(priceNum)
+    }
 
     const mileageRaw =
       (obj.mileageFromOdometer as Record<string, unknown> | undefined)?.value ??
@@ -411,10 +439,16 @@ function extractDetailFromJsonLd(payloads: unknown[]): {
     const yearNum = parseYear(toTextValue(yearRaw))
     if (yearNum != null) years.push(yearNum)
 
-    const addressRaw = obj.address ?? (obj.offers as Record<string, unknown> | undefined)?.address
-    const addr = addressRaw && typeof addressRaw === 'object' ? addressRaw : null
-    const cityVal = toTextValue((addr as Record<string, unknown>)?.addressLocality ?? obj.addressLocality ?? obj.city)
-    if (cityVal) cities.push(cityVal)
+    // Не берём город из Organization/WebSite — там штаб-квартира (часто СПб), а не местонахождение лота.
+    if (!isOrg) {
+      const addressRaw = obj.address ?? (obj.offers as Record<string, unknown> | undefined)?.address
+      const addr = addressRaw && typeof addressRaw === 'object' ? addressRaw : null
+      const cityVal = toTextValue((addr as Record<string, unknown>)?.addressLocality ?? obj.addressLocality ?? obj.city)
+      if (cityVal) {
+        cities.push(cityVal)
+        if (isProduct) productCities.push(cityVal)
+      }
+    }
 
     for (const value of Object.values(obj)) walk(value)
   }
@@ -427,13 +461,21 @@ function extractDetailFromJsonLd(payloads: unknown[]): {
     return filtered.length > 0 ? Math.max(...filtered) : null
   }
 
+  // Приоритет: данные из Product/Vehicle, не из Organization.
+  const price =
+    pickBestPrice(productPrices, 100_000, 500_000_000) ??
+    pickBestPrice(prices, 100_000, 500_000_000)
+  const city = pickFirstText(productCities) ?? pickFirstText(cities)
+  const imageUrl =
+    pickBestImageCandidate(productImages) ?? pickBestImageCandidate(images) ?? null
+
   return {
     title: bestTitle,
-    price: pickBestPrice(prices, 100_000, 500_000_000),
+    price,
     mileage: pickBest(mileages, 1),
     year: pickBest(years, 1990),
-    imageUrl: pickBestImageCandidate(images) ?? null,
-    city: pickFirstText(cities),
+    imageUrl,
+    city,
     vin: pickFirstText(vins),
     engine: pickFirstText(engines),
     transmission: pickFirstText(transmissions),
@@ -496,13 +538,23 @@ function extractDetailFromHtmlFallback(html: string): {
     null
   const imgSrc =
     html.match(/<img[^>]+data-src=["']([^"']+)["'][^>]*>/i)?.[1] ??
+    html.match(/<img[^>]+data-lazy-src=["']([^"']+)["'][^>]*>/i)?.[1] ??
+    html.match(/<img[^>]+data-original=["']([^"']+)["'][^>]*>/i)?.[1] ??
     html.match(/<img[^>]+src=["']([^"']+)["'][^>]*>/i)?.[1] ??
     null
   const srcsetCandidate = html.match(/<img[^>]+srcset=["']([^"']+)["'][^>]*>/i)?.[1] ?? null
   const firstSrcsetUrl = srcsetCandidate ? srcsetCandidate.split(',')[0]?.trim().split(' ')[0]?.trim() : null
-  const imageUrl = pickBestImageCandidate(
-    [ogImage, firstSrcsetUrl, imgSrc].map((v) => (typeof v === 'string' ? decodeHtmlAttr(v) : v))
-  )
+  // ileasing/Bitrix: /upload/iblock/ — URL фото техники. Собираем все и выбираем лучшее.
+  const iblockUrls = [...html.matchAll(/["']([^"']*\/upload\/iblock\/[^"']+\.(?:jpe?g|png|webp)(?:\?[^"']*)?)["']/gi)]
+    .map((m) => m[1]?.trim())
+    .filter((u): u is string => !!u && !isBadImageCandidate(u))
+  const allImageCandidates = [
+    ogImage,
+    firstSrcsetUrl,
+    imgSrc,
+    ...iblockUrls,
+  ].map((v) => (typeof v === 'string' ? decodeHtmlAttr(v) : v))
+  const imageUrl = pickBestImageCandidate(allImageCandidates)
 
   const city =
     plainText.match(/Город\s*[:-]\s*([А-Яа-яЁё0-9\-\s]{2,50})/i)?.[1]?.trim() ??
@@ -635,11 +687,12 @@ const EXTRACT_DOM_SCRIPT = `
   var city = cityMatch && cityMatch[1] ? cityMatch[1].trim() : null;
   function getImgUrl(img) {
     var u = (img.getAttribute('data-src') || img.getAttribute('data-lazy-src') || img.getAttribute('data-original') || img.getAttribute('src') || '').trim();
-    if (!u || u.indexOf('data:') === 0) return null;
-    var srcset = (img.getAttribute('srcset') || '').trim();
-    if (!u && srcset) {
-      var first = srcset.split(',')[0];
-      if (first) u = first.trim().split(/\\\\s+/)[0] || first.trim();
+    if (!u || u.indexOf('data:') === 0) {
+      var srcset = (img.getAttribute('srcset') || img.getAttribute('data-srcset') || '').trim();
+      if (srcset) {
+        var first = srcset.split(',')[0];
+        if (first) u = first.trim().split(/\\\\s+/)[0] || first.trim();
+      }
     }
     if (!u || isBadImg(u)) return null;
     return u;
@@ -661,9 +714,9 @@ const EXTRACT_DOM_SCRIPT = `
     var isPhoto = looksLikePhoto(u);
     candidates.push({ url: u, isBig: isBig, isPhoto: isPhoto });
   }
-  var sources = document.querySelectorAll('picture source[srcset]');
+  var sources = document.querySelectorAll('picture source[srcset], picture source[data-srcset]');
   for (var si = 0; si < sources.length; si++) {
-    var srcset = (sources[si].getAttribute('srcset') || '').trim();
+    var srcset = (sources[si].getAttribute('srcset') || sources[si].getAttribute('data-srcset') || '').trim();
     if (!srcset) continue;
     var firstSrc = srcset.split(',')[0];
     if (!firstSrc) continue;
@@ -709,6 +762,15 @@ async function enrichAndCollectListing(page: Page, detailUrl: string): Promise<S
   try {
     await page.goto(detailUrl, { waitUntil: 'domcontentloaded' })
     await sleep(process.env.CI ? 3000 : 5000)
+    // Прокрутка для загрузки lazy-изображений (галерея/слайдер на ileasing)
+    await page.evaluate(() => {
+      window.scrollTo(0, document.body.scrollHeight / 2)
+    })
+    await sleep(800)
+    await page.evaluate(() => {
+      window.scrollTo(0, 0)
+    })
+    await sleep(500)
     const html = await page.content()
 
     const jsonLd = extractJsonLdBlocks(html)
@@ -792,7 +854,13 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
   try {
     for (let pageIndex = 1; pageIndex <= maxPages; pageIndex++) {
       if (shutdownRequested) break
-      const currentUrl = pageIndex === 1 ? CATALOG_URL : `${CATALOG_URL}?page=${pageIndex}`
+      // Bitrix-совместимая пагинация: PAGEN_1
+      const currentUrl =
+        pageIndex === 1
+          ? CATALOG_URL
+          : CATALOG_URL.includes('?')
+            ? `${CATALOG_URL}&PAGEN_1=${pageIndex}`
+            : `${CATALOG_URL}?PAGEN_1=${pageIndex}`
       console.log(`\n--- Page ${pageIndex}/${maxPages}: ${currentUrl} ---`)
 
       try {
