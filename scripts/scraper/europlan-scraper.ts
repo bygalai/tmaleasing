@@ -1092,17 +1092,44 @@ async function run(): Promise<void> {
       if (error) throw error
     }
 
-    console.log(`Upserted ${listings.length} Europlan truck listings. They appear in "Грузовые" mixed with other sources.`)
+    console.log(`Upserted ${listings.length} Europlan listings.`)
 
-    const { data: deleted, error: cleanupErr } = await supabase
+    const scrapedIds = new Set(listings.map((l) => l.external_id))
+
+    const { data: skeletonDeleted, error: skeletonErr } = await supabase
       .from('listings')
       .delete()
       .eq('source', SOURCE)
       .is('price', null)
       .select('id')
 
-    if (!cleanupErr && deleted?.length) {
-      console.log(`Cleaned up ${deleted.length} unenriched skeleton rows (source=europlan).`)
+    if (!skeletonErr && skeletonDeleted?.length) {
+      console.log(`Cleaned up ${skeletonDeleted.length} unenriched skeleton rows (source=europlan).`)
+    }
+
+    const { data: existingRows } = await supabase
+      .from('listings')
+      .select('external_id')
+      .eq('source', SOURCE)
+    const toRemove = (existingRows ?? [])
+      .map((r) => (r as { external_id?: string }).external_id)
+      .filter((id): id is string => !!id && !scrapedIds.has(id))
+
+    if (toRemove.length > 0) {
+      const REMOVE_BATCH = 500
+      for (let i = 0; i < toRemove.length; i += REMOVE_BATCH) {
+        const batch = toRemove.slice(i, i + REMOVE_BATCH)
+        const { error: removeErr } = await supabase
+          .from('listings')
+          .delete()
+          .eq('source', SOURCE)
+          .in('external_id', batch)
+        if (removeErr) {
+          console.warn(`Sync cleanup warning: failed to remove old listings: ${removeErr.message}`)
+          break
+        }
+      }
+      console.log(`Removed ${toRemove.length} listings no longer on Europlan (sync cleanup).`)
     }
   } catch (error) {
     console.error('Europlan scraper failed:', error)

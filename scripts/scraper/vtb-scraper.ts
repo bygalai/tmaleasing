@@ -1489,24 +1489,48 @@ async function run(): Promise<void> {
       const updated = enriched.filter((l) => existingIds.has(l.external_id)).length
       const inserted = enriched.length - updated
       console.log(
-        `Upserted ${enriched.length} listings: ${updated} updated (already in DB), ${inserted} inserted (new). Total rows in DB unchanged when all are updates.`
+        `Upserted ${enriched.length} listings: ${updated} updated (already in DB), ${inserted} inserted (new).`
       )
     }
 
-    // Cleanup: remove skeleton rows that were never enriched.
-    // Unenriched rows always have price=NULL — enrichment always resolves a price.
-    const { data: deleted, error: cleanupErr } = await supabase
+    const scrapedIds = new Set(listings.map((l) => l.external_id))
+
+    const { data: skeletonDeleted, error: skeletonErr } = await supabase
       .from('listings')
       .delete()
       .eq('source', SOURCE)
       .is('price', null)
       .select('id')
 
-    if (cleanupErr) {
-      console.error('Cleanup warning (non-fatal):', cleanupErr.message)
-    } else {
-      const deletedCount = deleted?.length ?? 0
-      console.log(`Cleaned up ${deletedCount} unenriched skeleton rows`)
+    if (skeletonErr) {
+      console.error('Cleanup warning (non-fatal):', skeletonErr.message)
+    } else if (skeletonDeleted?.length) {
+      console.log(`Cleaned up ${skeletonDeleted.length} unenriched skeleton rows`)
+    }
+
+    const { data: existingRows } = await supabase
+      .from('listings')
+      .select('external_id')
+      .eq('source', SOURCE)
+    const toRemove = (existingRows ?? [])
+      .map((r) => (r as { external_id?: string }).external_id)
+      .filter((id): id is string => !!id && !scrapedIds.has(id))
+
+    if (toRemove.length > 0) {
+      const REMOVE_BATCH = 500
+      for (let i = 0; i < toRemove.length; i += REMOVE_BATCH) {
+        const batch = toRemove.slice(i, i + REMOVE_BATCH)
+        const { error: removeErr } = await supabase
+          .from('listings')
+          .delete()
+          .eq('source', SOURCE)
+          .in('external_id', batch)
+        if (removeErr) {
+          console.warn(`Sync cleanup warning: failed to remove old listings: ${removeErr.message}`)
+          break
+        }
+      }
+      console.log(`Removed ${toRemove.length} listings no longer on VTB (sync cleanup).`)
     }
   } catch (error) {
     console.error('Scraper failed:', error)
