@@ -1103,7 +1103,9 @@ async function run(): Promise<void> {
       .is('price', null)
       .select('id')
 
-    if (!skeletonErr && skeletonDeleted?.length) {
+    if (skeletonErr) {
+      console.warn('Skeleton cleanup (non-fatal):', skeletonErr.message)
+    } else if (skeletonDeleted?.length) {
       console.log(`Cleaned up ${skeletonDeleted.length} unenriched skeleton rows (source=europlan).`)
     }
 

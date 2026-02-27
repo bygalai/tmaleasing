@@ -1503,7 +1503,7 @@ async function run(): Promise<void> {
       .select('id')
 
     if (skeletonErr) {
-      console.error('Cleanup warning (non-fatal):', skeletonErr.message)
+      console.warn('Skeleton cleanup (non-fatal):', skeletonErr.message)
     } else if (skeletonDeleted?.length) {
       console.log(`Cleaned up ${skeletonDeleted.length} unenriched skeleton rows`)
     }
