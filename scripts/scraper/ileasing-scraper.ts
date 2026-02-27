@@ -352,7 +352,9 @@ function extractDetailFromJsonLd(payloads: unknown[]): {
 
   const pickBestPrice = (values: number[], minVal: number, maxVal: number): number | null => {
     const filtered = values.filter((v) => Number.isFinite(v) && v >= minVal && v <= maxVal)
-    return filtered.length > 0 ? Math.min(...filtered) : null
+    // Для Интерлизинга берём максимальную цену: на странице может быть помесячный платёж (меньше),
+    // а нам нужна полная стоимость техники (7 170 000 руб и т.п.).
+    return filtered.length > 0 ? Math.max(...filtered) : null
   }
   const pickFirstText = (values: string[]): string | null => {
     for (const v of values) {
@@ -475,7 +477,8 @@ function extractDetailFromHtmlFallback(html: string): {
     .map((m) => normalizeNumber(m[1]))
     .filter((v): v is number => v != null)
     .filter((v) => v >= 100_000 && v <= 500_000_000)
-  const price = priceMatches.length > 0 ? Math.min(...priceMatches) : null
+  // Берём максимальную цену, чтобы выбрать полную стоимость, а не помесячный платёж.
+  const price = priceMatches.length > 0 ? Math.max(...priceMatches) : null
 
   const mileageText =
     plainText.match(/Пробег[\s,]*км\s*[:-]*\s*(\d[\d\s\u00A0]*)/i)?.[1] ??
@@ -619,7 +622,8 @@ const EXTRACT_DOM_SCRIPT = `
     var num = parseInt((m[1] || '').replace(/\\\\s/g, ''), 10);
     if (!isNaN(num) && num >= 100000 && num <= 500000000) priceMatches.push(num);
   }
-  var price = priceMatches.length > 0 ? Math.min.apply(null, priceMatches) : null;
+  // Для Интерлизинга: максимальное значение = полная стоимость.
+  var price = priceMatches.length > 0 ? Math.max.apply(null, priceMatches) : null;
   var mileageMatch = bodyText.match(/Пробег[\\\\s,]*(?:км)?[\\\\s:]*([\\\\d\\\\s\\\\u00A0]+)/i) || bodyText.match(/([\\\\d\\\\s\\\\u00A0]{2,})\\\\s*(?:км|km)/i);
   var mileageStr = mileageMatch && mileageMatch[1] ? mileageMatch[1].replace(/\\\\s/g, '') : null;
   var mileage = mileageStr ? parseInt(mileageStr, 10) : null;
@@ -712,12 +716,13 @@ async function enrichAndCollectListing(page: Page, detailUrl: string): Promise<S
     const fromHtml = extractDetailFromHtmlFallback(html)
     const fromDom = await extractDetailFromLiveDom(page)
 
-    const title = fromLd.title ?? fromHtml.title ?? fromDom.title ?? null
-    const price = fromLd.price ?? fromHtml.price ?? fromDom.price ?? null
-    const mileage = fromLd.mileage ?? fromHtml.mileage ?? fromDom.mileage ?? null
-    const year = fromLd.year ?? fromHtml.year ?? fromDom.year ?? null
-    const imageUrl = fromLd.imageUrl ?? fromHtml.imageUrl ?? fromDom.imageUrl ?? null
-    const city = fromLd.city ?? fromHtml.city ?? fromDom.city ?? null
+    // Для Интерлизинга HTML/DOM обычно точнее JSON-LD (особенно по городу).
+    const title = fromHtml.title ?? fromDom.title ?? fromLd.title ?? null
+    const price = fromHtml.price ?? fromDom.price ?? fromLd.price ?? null
+    const mileage = fromHtml.mileage ?? fromDom.mileage ?? fromLd.mileage ?? null
+    const year = fromHtml.year ?? fromDom.year ?? fromLd.year ?? null
+    const imageUrl = fromHtml.imageUrl ?? fromDom.imageUrl ?? fromLd.imageUrl ?? null
+    const city = fromHtml.city ?? fromDom.city ?? fromLd.city ?? null
 
     if (!title || !isRealTitle(title)) {
       console.warn(`  skip (no title): ${detailUrl}`)
