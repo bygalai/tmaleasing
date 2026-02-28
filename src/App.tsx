@@ -1,6 +1,8 @@
+import { useCallback, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { AppLayout } from './components/layout/AppLayout'
 import { BottomNav } from './components/navigation/BottomNav'
+import { SplashScreen } from './components/SplashScreen'
 import { useFavorites } from './hooks/useFavorites'
 import { useListings } from './hooks/useListings'
 import { AboutPage } from './pages/AboutPage'
@@ -93,6 +95,17 @@ function Header() {
 function App() {
   const { items, isLoading, error } = useListings()
   const { isFavorite, toggleFavorite } = useFavorites()
+  const [splashVisible, setSplashVisible] = useState(true)
+
+  const handleSplashReady = useCallback(() => {
+    setSplashVisible(false)
+  }, [])
+
+  if (splashVisible) {
+    return (
+      <SplashScreen onReady={handleSplashReady} isAppReady={!isLoading} />
+    )
+  }
 
   return (
     <AppLayout>
