@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { getUserDisplayName } from '../lib/telegram'
+import { getUserDisplayName, notifyAppReady } from '../lib/telegram'
 
 const MIN_DISPLAY_MS = 1800
 const FADEOUT_MS = 350
@@ -15,6 +15,14 @@ export function SplashScreen({ onReady, isAppReady }: SplashScreenProps) {
   const readyCalled = useRef(false)
 
   useEffect(() => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        notifyAppReady()
+      })
+    })
+  }, [])
+
+  useEffect(() => {
     const timer = setTimeout(() => setMinTimeElapsed(true), MIN_DISPLAY_MS)
     return () => clearTimeout(timer)
   }, [])
@@ -27,8 +35,15 @@ export function SplashScreen({ onReady, isAppReady }: SplashScreenProps) {
     return () => clearTimeout(timer)
   }, [minTimeElapsed, isAppReady, onReady])
 
-  const userName = getUserDisplayName()
-  const greeting = userName === 'Гость' ? 'Привет!' : `Привет, ${userName}`
+  let greeting = 'Привет!'
+  try {
+    const userName = getUserDisplayName()
+    if (userName !== 'Гость') {
+      greeting = `Привет, ${userName}`
+    }
+  } catch {
+    // Вне Telegram или ошибка SDK
+  }
 
   return (
     <div

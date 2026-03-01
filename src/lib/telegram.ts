@@ -33,8 +33,15 @@ export function initializeTelegram(): void {
   const webApp = window.Telegram?.WebApp
   if (!webApp) return
 
-  webApp.ready()
   webApp.expand()
+}
+
+/** Вызвать, когда приложение готово к показу (после SplashScreen). */
+export function notifyAppReady(): void {
+  const webApp = window.Telegram?.WebApp
+  if (webApp) {
+    webApp.ready()
+  }
 }
 
 export function getTelegramUserFromInitData(): TelegramUser | undefined {
