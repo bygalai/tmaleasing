@@ -18,7 +18,13 @@ export function ListingCard({ item, isFavorite, onToggleFavorite }: ListingCardP
   return (
     <article className="relative mx-auto w-full max-w-[560px] overflow-hidden rounded-2xl border border-black/10 bg-white/70 shadow-[0_14px_45px_rgba(15,23,42,0.10)]">
       <div className="relative h-48 w-full">
-        <img src={item.imageUrl} alt={item.title} className="h-full w-full object-cover" loading="lazy" />
+        <img
+          src={item.imageUrl}
+          alt={item.title}
+          className="h-full w-full object-cover"
+          loading="lazy"
+          referrerPolicy="no-referrer"
+        />
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
         <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
           {item.badges.map((badge) => (

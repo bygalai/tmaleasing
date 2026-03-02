@@ -41,6 +41,20 @@ function isBadImageUrl(url: string): boolean {
   return false
 }
 
+/** ileasing.ru блокирует хотлинкинг. Проксируем через wsrv.nl. */
+function proxyImageUrl(url: string): string {
+  const trimmed = url.trim()
+  if (!trimmed) return url
+  try {
+    if (trimmed.toLowerCase().includes('ileasing.ru')) {
+      return `https://wsrv.nl/?url=${encodeURIComponent(trimmed)}`
+    }
+  } catch {
+    // ignore
+  }
+  return url
+}
+
 function normalizeEngine(value: string | null): string | null {
   if (!value) return null
   let out = value.replace(/\s+/g, ' ').trim()
@@ -127,7 +141,8 @@ function mapRowToListing(row: ListingsRow): Listing {
   const mileageKm = toNumber(row.mileage)
   const year = row.year ?? undefined
 
-  const imageUrls = (row.images ?? []).filter((url): url is string => Boolean(url && !isBadImageUrl(url)))
+  const rawImageUrls = (row.images ?? []).filter((url): url is string => Boolean(url && !isBadImageUrl(url)))
+  const imageUrls = rawImageUrls.map(proxyImageUrl)
   const imageUrl = imageUrls[0] ?? FALLBACK_IMAGE
 
   const engine = normalizeEngine(row.engine)

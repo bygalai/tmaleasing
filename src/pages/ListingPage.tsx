@@ -26,7 +26,12 @@ export function ListingPage({ items, isFavorite, toggleFavorite }: ListingPagePr
 
   return (
     <article className="space-y-4 pb-6">
-      <img src={item.imageUrl} alt={item.title} className="h-56 w-full rounded-2xl object-cover" />
+      <img
+        src={item.imageUrl}
+        alt={item.title}
+        className="h-56 w-full rounded-2xl object-cover"
+        referrerPolicy="no-referrer"
+      />
 
       <div className="space-y-2">
         <div className="flex items-start justify-between gap-2">
