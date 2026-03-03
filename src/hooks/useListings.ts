@@ -154,13 +154,17 @@ function mapRowToListing(row: ListingsRow): Listing {
   const imageUrls = rawImageUrls
   const imageUrl = imageUrls[0] ?? FALLBACK_IMAGE
 
-  const engine = normalizeEngine(row.engine)
-  const drivetrain = normalizeDrivetrain(row.drivetrain)
-  const transmission = normalizeTransmission(row.transmission)
+  const isTrailer = row.category === 'pricepy'
+  const engine = isTrailer ? null : normalizeEngine(row.engine)
+  const drivetrain = isTrailer ? null : normalizeDrivetrain(row.drivetrain)
+  const transmission = isTrailer ? null : normalizeTransmission(row.transmission)
   const bodyColor = (row.body_color ?? '').replace(/\s+обивка\s*$/gi, '').trim() || null
-  const subtitleParts = [bodyColor, engine, transmission, drivetrain].filter(
-    (part): part is string => Boolean(part && part.trim()),
-  )
+  const subtitleParts = isTrailer
+    ? [bodyColor].filter((part): part is string => Boolean(part && part.trim()))
+    : [bodyColor, engine, transmission, drivetrain].filter(
+        (part): part is string => Boolean(part && part.trim()),
+      )
+  const subtitleFallback = isTrailer ? 'Прицеп / полуприцеп' : 'Проверенный лот'
 
   const bodyColorForDescription = lowercaseFirstLetter(bodyColor)
   const drivetrainForDescription = lowercaseFirstLetter(drivetrain)
@@ -168,10 +172,14 @@ function mapRowToListing(row: ListingsRow): Listing {
   const descriptionParts = [
     row.city ? `Город: ${row.city}` : null,
     year ? `Год: ${year}` : null,
-    mileageKm !== undefined ? `Пробег: ${Math.round(mileageKm)} км` : null,
-    engine ? `Двигатель: ${engine}` : null,
-    transmission ? `КПП: ${transmission}` : null,
-    drivetrainForDescription ? `Привод: ${drivetrainForDescription}` : null,
+    mileageKm !== undefined
+      ? isTrailer
+        ? `Наработка: ${Math.round(mileageKm)} м.ч.`
+        : `Пробег: ${Math.round(mileageKm)} км`
+      : null,
+    !isTrailer && engine ? `Двигатель: ${engine}` : null,
+    !isTrailer && transmission ? `КПП: ${transmission}` : null,
+    !isTrailer && drivetrainForDescription ? `Привод: ${drivetrainForDescription}` : null,
     bodyColorForDescription ? `Цвет: ${bodyColorForDescription}` : null,
     row.vin ? `VIN: ${row.vin}` : null,
   ].filter((part): part is string => Boolean(part))
@@ -180,7 +188,7 @@ function mapRowToListing(row: ListingsRow): Listing {
     id: row.id,
     category: row.category ?? undefined,
     title: row.title,
-    subtitle: subtitleParts.length ? subtitleParts.join(' • ') : 'Проверенный лот',
+    subtitle: subtitleParts.length ? subtitleParts.join(' • ') : subtitleFallback,
     priceRub,
     // Пока у нас нет анализа рынка в БД — заполняем значения, чтобы UI работал стабильно.
     marketLowRub: Math.round(priceRub * 0.93),
@@ -192,9 +200,12 @@ function mapRowToListing(row: ListingsRow): Listing {
     imageUrl,
     imageUrls: imageUrls.length ? imageUrls : [imageUrl],
     detailUrl: row.listing_url ?? 'https://t.me/GONKACONFBOT',
-    description: descriptionParts.length
-      ? descriptionParts.join('\n')
-      : 'Конфискованная техника от лизинговой компании.',
+    description:
+      descriptionParts.length > 0
+        ? descriptionParts.join('\n')
+        : isTrailer
+          ? 'Прицеп/полуприцеп от лизинговой компании.'
+          : 'Конфискованная техника от лизинговой компании.',
     badges: ['in_stock'],
   }
 }

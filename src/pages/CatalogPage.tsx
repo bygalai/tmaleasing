@@ -5,13 +5,6 @@ import { SearchBar } from '../components/listing/SearchBar'
 import type { Listing } from '../types/marketplace'
 import type { CategoryId } from './CategorySelectionPage'
 
-const CATEGORY_LABELS: Record<CategoryId, string> = {
-  legkovye: 'Легковые',
-  gruzovye: 'Грузовые',
-  speztechnika: 'Спецтехника',
-  pricepy: 'Прицепы',
-}
-
 type CatalogPageProps = {
   items: Listing[]
   isLoading: boolean
@@ -29,10 +22,6 @@ export function CatalogPage({
 }: CatalogPageProps) {
   const { category } = useParams<{ category?: string }>()
   const categoryId = category as CategoryId | undefined
-  const categoryLabel =
-    categoryId && categoryId in CATEGORY_LABELS
-      ? CATEGORY_LABELS[categoryId as CategoryId]
-      : null
 
   const [query, setQuery] = useState('')
 
@@ -54,11 +43,6 @@ export function CatalogPage({
 
   return (
     <section className="space-y-4">
-      {categoryLabel ? (
-        <p className="text-center text-sm font-medium text-[#FF5C34] [font-family:Inter,system-ui,sans-serif]">
-          {categoryLabel}
-        </p>
-      ) : null}
       <SearchBar value={query} onChange={setQuery} />
 
       {error ? (

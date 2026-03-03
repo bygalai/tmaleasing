@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom'
-import { formatMileage, formatPriceRub } from '../../lib/format'
+import { formatMileage, formatMileageHours, formatPriceRub } from '../../lib/format'
 import type { Listing } from '../../types/marketplace'
+
+const isTrailer = (item: Listing) => item.category === 'pricepy'
 
 type ListingCardProps = {
   item: Listing
@@ -16,7 +18,12 @@ function badgeLabel(item: Listing, badge: Listing['badges'][number]) {
 
 export function ListingCard({ item, isFavorite, onToggleFavorite }: ListingCardProps) {
   return (
-    <article className="relative mx-auto w-full max-w-[560px] overflow-hidden rounded-2xl border border-black/10 bg-white/70 shadow-[0_14px_45px_rgba(15,23,42,0.10)]">
+    <Link
+      to={`/listing/${item.id}`}
+      className="relative mx-auto block w-full max-w-[560px] overflow-hidden rounded-2xl border border-black/10 bg-white/70 shadow-[0_14px_45px_rgba(15,23,42,0.10)] transition active:scale-[0.99]"
+      style={{ WebkitTapHighlightColor: 'transparent' }}
+    >
+    <article>
       <div className="relative h-48 w-full">
         <img
           src={item.imageUrl}
@@ -38,9 +45,13 @@ export function ListingCard({ item, isFavorite, onToggleFavorite }: ListingCardP
         </div>
         <button
           type="button"
-          className="absolute right-3 top-3 rounded-full border border-white/20 bg-black/55 p-2 text-sm text-white/90"
+          className="absolute right-3 top-3 z-20 rounded-full border border-white/20 bg-black/55 p-2 text-sm text-white/90 transition active:scale-95"
           aria-label="Добавить в избранное"
-          onClick={() => onToggleFavorite(item.id)}
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            onToggleFavorite(item.id)
+          }}
         >
           {isFavorite ? '♥' : '♡'}
         </button>
@@ -54,7 +65,11 @@ export function ListingCard({ item, isFavorite, onToggleFavorite }: ListingCardP
 
         <div className="relative z-10 grid grid-cols-[auto_1fr] gap-2 text-xs text-slate-600">
           <span>{item.year ? `Год: ${item.year}` : 'Год: —'}</span>
-          <span>Пробег: {formatMileage(item.mileageKm)}</span>
+          {isTrailer(item) ? (
+            <span>Наработка: {formatMileageHours(item.mileageKm)}</span>
+          ) : (
+            <span>Пробег: {formatMileage(item.mileageKm)}</span>
+          )}
           <span>{item.location ?? '—'}</span>
           <span>Проверенный лот</span>
         </div>
@@ -63,14 +78,12 @@ export function ListingCard({ item, isFavorite, onToggleFavorite }: ListingCardP
           <p className="text-2xl font-bold tabular-nums tracking-tight text-[#FF5C34]">
             {formatPriceRub(item.priceRub)}
           </p>
-          <Link
-            to={`/listing/${item.id}`}
-            className="rounded-xl bg-[#FF5C34] px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
-          >
+          <span className="rounded-xl bg-[#FF5C34] px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90">
             Подробнее
-          </Link>
+          </span>
         </div>
       </div>
     </article>
+    </Link>
   )
 }

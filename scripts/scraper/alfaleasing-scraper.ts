@@ -1,7 +1,7 @@
 /**
- * Альфа-Лизинг парсер — легковые, грузовые и спецтехника с пробегом с alfaleasing.ru.
- * Секции: legkovye, gruzovye, speztechnika. Пишет в listings (source='alfaleasing').
- * Каталоги: /rasprodazha-avto-s-probegom/legkovye/, gruzovye/, spectech/
+ * Альфа-Лизинг парсер — легковые, грузовые, спецтехника и прицепы с пробегом с alfaleasing.ru.
+ * Секции: legkovye, gruzovye, speztechnika, pricepy. Пишет в listings (source='alfaleasing').
+ * Каталоги: /rasprodazha-avto-s-probegom/legkovye/, gruzovye/, spectech/, pricepy/
  */
 
 import { createHash } from 'node:crypto'
@@ -51,12 +51,14 @@ const DETAIL_PREFIXES = [
   '/rasprodazha-avto-s-probegom/legkovye/',
   '/rasprodazha-avto-s-probegom/gruzovye/',
   '/rasprodazha-avto-s-probegom/spectech/',
+  '/rasprodazha-avto-s-probegom/pricepy/',
 ] as const
 
 const ALFALEASING_SECTIONS: Array<{ catalogUrl: string; category: string; detailPrefix: string }> = [
   { catalogUrl: 'https://alfaleasing.ru/rasprodazha-avto-s-probegom/legkovye/', category: 'legkovye', detailPrefix: '/rasprodazha-avto-s-probegom/legkovye/' },
   { catalogUrl: 'https://alfaleasing.ru/rasprodazha-avto-s-probegom/gruzovye/', category: 'gruzovye', detailPrefix: '/rasprodazha-avto-s-probegom/gruzovye/' },
   { catalogUrl: 'https://alfaleasing.ru/rasprodazha-avto-s-probegom/spectech/', category: 'speztechnika', detailPrefix: '/rasprodazha-avto-s-probegom/spectech/' },
+  { catalogUrl: 'https://alfaleasing.ru/rasprodazha-avto-s-probegom/pricepy/', category: 'pricepy', detailPrefix: '/rasprodazha-avto-s-probegom/pricepy/' },
 ]
 
 const BAD_IMAGE_SUBSTRINGS = [
@@ -80,6 +82,9 @@ const BAD_IMAGE_SUBSTRINGS = [
 const TITLE_BLOCKLIST = new Set([
   'легковые автомобили',
   'грузовые автомобили',
+  'прицепы',
+  'полуприцепы',
+  'прицепы и полуприцепы',
   'каталог',
   'автомобили',
   'техника',
@@ -499,7 +504,7 @@ function extractDetailFromHtmlFallback(html: string): {
   const price = priceMatches.length > 0 ? Math.min(...priceMatches) : null
 
   const mileageText =
-    plainText.match(/(\d[\d\s\u00A0]{2,})\s*(?:км|km)/i)?.[1] ??
+    plainText.match(/(\d[\d\s\u00A0]{2,})\s*(?:км|km|м\.ч\.?)/i)?.[1] ??
     html.match(/"mileageFromOdometer"[\s\S]{0,120}"value"\s*:\s*"?(\\d{2,})"?/i)?.[1] ??
     null
   const yearText =

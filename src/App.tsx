@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { AppLayout } from './components/layout/AppLayout'
+import { ScrollToTop } from './components/ScrollToTop'
 import { BottomNav } from './components/navigation/BottomNav'
 import { SplashScreen } from './components/SplashScreen'
 import { useFavorites } from './hooks/useFavorites'
@@ -32,22 +33,22 @@ function Header() {
           type="button"
           onClick={goBack}
           aria-label="Назад в каталог"
-          className="absolute left-0 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/10 bg-black/5 text-slate-900 shadow-[0_10px_30px_rgba(15,23,42,0.10)] backdrop-blur-xl"
+          className="absolute left-0 flex h-10 w-10 shrink-0 items-center justify-center text-slate-900"
         >
           <svg
             aria-hidden="true"
             viewBox="0 0 24 24"
-            className="h-6 w-6"
+            className="h-8 w-8"
             fill="none"
             stroke="currentColor"
             strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+            strokeLinecap="butt"
+            strokeLinejoin="miter"
           >
             <path d="M15 18l-6-6 6-6" />
           </svg>
         </button>
-        <h1 className="whitespace-nowrap font-bold leading-[1] tracking-tight text-[#FF5C34] [font-family:Helvetica,Arial,sans-serif] [font-size:clamp(22px,6vw,32px)]">
+        <h1 className="whitespace-nowrap font-bold leading-[1] tracking-tight text-[#FF5C34] [font-family:Helvetica,Arial,sans-serif] [font-size:clamp(28px,8vw,42px)]">
           "GONKA"
         </h1>
       </div>
@@ -61,22 +62,22 @@ function Header() {
           type="button"
           onClick={goToCategories}
           aria-label="Назад к выбору раздела"
-          className="absolute left-0 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/10 bg-black/5 text-slate-900 shadow-[0_10px_30px_rgba(15,23,42,0.10)] backdrop-blur-xl"
+          className="absolute left-0 flex h-10 w-10 shrink-0 items-center justify-center text-slate-900"
         >
           <svg
             aria-hidden="true"
             viewBox="0 0 24 24"
-            className="h-6 w-6"
+            className="h-8 w-8"
             fill="none"
             stroke="currentColor"
             strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+            strokeLinecap="butt"
+            strokeLinejoin="miter"
           >
             <path d="M15 18l-6-6 6-6" />
           </svg>
         </button>
-        <h1 className="whitespace-nowrap font-bold leading-[1] tracking-tight text-[#FF5C34] [font-family:Helvetica,Arial,sans-serif] [font-size:clamp(22px,6vw,32px)]">
+        <h1 className="whitespace-nowrap font-bold leading-[1] tracking-tight text-[#FF5C34] [font-family:Helvetica,Arial,sans-serif] [font-size:clamp(28px,8vw,42px)]">
           "GONKA"
         </h1>
       </div>
@@ -109,6 +110,7 @@ function App() {
 
   return (
     <AppLayout>
+      <ScrollToTop />
       <header className="mb-5 flex items-center justify-center">
         <Header />
       </header>

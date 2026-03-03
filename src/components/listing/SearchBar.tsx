@@ -26,7 +26,7 @@ export function SearchBar({ value, onChange }: SearchBarProps) {
     <label className="mx-auto block w-full max-w-[560px]">
       <div
         ref={glassRef}
-        className="liquid-glass rounded-2xl"
+        className="liquid-glass rounded-none"
         onPointerMove={handlePointerMove}
         onPointerLeave={handlePointerLeave}
       >
@@ -35,7 +35,7 @@ export function SearchBar({ value, onChange }: SearchBarProps) {
           type="search"
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          placeholder="Марка, модель, город, год..."
+          placeholder="Марка, модель, город..."
           className="relative z-10 w-full bg-transparent px-4 py-3 pr-11 text-sm text-slate-900 outline-none placeholder:italic placeholder:text-slate-500"
         />
         <svg

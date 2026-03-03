@@ -1,7 +1,9 @@
 import { Link, useParams } from 'react-router-dom'
 import { PriceAnalysisBar } from '../components/listing/PriceAnalysisBar'
-import { formatMileage, formatPriceRub } from '../lib/format'
+import { formatMileage, formatMileageHours, formatPriceRub } from '../lib/format'
 import type { Listing } from '../types/marketplace'
+
+const isTrailer = (item: Listing) => item.category === 'pricepy'
 
 type ListingPageProps = {
   items: Listing[]
@@ -54,7 +56,11 @@ export function ListingPage({ items, isFavorite, toggleFavorite }: ListingPagePr
         </p>
         <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-600">
           <span>Год: {item.year ?? '—'}</span>
-          <span>Пробег: {formatMileage(item.mileageKm)}</span>
+          {isTrailer(item) ? (
+            <span>Наработка: {formatMileageHours(item.mileageKm)}</span>
+          ) : (
+            <span>Пробег: {formatMileage(item.mileageKm)}</span>
+          )}
           <span>{item.location ?? '—'}</span>
           <span>Юридическая проверка</span>
         </div>
