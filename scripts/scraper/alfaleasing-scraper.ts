@@ -1,7 +1,7 @@
 /**
- * Альфа-Лизинг парсер — легковые и спецтехника с пробегом с alfaleasing.ru.
- * Секции: legkovye, speztechnika. Пишет в listings (source='alfaleasing', category='legkovye'|'speztechnika').
- * Каталоги: /rasprodazha-avto-s-probegom/legkovye/ и /rasprodazha-avto-s-probegom/spectech/
+ * Альфа-Лизинг парсер — легковые, грузовые и спецтехника с пробегом с alfaleasing.ru.
+ * Секции: legkovye, gruzovye, speztechnika. Пишет в listings (source='alfaleasing').
+ * Каталоги: /rasprodazha-avto-s-probegom/legkovye/, gruzovye/, spectech/
  */
 
 import { createHash } from 'node:crypto'
@@ -49,11 +49,13 @@ const ALLOWED_DOMAIN = 'alfaleasing.ru'
 const DETAIL_UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i
 const DETAIL_PREFIXES = [
   '/rasprodazha-avto-s-probegom/legkovye/',
+  '/rasprodazha-avto-s-probegom/gruzovye/',
   '/rasprodazha-avto-s-probegom/spectech/',
 ] as const
 
 const ALFALEASING_SECTIONS: Array<{ catalogUrl: string; category: string; detailPrefix: string }> = [
   { catalogUrl: 'https://alfaleasing.ru/rasprodazha-avto-s-probegom/legkovye/', category: 'legkovye', detailPrefix: '/rasprodazha-avto-s-probegom/legkovye/' },
+  { catalogUrl: 'https://alfaleasing.ru/rasprodazha-avto-s-probegom/gruzovye/', category: 'gruzovye', detailPrefix: '/rasprodazha-avto-s-probegom/gruzovye/' },
   { catalogUrl: 'https://alfaleasing.ru/rasprodazha-avto-s-probegom/spectech/', category: 'speztechnika', detailPrefix: '/rasprodazha-avto-s-probegom/spectech/' },
 ]
 
@@ -77,6 +79,7 @@ const BAD_IMAGE_SUBSTRINGS = [
 
 const TITLE_BLOCKLIST = new Set([
   'легковые автомобили',
+  'грузовые автомобили',
   'каталог',
   'автомобили',
   'техника',
@@ -672,7 +675,7 @@ async function extractDetailUrlsWithCardData(
         const engine = engineMatch ? engineMatch[0].trim() : null
         const transMatch = text.match(/(?:Автомат|Механика|Робот|Вариатор)/i)
         const transmission = transMatch ? transMatch[0].trim() : null
-        const driveMatch = text.match(/(?:Полный|Передний|Задний|Колесный|Гусеничный|Комбинированный)/i)
+        const driveMatch = text.match(/(?:Полный|Передний|Задний|Колесный|Гусеничный|Комбинированный|\d+x\d+)/i)
         const drivetrain = driveMatch ? driveMatch[0].trim() : null
         const colorMatch = text.match(/(?:Серый|Белый|Черный|Красный|Синий|Желтый|Зеленый|Коричневый|Бежевый|Оранжевый)/i)
         const bodyColor = colorMatch ? colorMatch[0].trim() : null
