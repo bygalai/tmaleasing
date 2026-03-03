@@ -68,6 +68,11 @@ const BAD_IMAGE_SUBSTRINGS = [
   'telegram',
   'vk.',
   'youtube',
+  'placeholder',
+  '1x1',
+  'no-image',
+  'default.',
+  'empty',
 ]
 
 const TITLE_BLOCKLIST = new Set([
@@ -328,7 +333,7 @@ function extractDetailFromJsonLd(payloads: unknown[]): {
   price: number | null
   mileage: number | null
   year: number | null
-  imageUrl: string | null
+  imageUrls: string[]
   vin: string | null
   engine: string | null
   transmission: string | null
@@ -451,7 +456,7 @@ function extractDetailFromJsonLd(payloads: unknown[]): {
     price: pickBestPrice(prices, MIN_VEHICLE_PRICE, 100_000_000),
     mileage: pickBest(mileages, 1),
     year: pickBest(years, 1900),
-    imageUrl: pickBestImageCandidate(images) ?? null,
+    imageUrls: images,
     vin: pickFirstText(vins),
     engine: pickFirstText(engines),
     transmission: pickFirstText(transmissions),
@@ -465,7 +470,7 @@ function extractDetailFromHtmlFallback(html: string): {
   price: number | null
   mileage: number | null
   year: number | null
-  imageUrl: string | null
+  imageUrls: string[]
   city: string | null
   vin: string | null
   engine: string | null
@@ -504,15 +509,12 @@ function extractDetailFromHtmlFallback(html: string): {
     html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["'][^>]*>/i)?.[1] ??
     html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["'][^>]*>/i)?.[1] ??
     null
-  const imgSrc =
-    html.match(/<img[^>]+data-src=["']([^"']+)["'][^>]*>/i)?.[1] ??
-    html.match(/<img[^>]+src=["']([^"']+)["'][^>]*>/i)?.[1] ??
-    null
-  const srcsetCandidate = html.match(/<img[^>]+srcset=["']([^"']+)["'][^>]*>/i)?.[1] ?? null
-  const firstSrcsetUrl = srcsetCandidate ? srcsetCandidate.split(',')[0]?.trim().split(' ')[0]?.trim() : null
-  const imageUrl = pickBestImageCandidate(
-    [ogImage, firstSrcsetUrl, imgSrc].map((v) => (typeof v === 'string' ? decodeHtmlAttr(v) : v))
+  const imgSrcs = [...html.matchAll(/<img[^>]+(?:data-src|src)=["']([^"']+)["'][^>]*>/gi)].map((m) => m[1])
+  const srcsetMatches = [...html.matchAll(/<img[^>]+srcset=["']([^"']+)["'][^>]*>/gi)]
+  const srcsetUrls = srcsetMatches.flatMap((m) =>
+    (m[1] ?? '').split(',').map((s) => s.trim().split(/\s+/)[0]).filter(Boolean)
   )
+  const htmlImageUrls = [ogImage, ...imgSrcs, ...srcsetUrls].filter(Boolean).map(decodeHtmlAttr)
 
   const vin =
     plainText.match(/\bVIN\b[\s:]*([A-HJ-NPR-Z0-9]{17})/i)?.[1] ??
@@ -565,7 +567,7 @@ function extractDetailFromHtmlFallback(html: string): {
     price,
     mileage: normalizeNumber(mileageText),
     year: parseYear(yearText),
-    imageUrl,
+    imageUrls: htmlImageUrls,
     city: cleanupValue(city, 3),
     vin,
     engine: cleanupValue(engine, 6),
@@ -601,7 +603,7 @@ type CatalogCardData = {
   mileage: number | null
   year: number | null
   city: string | null
-  imageUrl: string | null
+  imageUrls: string[]
   engine: string | null
   transmission: string | null
   drivetrain: string | null
@@ -661,8 +663,10 @@ async function extractDetailUrlsWithCardData(
           text.match(/([А-Яа-яЁё][А-Яа-яЁё\s\-]{2,30})\s*$/)
         const city = cityMatch?.[1]?.trim() ?? null
 
-        const img = container.querySelector('img[src], img[data-src]')
-        const imgSrc = img?.getAttribute('data-src') ?? img?.getAttribute('src') ?? null
+        const imgs = container.querySelectorAll('img[src], img[data-src]')
+        const imageUrls = Array.from(imgs).map(function (img) {
+          return img.getAttribute('data-src') ?? img.getAttribute('src') ?? ''
+        }).filter(Boolean)
 
         const engineMatch = text.match(/(?:Бензиновый|Дизельный|Электрический)[\s\d.,\-а-яёА-ЯЁ]*?(?:\d+\s*л\.\s*с\.?|л\.\s*с\.)/i)
         const engine = engineMatch ? engineMatch[0].trim() : null
@@ -681,7 +685,7 @@ async function extractDetailUrlsWithCardData(
             mileage: mileageOk ? mileage : null,
             year: yearOk ? year : null,
             city: city && city.length >= 2 && city.length <= 40 ? city : null,
-            imageUrl: imgSrc,
+            imageUrls,
             engine,
             transmission,
             drivetrain,
@@ -755,7 +759,11 @@ async function enrichAndCollectListing(
     const price = fromLd.price ?? fromHtml.price ?? card?.price ?? null
     const mileage = fromLd.mileage ?? fromHtml.mileage ?? card?.mileage ?? null
     const year = fromLd.year ?? fromHtml.year ?? card?.year ?? null
-    const imageUrl = fromLd.imageUrl ?? fromHtml.imageUrl ?? card?.imageUrl ?? null
+    const allImageCandidates = [
+      ...(card?.imageUrls ?? []),
+      ...(fromLd.imageUrls ?? []),
+      ...(fromHtml.imageUrls ?? []),
+    ].filter(Boolean) as string[]
     const city = card?.city ?? fromHtml.city ?? null
     const vin = fromLd.vin ?? fromHtml.vin ?? null
     const engine = card?.engine ?? fromLd.engine ?? fromHtml.engine ?? null
@@ -773,7 +781,9 @@ async function enrichAndCollectListing(
       return null
     }
 
-    const absoluteImage = imageUrl ? toAbsoluteUrl(pickBestImageCandidate([imageUrl])) : null
+    const absoluteImage = allImageCandidates.length > 0
+      ? toAbsoluteUrl(pickBestImageCandidate(allImageCandidates))
+      : null
     if (!absoluteImage || isBadImageCandidate(absoluteImage)) {
       console.warn(`  skip (no real image): ${title.slice(0, 40)}...`)
       return null
