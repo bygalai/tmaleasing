@@ -85,9 +85,7 @@ export function BottomNav() {
             aria-hidden
           />
         )}
-        {tabs.map((tab) => {
-          const active = activeIndex >= 0 && tabs[activeIndex]?.to === tab.to
-          return (
+        {tabs.map((tab) => (
             <Link
               key={tab.to}
               to={tab.to}
@@ -99,8 +97,7 @@ export function BottomNav() {
             >
               {tab.icon}
             </Link>
-          )
-        })}
+        ))}
       </div>
     </nav>
   )

@@ -129,7 +129,7 @@ function interleaveBySource<T extends { source?: string | null }>(rows: T[]): T[
   const total = rows.length
   while (out.length < total) {
     const available = groups
-      .map((g, i) => i)
+      .map((_, i) => i)
       .filter((i) => indices[i] < groups[i].length)
     if (available.length === 0) break
     const pick = available[Math.floor(Math.random() * available.length)]
