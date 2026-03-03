@@ -1,7 +1,7 @@
 /**
- * Альфа-Лизинг парсер — легковые автомобили с пробегом с alfaleasing.ru.
- * Секция: легковые (legkovye). Пишет в таблицу listings (source='alfaleasing', category='legkovye').
- * Каталог: https://alfaleasing.ru/rasprodazha-avto-s-probegom/legkovye/
+ * Альфа-Лизинг парсер — легковые и спецтехника с пробегом с alfaleasing.ru.
+ * Секции: legkovye, speztechnika. Пишет в listings (source='alfaleasing', category='legkovye'|'speztechnika').
+ * Каталоги: /rasprodazha-avto-s-probegom/legkovye/ и /rasprodazha-avto-s-probegom/spectech/
  */
 
 import { createHash } from 'node:crypto'
@@ -45,12 +45,16 @@ const SOURCE = 'alfaleasing'
 const ALFALEASING_BASE_URL = 'https://alfaleasing.ru'
 const ALLOWED_DOMAIN = 'alfaleasing.ru'
 
-/** Паттерн URL карточки: /rasprodazha-avto-s-probegom/legkovye/.../uuid/ */
-const LEGKOVYE_DETAIL_PREFIX = '/rasprodazha-avto-s-probegom/legkovye/'
+/** Паттерны URL карточек: .../uuid/ */
 const DETAIL_UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i
+const DETAIL_PREFIXES = [
+  '/rasprodazha-avto-s-probegom/legkovye/',
+  '/rasprodazha-avto-s-probegom/spectech/',
+] as const
 
-const ALFALEASING_SECTIONS: Array<{ catalogUrl: string; category: string }> = [
-  { catalogUrl: 'https://alfaleasing.ru/rasprodazha-avto-s-probegom/legkovye/', category: 'legkovye' },
+const ALFALEASING_SECTIONS: Array<{ catalogUrl: string; category: string; detailPrefix: string }> = [
+  { catalogUrl: 'https://alfaleasing.ru/rasprodazha-avto-s-probegom/legkovye/', category: 'legkovye', detailPrefix: '/rasprodazha-avto-s-probegom/legkovye/' },
+  { catalogUrl: 'https://alfaleasing.ru/rasprodazha-avto-s-probegom/spectech/', category: 'speztechnika', detailPrefix: '/rasprodazha-avto-s-probegom/spectech/' },
 ]
 
 const BAD_IMAGE_SUBSTRINGS = [
@@ -71,6 +75,7 @@ const TITLE_BLOCKLIST = new Set([
   'каталог',
   'автомобили',
   'техника',
+  'спецтехника',
   'альфа-лизинг',
   'alfaleasing',
   'лизинг',
@@ -256,12 +261,13 @@ function isAlfaleasingUrl(value: string | null | undefined): boolean {
   }
 }
 
-function isDetailUrl(url: string): boolean {
+function isDetailUrl(url: string, detailPrefix?: string): boolean {
   if (!isAlfaleasingUrl(url)) return false
   try {
     const path = new URL(url, ALFALEASING_BASE_URL).pathname
-    if (!path.startsWith(LEGKOVYE_DETAIL_PREFIX)) return false
-    return DETAIL_UUID_RE.test(path)
+    const prefix = detailPrefix ?? DETAIL_PREFIXES.find((p) => path.startsWith(p))
+    if (!prefix) return false
+    return path.startsWith(prefix) && DETAIL_UUID_RE.test(path)
   } catch {
     return false
   }
@@ -272,7 +278,7 @@ function buildExternalId(listingUrl: string): string {
 }
 
 function sanitizeTitle(value: string | null | undefined): string {
-  const fallback = 'Легковой автомобиль'
+  const fallback = 'Техника'
   if (!value) return fallback
   const cleaned = value.replace(/\s+/g, ' ').trim()
   return cleaned.length > 0 ? cleaned : fallback
@@ -603,7 +609,10 @@ type CatalogCardData = {
 }
 
 /** Извлекает URL карточек и данные с карточек каталога (fallback при парсинге detail). */
-async function extractDetailUrlsWithCardData(page: Page): Promise<Array<{ url: string; cardData: CatalogCardData }>> {
+async function extractDetailUrlsWithCardData(
+  page: Page,
+  detailPrefix: string
+): Promise<Array<{ url: string; cardData: CatalogCardData }>> {
   const results = await page.evaluate(
     (ctx: { baseUrl: string; detailPrefix: string; uuidRe: string }) => {
       const re = new RegExp(ctx.uuidRe)
@@ -639,7 +648,7 @@ async function extractDetailUrlsWithCardData(page: Page): Promise<Array<{ url: s
         const price = priceMatches.length > 0 ? Math.max.apply(null, priceMatches) : null
         const priceOk = price !== null
 
-        const mileageMatch = text.match(/(\d[\d\s]{2,})\s*(?:км|km)/i)
+        const mileageMatch = text.match(/(\d[\d\s]{1,})\s*(?:км|km|м\.ч\.)/i)
         const mileageStr = mileageMatch?.[1]?.replace(/\s/g, '')
         const mileage = mileageStr ? parseInt(mileageStr, 10) : null
         const mileageOk = mileage !== null && !isNaN(mileage) && mileage >= 0
@@ -659,7 +668,7 @@ async function extractDetailUrlsWithCardData(page: Page): Promise<Array<{ url: s
         const engine = engineMatch ? engineMatch[0].trim() : null
         const transMatch = text.match(/(?:Автомат|Механика|Робот|Вариатор)/i)
         const transmission = transMatch ? transMatch[0].trim() : null
-        const driveMatch = text.match(/(?:Полный|Передний|Задний)/i)
+        const driveMatch = text.match(/(?:Полный|Передний|Задний|Колесный|Гусеничный|Комбинированный)/i)
         const drivetrain = driveMatch ? driveMatch[0].trim() : null
         const colorMatch = text.match(/(?:Серый|Белый|Черный|Красный|Синий|Желтый|Зеленый|Коричневый|Бежевый|Оранжевый)/i)
         const bodyColor = colorMatch ? colorMatch[0].trim() : null
@@ -684,11 +693,11 @@ async function extractDetailUrlsWithCardData(page: Page): Promise<Array<{ url: s
     },
     {
       baseUrl: ALFALEASING_BASE_URL,
-      detailPrefix: LEGKOVYE_DETAIL_PREFIX,
+      detailPrefix,
       uuidRe: DETAIL_UUID_RE.source,
     }
   )
-  return results.filter((r) => isDetailUrl(r.url))
+  return results.filter((r) => isDetailUrl(r.url, detailPrefix))
 }
 
 /** Ищет URL следующей страницы пагинации. */
@@ -843,7 +852,7 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
         await scrollToLoadMore(page)
         await randomDelay(500, 1200)
 
-        const detailItems = await extractDetailUrlsWithCardData(page)
+        const detailItems = await extractDetailUrlsWithCardData(page, section.detailPrefix)
         console.log(`Found ${detailItems.length} detail links on page`)
 
         for (const { url, cardData } of detailItems) {
