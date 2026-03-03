@@ -9,8 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "scrape:vtb": "tsx scripts/scraper/vtb-scraper.ts",
-    "scrape:europlan": "tsx scripts/scraper/europlan-scraper.ts",
-    "scrape:ileasing": "tsx scripts/scraper/ileasing-scraper.ts"
+    "scrape:europlan": "tsx scripts/scraper/europlan-scraper.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.95.3",
