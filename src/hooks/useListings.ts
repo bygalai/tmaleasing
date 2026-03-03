@@ -47,16 +47,19 @@ function normalizeEngine(value: string | null): string | null {
   let out = value.replace(/\s+/g, ' ').trim()
   if (!out) return null
 
-  // Приводим тип топлива к единому виду (как в VTB): бензин / дизель вместо Бензиновый / Дизельный
-  out = out.replace(/\bБензиновый\b/gi, 'бензин')
-  out = out.replace(/\bДизельный\b/gi, 'дизель')
-  out = out.replace(/\bГибридный\b/gi, 'гибрид')
-  out = out.replace(/\bЭлектрический\b/gi, 'электро')
+  // Краткая форма типа топлива: Бензин / Дизель вместо Бензиновый / Дизельный
+  out = out.replace(/Бензиновый/gi, 'Бензин')
+  out = out.replace(/Дизельный/gi, 'Дизель')
+  out = out.replace(/Гибридный/gi, 'Гибрид')
+  out = out.replace(/Электрический/gi, 'Электро')
 
   out = out.replace(/^\d+\s*\/\s*/i, '')
   out = out.replace(/^\d+\s*(см3|см\^?3|cc)\s*\/\s*/i, '')
 
   out = out.replace(/\s*[/,]?\s*\b(трансмиссия|кпп|привод|передний|задний|полный|акпп|мкпп|робот|вариатор|cvt)\b.*/i, '')
+  out = out.replace(/\s*,\s*турбированный\b/gi, '').replace(/\bтурбированный\s*/gi, '')
+  out = out.replace(/\s*,\s*\d+-цилиндровый\b/gi, '').replace(/\b\d+-цилиндровый\s*/gi, '')
+  out = out.replace(/\s*Рабочий\s+объём\b/gi, '').replace(/\s*рабочий\s+объём\b/gi, '')
 
   out = out.replace(/\s*\/\s*/g, ', ')
 
@@ -134,11 +137,12 @@ function mapRowToListing(row: ListingsRow): Listing {
 
   const engine = normalizeEngine(row.engine)
   const drivetrain = normalizeDrivetrain(row.drivetrain)
-  const subtitleParts = [row.body_color, engine, row.transmission, drivetrain].filter(
+  const bodyColor = (row.body_color ?? '').replace(/\s+обивка\s*$/gi, '').trim() || null
+  const subtitleParts = [bodyColor, engine, row.transmission, drivetrain].filter(
     (part): part is string => Boolean(part && part.trim()),
   )
 
-  const bodyColorForDescription = lowercaseFirstLetter(row.body_color)
+  const bodyColorForDescription = lowercaseFirstLetter(bodyColor)
   const drivetrainForDescription = lowercaseFirstLetter(drivetrain)
 
   const descriptionParts = [
