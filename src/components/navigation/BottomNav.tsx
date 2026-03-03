@@ -8,7 +8,7 @@ type Tab = {
 
 function IconHome() {
   return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor">
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor">
       <path
         d="M4 10.5l8-6 8 6V20a1.5 1.5 0 0 1-1.5 1.5H5.5A1.5 1.5 0 0 1 4 20v-9.5Z"
         strokeWidth="2"
@@ -24,7 +24,7 @@ function IconHeart() {
     <svg
       aria-hidden="true"
       viewBox="0 0 24 24"
-      className="h-5 w-5"
+      className="h-6 w-6"
       fill="none"
       stroke="currentColor"
       strokeWidth="2"
@@ -40,7 +40,7 @@ function IconHeart() {
 
 function IconUser() {
   return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor">
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor">
       <path d="M12 12a4.5 4.5 0 1 0-4.5-4.5A4.5 4.5 0 0 0 12 12Z" strokeWidth="2" />
       <path
         d="M4.5 21a7.5 7.5 0 0 1 15 0"
@@ -58,7 +58,7 @@ const tabs: Tab[] = [
   { to: '/profile', label: 'Профиль', icon: <IconUser /> },
 ]
 
-const SLOT_WIDTH = 56
+const SLOT_WIDTH = 68
 
 export function BottomNav() {
   const location = useLocation()
@@ -74,11 +74,11 @@ export function BottomNav() {
       style={{ bottom: 'max(env(safe-area-inset-bottom, 0px), 14px)' }}
       aria-label="Навигация"
     >
-      <div className="liquid-glass-nav relative mx-auto flex w-fit items-center justify-center gap-6 rounded-lg px-4 py-2">
+      <div className="liquid-glass-nav relative mx-auto flex w-fit items-center justify-center gap-8 rounded-xl px-5 py-2.5">
         {/* Sliding pill background — капля перетекает при смене таба */}
         {rawIndex >= 0 && (
           <div
-            className="absolute left-2 top-1/2 h-9 w-12 -translate-y-1/2 rounded-full bg-white/55 transition-all duration-300 ease-out"
+            className="absolute left-2.5 top-1/2 h-10 w-14 -translate-y-1/2 rounded-full bg-white/55 transition-all duration-300 ease-out"
             style={{
               transform: `translateX(${activeIndex * SLOT_WIDTH}px) translateY(-50%)`,
             }}
@@ -91,7 +91,7 @@ export function BottomNav() {
               to={tab.to}
               aria-label={tab.label}
               className={[
-                'relative z-10 flex h-8 w-8 items-center justify-center text-slate-900 transition-colors',
+                'relative z-10 flex h-9 w-9 items-center justify-center text-slate-900 transition-colors',
                 'hover:text-slate-700',
               ].join(' ')}
             >
