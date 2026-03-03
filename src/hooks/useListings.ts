@@ -63,6 +63,16 @@ function normalizeEngine(value: string | null): string | null {
 
   out = out.replace(/\s*\/\s*/g, ', ')
 
+  // Единый порядок: л.с. → топливо → объём
+  const hpMatch = out.match(/(\d[\d\s]*)\s*л\.\s*с\.?/i)
+  const fuelMatch = out.match(/(Бензин|Дизель|Гибрид|Электро)/i)
+  const volMatch = out.match(/(\d+[,.]?\d*)\s*л\.?(?:\s|,|$)/)
+  const parts: string[] = []
+  if (hpMatch) parts.push(`${hpMatch[1].replace(/\s/g, '')} л.с.`)
+  if (fuelMatch) parts.push(fuelMatch[1])
+  if (volMatch) parts.push(`${volMatch[1].replace(',', '.')} л.`)
+  if (parts.length > 0) out = parts.join(', ')
+
   return out || null
 }
 
@@ -73,15 +83,24 @@ function normalizeDrivetrain(value: string | null): string | null {
 
   // Schema.org enums sometimes leak into data as plain strings.
   const lowered = raw.toLowerCase()
-  if (lowered.includes('frontwheeldriveconfiguration')) return 'Передний привод'
-  if (lowered.includes('rearwheeldriveconfiguration')) return 'Задний привод'
-  if (lowered.includes('fourwheeldriveconfiguration')) return 'Полный привод'
-  if (lowered.includes('allwheeldriveconfiguration')) return 'Полный привод'
+  if (lowered.includes('frontwheeldriveconfiguration')) return 'Передний'
+  if (lowered.includes('rearwheeldriveconfiguration')) return 'Задний'
+  if (lowered.includes('fourwheeldriveconfiguration')) return 'Полный'
+  if (lowered.includes('allwheeldriveconfiguration')) return 'Полный'
 
   // Drop other english-ish technical leftovers.
   if (/[A-Za-z]/.test(raw) && /configuration$/i.test(raw)) return null
   if (/[A-Za-z]/.test(raw) && raw.length > 18) return null
 
+  return raw.replace(/\s+привод$/i, '').trim() || null
+}
+
+function normalizeTransmission(value: string | null): string | null {
+  if (!value) return null
+  const raw = value.replace(/\s+/g, ' ').trim()
+  if (!raw) return null
+  if (/^Механика$/i.test(raw)) return 'МКПП'
+  if (/^Автомат$/i.test(raw)) return 'АКПП'
   return raw
 }
 
@@ -137,8 +156,9 @@ function mapRowToListing(row: ListingsRow): Listing {
 
   const engine = normalizeEngine(row.engine)
   const drivetrain = normalizeDrivetrain(row.drivetrain)
+  const transmission = normalizeTransmission(row.transmission)
   const bodyColor = (row.body_color ?? '').replace(/\s+обивка\s*$/gi, '').trim() || null
-  const subtitleParts = [bodyColor, engine, row.transmission, drivetrain].filter(
+  const subtitleParts = [bodyColor, engine, transmission, drivetrain].filter(
     (part): part is string => Boolean(part && part.trim()),
   )
 
@@ -150,7 +170,7 @@ function mapRowToListing(row: ListingsRow): Listing {
     year ? `Год: ${year}` : null,
     mileageKm !== undefined ? `Пробег: ${Math.round(mileageKm)} км` : null,
     engine ? `Двигатель: ${engine}` : null,
-    row.transmission ? `КПП: ${row.transmission}` : null,
+    transmission ? `КПП: ${transmission}` : null,
     drivetrainForDescription ? `Привод: ${drivetrainForDescription}` : null,
     bodyColorForDescription ? `Цвет: ${bodyColorForDescription}` : null,
     row.vin ? `VIN: ${row.vin}` : null,

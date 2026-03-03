@@ -544,7 +544,8 @@ function extractDetailFromHtmlFallback(html: string): {
     plainText.match(/Тип\s*привода\s*[:-]\s*([A-Za-zА-Яа-яЁё0-9xX -]{2,60})/i)?.[1]?.trim() ??
     null
   const engine =
-    plainText.match(/Двигатель\s*[:-]\s*([A-Za-zА-Яа-яЁё0-9.,/ -]{2,80})/i)?.[1]?.trim() ??
+    plainText.match(/Двигатель\s*[:-]\s*([A-Za-zА-Яа-яЁё0-9.,/ л\-]{2,120})/i)?.[1]?.trim() ??
+    plainText.match(/(Бензиновый|Дизельный|Электрический|Гибридный)[^КоробкаПриводЦвет]{0,80}(?:\d+\s*л\.\s*с\.?|\d+\s*л\.\s*с)/i)?.[0]?.trim() ??
     null
 
   const city =
@@ -654,7 +655,7 @@ async function extractDetailUrlsWithCardData(page: Page): Promise<Array<{ url: s
         const img = container.querySelector('img[src], img[data-src]')
         const imgSrc = img?.getAttribute('data-src') ?? img?.getAttribute('src') ?? null
 
-        const engineMatch = text.match(/(?:Бензиновый|Дизельный|Электрический)[^АвтоПолПередЗад]*?(?:л\.с\.|л\.\s*с\.)/i)
+        const engineMatch = text.match(/(?:Бензиновый|Дизельный|Электрический)[\s\d.,\-а-яёА-ЯЁ]*?(?:\d+\s*л\.\s*с\.?|л\.\s*с\.)/i)
         const engine = engineMatch ? engineMatch[0].trim() : null
         const transMatch = text.match(/(?:Автомат|Механика|Робот|Вариатор)/i)
         const transmission = transMatch ? transMatch[0].trim() : null
