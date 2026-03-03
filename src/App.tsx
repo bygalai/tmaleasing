@@ -95,7 +95,7 @@ function Header() {
 
 function App() {
   const { items, isLoading, error } = useListings()
-  const { isFavorite, toggleFavorite } = useFavorites()
+  const { favorites, isFavorite, toggleFavorite } = useFavorites()
   const [splashVisible, setSplashVisible] = useState(true)
 
   const handleSplashReady = useCallback(() => {
@@ -147,7 +147,7 @@ function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
 
-      <BottomNav />
+      <BottomNav favoritesCount={favorites.length} />
     </AppLayout>
   )
 }

@@ -46,7 +46,7 @@ export function ProfilePage() {
 
       {/* Нижний блок — «Здесь пока пусто» */}
       <div className="mt-10 flex min-h-[20vh] flex-1 items-center justify-center rounded-2xl bg-white/80 py-8">
-        <p className="font-sf text-slate-600">Здесь пока пусто</p>
+        <p className="font-sf text-slate-600">В разработке</p>
       </div>
     </section>
   )

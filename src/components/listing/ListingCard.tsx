@@ -33,28 +33,32 @@ export function ListingCard({ item, isFavorite, onToggleFavorite }: ListingCardP
           referrerPolicy="no-referrer"
         />
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
-        <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
-          {item.badges.map((badge) => (
-            <span
-              key={`${item.id}-${badge}`}
-              className="rounded-full border border-white/20 bg-black/55 px-2.5 py-1 text-[11px] text-[#F2F3F5]"
-            >
-              {badgeLabel(item, badge)}
-            </span>
-          ))}
+        <div className="absolute left-3 right-3 top-3 z-20 flex items-center justify-between gap-2">
+          <div className="flex flex-wrap gap-1.5">
+            {item.badges.map((badge) => (
+              <span
+                key={`${item.id}-${badge}`}
+                className="rounded-lg bg-brand px-2.5 py-1 text-[11px] text-white"
+              >
+                {badgeLabel(item, badge)}
+              </span>
+            ))}
+          </div>
+          <button
+            type="button"
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xl text-white transition active:scale-95 ${
+              isFavorite ? 'bg-brand' : 'bg-brand/80 hover:bg-brand/90'
+            }`}
+            aria-label="Добавить в избранное"
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              onToggleFavorite(item.id)
+            }}
+          >
+            {isFavorite ? '♥' : '♡'}
+          </button>
         </div>
-        <button
-          type="button"
-          className="absolute right-3 top-3 z-20 rounded-full border border-white/20 bg-black/55 p-2 text-sm text-white/90 transition active:scale-95"
-          aria-label="Добавить в избранное"
-          onClick={(e) => {
-            e.preventDefault()
-            e.stopPropagation()
-            onToggleFavorite(item.id)
-          }}
-        >
-          {isFavorite ? '♥' : '♡'}
-        </button>
       </div>
 
       <div className="relative space-y-3 border-t border-black/10 bg-white/60 p-4 backdrop-blur-xl before:pointer-events-none before:absolute before:inset-0 before:content-[''] before:bg-gradient-to-br before:from-white/95 before:via-white/55 before:to-transparent before:opacity-70 after:pointer-events-none after:absolute after:inset-x-0 after:top-0 after:h-1/2 after:content-[''] after:bg-gradient-to-b after:from-white/80 after:to-transparent after:opacity-55">
