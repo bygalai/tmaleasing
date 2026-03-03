@@ -139,7 +139,7 @@ export function CategorySelectionPage() {
         <button
           type="button"
           aria-label="Фильтры"
-          className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200/80 bg-white text-slate-600 shadow-[0_1px_3px_rgba(15,23,42,0.06)] transition hover:bg-slate-50"
+          className="flex h-10 w-10 items-center justify-center text-slate-600 transition hover:text-slate-900"
         >
           <FilterIcon />
         </button>

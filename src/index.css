@@ -214,6 +214,33 @@ body {
   opacity: 0.55;
 }
 
+/* Bottom nav — более прозрачное стекло, менее закруглённое */
+.liquid-glass-nav {
+  position: relative;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  box-shadow:
+    0 4px 24px rgba(15, 23, 42, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  -webkit-backdrop-filter: blur(32px) saturate(180%);
+  backdrop-filter: blur(32px) saturate(180%);
+}
+
+.liquid-glass-nav::before {
+  content: '';
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    ellipse 120% 80% at 50% 0%,
+    rgba(255, 255, 255, 0.4) 0%,
+    transparent 60%
+  );
+  opacity: 0.8;
+}
+
 /* Splash screen — раскрывающаяся приветственная надпись */
 @keyframes splash-reveal {
   0% {

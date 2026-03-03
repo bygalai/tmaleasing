@@ -8,7 +8,7 @@ type Tab = {
 
 function IconHome() {
   return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor">
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor">
       <path
         d="M4 10.5l8-6 8 6V20a1.5 1.5 0 0 1-1.5 1.5H5.5A1.5 1.5 0 0 1 4 20v-9.5Z"
         strokeWidth="2"
@@ -24,7 +24,7 @@ function IconHeart() {
     <svg
       aria-hidden="true"
       viewBox="0 0 24 24"
-      className="h-6 w-6"
+      className="h-5 w-5"
       fill="none"
       stroke="currentColor"
       strokeWidth="2"
@@ -40,7 +40,7 @@ function IconHeart() {
 
 function IconUser() {
   return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor">
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor">
       <path d="M12 12a4.5 4.5 0 1 0-4.5-4.5A4.5 4.5 0 0 0 12 12Z" strokeWidth="2" />
       <path
         d="M4.5 21a7.5 7.5 0 0 1 15 0"
@@ -52,51 +52,52 @@ function IconUser() {
   )
 }
 
-function IconInfo() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor">
-      <path d="M12 21a9 9 0 1 0-9-9 9 9 0 0 0 9 9Z" strokeWidth="2" />
-      <path d="M12 10.5V16" strokeWidth="2" strokeLinecap="round" />
-      <path d="M12 7.5h.01" strokeWidth="3" strokeLinecap="round" />
-    </svg>
-  )
-}
-
 const tabs: Tab[] = [
   { to: '/', label: 'Главная', icon: <IconHome /> },
   { to: '/favorites', label: 'Избранное', icon: <IconHeart /> },
   { to: '/profile', label: 'Профиль', icon: <IconUser /> },
-  { to: '/about', label: 'О нас', icon: <IconInfo /> },
 ]
+
+const SLOT_WIDTH = 56
 
 export function BottomNav() {
   const location = useLocation()
 
-  const isActive = (to: string) => {
-    if (to === '/') return location.pathname === '/'
-    return location.pathname === to
-  }
+  const rawIndex = tabs.findIndex((tab) =>
+    tab.to === '/' ? location.pathname === '/' : location.pathname === tab.to
+  )
+  const activeIndex = rawIndex >= 0 ? rawIndex : 0
 
   return (
     <nav
       className="fixed left-1/2 z-50 w-[min(92vw,680px)] -translate-x-1/2"
-      style={{ bottom: 'calc(max(env(safe-area-inset-bottom, 0px), 0px) + 14px)' }}
+      style={{ bottom: 'max(env(safe-area-inset-bottom, 0px), 14px)' }}
       aria-label="Навигация"
     >
-      <div className="liquid-glass-apple-dark mx-auto flex w-fit items-center gap-2 rounded-full px-3 py-2">
+      <div className="liquid-glass-nav relative mx-auto flex w-fit items-center justify-center gap-6 rounded-lg px-4 py-2">
+        {/* Sliding pill background — капля перетекает при смене таба */}
+        {rawIndex >= 0 && (
+          <div
+            className="absolute left-2 top-1/2 h-9 w-12 -translate-y-1/2 rounded-full bg-white/55 transition-all duration-300 ease-out"
+            style={{
+              transform: `translateX(${activeIndex * SLOT_WIDTH}px) translateY(-50%)`,
+            }}
+            aria-hidden
+          />
+        )}
         {tabs.map((tab) => {
-          const active = isActive(tab.to)
+          const active = activeIndex >= 0 && tabs[activeIndex]?.to === tab.to
           return (
             <Link
               key={tab.to}
               to={tab.to}
               aria-label={tab.label}
               className={[
-                'group relative flex h-12 w-12 items-center justify-center rounded-full text-slate-900/70 transition',
-                active ? 'bg-black/10 text-slate-900' : 'hover:bg-black/5',
+                'relative z-10 flex h-8 w-8 items-center justify-center text-slate-900 transition-colors',
+                'hover:text-slate-700',
               ].join(' ')}
             >
-              <span className="relative z-10">{tab.icon}</span>
+              {tab.icon}
             </Link>
           )
         })}
