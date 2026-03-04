@@ -8,7 +8,7 @@ type Tab = {
 
 function IconHome() {
   return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-7 w-7" fill="none" stroke="currentColor">
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor">
       <path
         d="M4 10.5l8-6 8 6V20a1.5 1.5 0 0 1-1.5 1.5H5.5A1.5 1.5 0 0 1 4 20v-9.5Z"
         strokeWidth="2"
@@ -24,7 +24,7 @@ function IconHeart() {
     <svg
       aria-hidden="true"
       viewBox="0 0 24 24"
-      className="h-7 w-7"
+      className="h-6 w-6"
       fill="none"
       stroke="currentColor"
       strokeWidth="2"
@@ -40,7 +40,7 @@ function IconHeart() {
 
 function IconUser() {
   return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-7 w-7" fill="none" stroke="currentColor">
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor">
       <path d="M12 12a4.5 4.5 0 1 0-4.5-4.5A4.5 4.5 0 0 0 12 12Z" strokeWidth="2" />
       <path
         d="M4.5 21a7.5 7.5 0 0 1 15 0"
@@ -58,7 +58,7 @@ const tabs: Tab[] = [
   { to: '/profile', label: 'Профиль', icon: <IconUser /> },
 ]
 
-const SLOT_WIDTH = 80
+const SLOT_WIDTH = 72
 
 type BottomNavProps = {
   favoritesCount?: number
@@ -78,11 +78,11 @@ export function BottomNav({ favoritesCount = 0 }: BottomNavProps) {
       style={{ bottom: 'max(env(safe-area-inset-bottom, 0px), 14px)' }}
       aria-label="Навигация"
     >
-      <div className="liquid-glass-nav relative mx-auto flex w-fit items-center justify-center gap-10 rounded-xl px-6 py-3">
+      <div className="liquid-glass-nav relative mx-auto flex w-fit items-center justify-center gap-8 rounded-xl px-5 py-2.5">
         {/* Sliding pill background — капля перетекает при смене таба */}
         {rawIndex >= 0 && (
           <div
-            className="absolute left-3 top-1/2 h-11 w-16 -translate-y-1/2 rounded-full bg-brand/60 transition-all duration-300 ease-out"
+            className="absolute left-2.5 top-1/2 h-10 w-14 -translate-y-1/2 rounded-full bg-brand/60 transition-all duration-300 ease-out"
             style={{
               transform: `translateX(${activeIndex * SLOT_WIDTH}px) translateY(-50%)`,
             }}
@@ -95,13 +95,13 @@ export function BottomNav({ favoritesCount = 0 }: BottomNavProps) {
               to={tab.to}
               aria-label={tab.to === '/favorites' && favoritesCount > 0 ? `${tab.label} (${favoritesCount})` : tab.label}
               className={[
-                'relative z-10 flex h-10 w-10 items-center justify-center text-slate-900 transition-colors',
+                'relative z-10 flex h-9 w-9 items-center justify-center text-slate-900 transition-colors',
                 'hover:text-slate-700',
               ].join(' ')}
             >
               {tab.icon}
               {tab.to === '/favorites' && favoritesCount > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-lg bg-brand px-1 text-[10px] font-medium text-white">
+                <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-lg bg-brand px-1 text-[10px] font-sf font-medium text-white">
                   {favoritesCount > 99 ? '99+' : favoritesCount}
                 </span>
               )}

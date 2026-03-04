@@ -1,4 +1,4 @@
-import { formatPriceRub } from '../../lib/format'
+import { splitPriceRub } from '../../lib/format'
 
 type PriceAnalysisBarProps = {
   priceRub: number
@@ -24,7 +24,7 @@ export function PriceAnalysisBar({
 
   return (
     <section className="rounded-2xl border border-black/10 bg-black/5 p-4 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur-xl">
-      <div className="mb-3 flex items-center justify-between text-xs text-slate-600">
+      <div className="mb-3 flex items-center justify-between font-sf text-xs text-slate-600">
         <span>Анализ цены</span>
         <span>{label}</span>
       </div>
@@ -41,10 +41,16 @@ export function PriceAnalysisBar({
         />
       </div>
 
-      <div className="mt-3 flex items-center justify-between text-xs text-slate-600">
-        <span>{formatPriceRub(marketLowRub)}</span>
-        <span>{formatPriceRub(marketAvgRub)}</span>
-        <span>{formatPriceRub(marketHighRub)}</span>
+      <div className="mt-3 flex items-center justify-between font-sf text-xs text-slate-600">
+        {[marketLowRub, marketAvgRub, marketHighRub].map((value, index) => {
+          const { amount, currency } = splitPriceRub(value)
+          return (
+            <span key={index}>
+              {amount}
+              <span className="align-top text-slate-400/80 text-[0.75em]">{currency}</span>
+            </span>
+          )
+        })}
       </div>
     </section>
   )

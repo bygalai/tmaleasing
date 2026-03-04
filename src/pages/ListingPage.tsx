@@ -1,6 +1,6 @@
 import { Link, useParams } from 'react-router-dom'
 import { PriceAnalysisBar } from '../components/listing/PriceAnalysisBar'
-import { formatMileage, formatMileageHours, formatPriceRub } from '../lib/format'
+import { formatMileage, formatMileageHours, splitPriceRub } from '../lib/format'
 import type { Listing } from '../types/marketplace'
 
 const isTrailer = (item: Listing) => item.category === 'pricepy'
@@ -51,9 +51,15 @@ export function ListingPage({ items, isFavorite, toggleFavorite }: ListingPagePr
       </div>
 
       <div className="rounded-2xl border border-black/10 bg-black/5 p-4 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur-xl">
-        <p className="text-3xl font-bold tabular-nums tracking-tight text-[#FF5C34]">
-          {formatPriceRub(item.priceRub)}
-        </p>
+        {(() => {
+          const { amount, currency } = splitPriceRub(item.priceRub)
+          return (
+            <p className="text-3xl font-bold tabular-nums tracking-tight text-[#FF5C34]">
+              {amount}
+              <span className="align-top text-slate-400 text-[0.75em]">{currency}</span>
+            </p>
+          )
+        })()}
         <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-600">
           <span>Год: {item.year ?? '—'}</span>
           {isTrailer(item) ? (
@@ -75,14 +81,16 @@ export function ListingPage({ items, isFavorite, toggleFavorite }: ListingPagePr
 
       <div className="rounded-2xl border border-black/10 bg-black/5 p-4 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur-xl">
         <p className="mb-2 text-sm font-medium text-slate-900">Описание</p>
-        <p className="whitespace-pre-line text-sm leading-relaxed text-slate-700">{item.description}</p>
+        <p className="font-sf whitespace-pre-line text-sm leading-relaxed text-slate-700">
+          {item.description}
+        </p>
       </div>
 
       <a
         href="https://t.me/GONKACONFBOT"
         target="_blank"
         rel="noreferrer"
-        className="inline-flex rounded-xl bg-[#FF5C34] px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+        className="inline-flex rounded-xl bg-[#FF5C34] px-4 py-2 text-sm font-sf font-semibold text-white transition hover:opacity-90"
       >
         Оставить заявку
       </a>

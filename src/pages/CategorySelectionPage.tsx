@@ -97,7 +97,7 @@ function CategoryCard({
         }`}
       >
         {category.topLeftText ? (
-          <p className="absolute left-4 top-4 text-sm font-sf font-normal text-white/85">
+          <p className="absolute left-4 right-12 top-4 max-w-[9.5rem] text-xs font-sf font-normal leading-snug text-white/85">
             {category.topLeftText}
           </p>
         ) : null}
