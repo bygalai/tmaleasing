@@ -22,6 +22,7 @@ type TelegramUpdate = {
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const MANAGER_CHAT_ID = process.env.TELEGRAM_MANAGER_CHAT_ID
+const MINIAPP_URL = process.env.MINIAPP_URL ?? 'https://tma-tawny.vercel.app'
 
 async function callTelegram<T = unknown>(method: string, body: Record<string, unknown>): Promise<T> {
   if (!BOT_TOKEN) {
@@ -100,7 +101,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await callTelegram('sendMessage', {
         chat_id: msg.chat.id,
         text:
-          'Привет! Это бот GONKA.\n\nОставляйте заявки через Mini App — менеджер свяжется с вами в этом чате.',
+          'Привет! Это бот GONKA.\n\nОткройте мини-приложение, чтобы посмотреть технику и оставить заявку.',
+        reply_markup: {
+          inline_keyboard: [
+            [
+              {
+                text: 'Открыть GONKA Mini App',
+                web_app: { url: MINIAPP_URL },
+              },
+            ],
+          ],
+        },
       })
       res.status(200).send('OK')
       return
