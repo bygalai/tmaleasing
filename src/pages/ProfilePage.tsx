@@ -12,7 +12,7 @@ export function ProfilePage() {
   const rawUser = getTelegramUserFromInitData()
 
   return (
-    <section className="flex flex-col items-center gap-10 pt-6">
+    <section className="flex flex-col items-center gap-6 pt-6">
       {/* Аватар — большая часть, тёплое свечение как в референсе */}
       <div className="flex flex-col items-center gap-6">
         <div
@@ -41,19 +41,23 @@ export function ProfilePage() {
         </div>
 
         {/* Никнейм в San Francisco */}
-        <p className="text-center font-sf text-xl font-medium tracking-tight text-slate-900">
-          {nickname}
-        </p>
+        <div className="flex flex-col items-center gap-1">
+          <p className="text-center font-sf text-xl font-medium tracking-tight text-slate-900">
+            {nickname}
+          </p>
+          {/* Временный отладочный текст прямо под никнеймом, чтобы точно был виден */}
+          <p className="max-w-[320px] break-all text-center text-[10px] text-slate-500">
+            debug user: {rawUser ? JSON.stringify(rawUser) : 'none'}
+          </p>
+          <p className="max-w-[320px] break-all text-center text-[10px] text-slate-500">
+            search: {typeof window !== 'undefined' ? window.location.search : 'n/a'}
+          </p>
+        </div>
       </div>
 
       {/* Нижний блок — «Здесь пока пусто» */}
       <div className="flex w-full max-w-[560px] items-center justify-center rounded-2xl bg-white/80 py-8">
         <p className="font-sf text-slate-600">В разработке</p>
-      </div>
-
-      {/* Временная отладочная секция, чтобы понять, что приходит от Telegram */}
-      <div className="max-w-[560px] rounded-xl bg-black/5 px-3 py-2 text-center text-[10px] text-slate-500 break-all">
-        debug user: {rawUser ? JSON.stringify(rawUser) : 'none'} | search: {typeof window !== 'undefined' ? window.location.search : 'n/a'}
       </div>
     </section>
   )
