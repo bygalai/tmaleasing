@@ -90,7 +90,8 @@ export function getTelegramUserFromInitData(): TelegramUser | undefined {
       const params = new URLSearchParams(window.location.search)
       const userJson = params.get('u')
       if (userJson) {
-        const raw = JSON.parse(userJson) as {
+        const decoded = decodeURIComponent(userJson)
+        const raw = JSON.parse(decoded) as {
           id?: number
           first_name?: string
           last_name?: string
