@@ -178,6 +178,18 @@ export function closeTelegramMiniApp(): void {
   window.Telegram?.WebApp?.close()
 }
 
+const BOT_USERNAME = 'GONKACONFBOT'
+
+/** Открывает бота с /start, чтобы пользователь не вводил команду вручную. */
+export function openBotStartLink(): void {
+  const url = `https://t.me/${BOT_USERNAME}?start=app`
+  if (window.Telegram?.WebApp?.openTelegramLink) {
+    window.Telegram.WebApp.openTelegramLink(url)
+  } else {
+    window.open(url, '_blank', 'noreferrer')
+  }
+}
+
 export function getAppTheme(): AppTheme {
   try {
     const launchParams = retrieveLaunchParams(true)

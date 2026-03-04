@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { openBotStartLink } from '../lib/telegram'
 
 export type CategoryId = 'legkovye' | 'gruzovye' | 'speztechnika' | 'pricepy'
 
@@ -132,6 +133,15 @@ function CategoryCard({
 export function CategorySelectionPage() {
   return (
     <section className="space-y-6">
+      <button
+        type="button"
+        onClick={openBotStartLink}
+        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#FF5C34] px-4 py-3 font-sf font-semibold text-white transition hover:opacity-90 active:scale-[0.98]"
+      >
+        <span>Начать</span>
+        <ArrowIcon className="h-5 w-5 opacity-90" />
+      </button>
+
       <header className="flex items-center justify-between">
         <h1 className="font-bold tracking-tight text-slate-900 font-sf [font-size:clamp(28px,7vw,34px)]">
           Каталог
