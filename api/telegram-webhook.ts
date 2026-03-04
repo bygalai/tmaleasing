@@ -123,7 +123,7 @@ export default async function handler(req: any, res: any) {
           keyboard: [
             [
               {
-                text: 'Открыть GONKA Mini App',
+                text: 'Начать',
                 web_app: { url },
               },
             ],
