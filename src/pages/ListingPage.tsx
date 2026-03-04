@@ -1,7 +1,8 @@
+import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { PriceAnalysisBar } from '../components/listing/PriceAnalysisBar'
 import { formatMileage, formatMileageHours, splitPriceRub } from '../lib/format'
-import { closeTelegramMiniApp, sendLeadToTelegram } from '../lib/telegram'
+import { closeTelegramMiniApp, sendLeadToTelegram, submitLeadViaApi } from '../lib/telegram'
 import type { Listing } from '../types/marketplace'
 
 const isTrailer = (item: Listing) => item.category === 'pricepy'
@@ -14,6 +15,7 @@ type ListingPageProps = {
 
 export function ListingPage({ items, isFavorite, toggleFavorite }: ListingPageProps) {
   const { id } = useParams()
+  const [submitting, setSubmitting] = useState(false)
   const item = items.find((entry) => entry.id === id)
 
   if (!item) {
@@ -89,26 +91,34 @@ export function ListingPage({ items, isFavorite, toggleFavorite }: ListingPagePr
 
       <button
         type="button"
-        className="inline-flex rounded-xl bg-[#FF5C34] px-4 py-2 text-sm font-sf font-semibold text-white transition hover:opacity-90"
-        onClick={() => {
-          const ok = sendLeadToTelegram({
-            kind: 'lead',
+        disabled={submitting}
+        className="inline-flex rounded-xl bg-[#FF5C34] px-4 py-2 text-sm font-sf font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
+        onClick={async () => {
+          const payload = {
+            kind: 'lead' as const,
             listingId: item.id,
             listingTitle: item.title,
             priceRub: item.priceRub,
             detailUrl: item.detailUrl,
             imageUrl: item.imageUrl,
-          })
-          if (!ok) {
-            // Fallback: открыть диалог с ботом, если Mini App запущено не в Telegram
-            window.open('https://t.me/GONKACONFBOT', '_blank', 'noreferrer')
-          } else {
-            // Закрываем Mini App, чтобы пользователь сразу увидел ответ бота
+          }
+          // Сначала пробуем WebApp.sendData (работает при входе через нижнюю кнопку в чате)
+          if (sendLeadToTelegram(payload)) {
             closeTelegramMiniApp()
+            return
+          }
+          // Иначе отправляем через API (вход через «Открыть приложение» в профиле бота)
+          setSubmitting(true)
+          try {
+            const ok = await submitLeadViaApi(payload)
+            if (ok) closeTelegramMiniApp()
+            else window.open('https://t.me/GONKACONFBOT', '_blank', 'noreferrer')
+          } finally {
+            setSubmitting(false)
           }
         }}
       >
-        Оставить заявку
+        {submitting ? 'Отправка…' : 'Оставить заявку'}
       </button>
     </article>
   )

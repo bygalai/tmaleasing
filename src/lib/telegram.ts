@@ -250,3 +250,34 @@ export function sendLeadToTelegram(payload: LeadPayload): boolean {
     return false
   }
 }
+
+/**
+ * Отправляет заявку через наш API, когда WebApp.sendData недоступен
+ * (вход через кнопку «Открыть приложение» в профиле бота). Не теряем лиды.
+ */
+export async function submitLeadViaApi(payload: LeadPayload): Promise<boolean> {
+  const user = getTelegramUserFromInitData()
+  if (!user?.id) return false
+  try {
+    const res = await fetch('/api/submit-lead', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        kind: payload.kind,
+        listingId: payload.listingId,
+        listingTitle: payload.listingTitle,
+        priceRub: payload.priceRub,
+        detailUrl: payload.detailUrl,
+        imageUrl: payload.imageUrl,
+        userId: user.id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        username: user.username,
+      }),
+    })
+    const data = (await res.json()) as { ok?: boolean }
+    return res.ok === true && data.ok === true
+  } catch {
+    return false
+  }
+}
