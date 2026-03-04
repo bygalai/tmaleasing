@@ -58,7 +58,7 @@ const tabs: Tab[] = [
   { to: '/profile', label: 'Профиль', icon: <IconUser /> },
 ]
 
-const SLOT_WIDTH = 72
+const SLOT_WIDTH = 76
 
 type BottomNavProps = {
   favoritesCount?: number
@@ -78,11 +78,11 @@ export function BottomNav({ favoritesCount = 0 }: BottomNavProps) {
       style={{ bottom: 'max(env(safe-area-inset-bottom, 0px), 14px)' }}
       aria-label="Навигация"
     >
-      <div className="liquid-glass-nav relative mx-auto flex w-fit items-center justify-center gap-8 rounded-xl px-5 py-2.5">
+      <div className="liquid-glass-nav relative mx-auto flex w-fit items-center justify-center gap-9 rounded-xl px-6 py-3">
         {/* Sliding pill background — капля перетекает при смене таба */}
         {rawIndex >= 0 && (
           <div
-            className="absolute left-2.5 top-1/2 h-10 w-14 -translate-y-1/2 rounded-full bg-brand/60 transition-all duration-300 ease-out"
+            className="absolute left-4 top-1/2 h-10 w-14 -translate-y-1/2 rounded-full bg-brand/60 transition-all duration-300 ease-out"
             style={{
               transform: `translateX(${activeIndex * SLOT_WIDTH}px) translateY(-50%)`,
             }}
@@ -95,7 +95,7 @@ export function BottomNav({ favoritesCount = 0 }: BottomNavProps) {
               to={tab.to}
               aria-label={tab.to === '/favorites' && favoritesCount > 0 ? `${tab.label} (${favoritesCount})` : tab.label}
               className={[
-                'relative z-10 flex h-9 w-9 items-center justify-center text-slate-900 transition-colors',
+                'relative z-10 flex h-10 w-10 items-center justify-center text-slate-900 transition-colors',
                 'hover:text-slate-700',
               ].join(' ')}
             >

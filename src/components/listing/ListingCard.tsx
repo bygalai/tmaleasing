@@ -48,7 +48,7 @@ export function ListingCard({ item, isFavorite, onToggleFavorite }: ListingCardP
           </div>
           <button
             type="button"
-            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xl text-white transition active:scale-95 ${
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xl text-white transition active:scale-95 ${
               isFavorite ? 'bg-brand' : 'bg-brand/80 hover:bg-brand/90'
             }`}
             aria-label="Добавить в избранное"
