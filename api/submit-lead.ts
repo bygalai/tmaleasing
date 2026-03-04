@@ -115,7 +115,7 @@ export default async function handler(req: { method?: string; body?: unknown }, 
     await callTelegram('sendMessage', {
       chat_id: lead.userId,
       text:
-        '✅ Заявка по этому автомобилю отправлена менеджеру.\nМы свяжемся с вами в этом чате.',
+        '✅ Заявка по автомобилю отправлена менеджеру.\nМы свяжемся с Вами в этом чате или в лс.',
     })
 
     res.status(200).json({ ok: true })
