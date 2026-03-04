@@ -1,7 +1,7 @@
 import { Link, useParams } from 'react-router-dom'
 import { PriceAnalysisBar } from '../components/listing/PriceAnalysisBar'
 import { formatMileage, formatMileageHours, splitPriceRub } from '../lib/format'
-import { sendLeadToTelegram } from '../lib/telegram'
+import { closeTelegramMiniApp, sendLeadToTelegram } from '../lib/telegram'
 import type { Listing } from '../types/marketplace'
 
 const isTrailer = (item: Listing) => item.category === 'pricepy'
@@ -102,6 +102,9 @@ export function ListingPage({ items, isFavorite, toggleFavorite }: ListingPagePr
           if (!ok) {
             // Fallback: открыть диалог с ботом, если Mini App запущено не в Telegram
             window.open('https://t.me/GONKACONFBOT', '_blank', 'noreferrer')
+          } else {
+            // Закрываем Mini App, чтобы пользователь сразу увидел ответ бота
+            closeTelegramMiniApp()
           }
         }}
       >

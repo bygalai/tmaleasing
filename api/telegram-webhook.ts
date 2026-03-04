@@ -1,5 +1,3 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node'
-
 type TelegramUser = {
   id: number
   username?: string
@@ -81,7 +79,7 @@ function formatPriceRubCompact(value: number): string {
   return raw.replace(/\s/g, '.')
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {
     res.status(200).send('OK')
     return
@@ -98,19 +96,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // /start и простые команды
     if (msg.text?.startsWith('/start')) {
+      const shortName =
+        msg.from?.first_name ||
+        (msg.from?.username ? `@${msg.from.username}` : 'друг')
+
+      // Прокидываем данные пользователя в URL Mini App как fallback,
+      // чтобы фронтенд мог восстановить профиль даже если WebApp API не даёт user.
+      let url = MINIAPP_URL
+      if (msg.from) {
+        const userForUrl = {
+          id: msg.from.id,
+          first_name: msg.from.first_name,
+          last_name: msg.from.last_name,
+          username: msg.from.username,
+        }
+        const encoded = encodeURIComponent(JSON.stringify(userForUrl))
+        url = `${MINIAPP_URL}?u=${encoded}`
+      }
+
       await callTelegram('sendMessage', {
         chat_id: msg.chat.id,
         text:
-          'Привет! Это бот GONKA.\n\nОткройте мини-приложение, чтобы посмотреть технику и оставить заявку.',
+          `Привет, ${shortName}! Это бот GONKA.\n\n` +
+          'Нажмите кнопку ниже, чтобы открыть мини-приложение и оставить заявку.',
         reply_markup: {
-          inline_keyboard: [
+          keyboard: [
             [
               {
                 text: 'Открыть GONKA Mini App',
-                web_app: { url: MINIAPP_URL },
+                web_app: { url },
               },
             ],
           ],
+          resize_keyboard: true,
+          one_time_keyboard: true,
         },
       })
       res.status(200).send('OK')
@@ -165,6 +184,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           text:
             '✅ Заявка по этому автомобилю отправлена менеджеру.\n' +
             'Мы свяжемся с вами в этом чате.',
+        })
+      } else {
+        // На всякий случай залогируем странный payload, чтобы не терять заявки.
+        const managerChat = MANAGER_CHAT_ID ? Number(MANAGER_CHAT_ID) : msg.chat.id
+        await callTelegram('sendMessage', {
+          chat_id: managerChat,
+          text:
+            '⚠️ Получены данные из Mini App, но формат не распознан.\n' +
+            `raw: \`${msg.web_app_data.data.slice(0, 2000)}\``,
+          parse_mode: 'Markdown',
         })
       }
 

@@ -34,6 +34,8 @@ const FALLBACK_THEME: AppTheme = {
   textColor: '#f8fafc',
 }
 
+let cachedTelegramUser: TelegramUser | null | undefined
+
 export function initializeTelegram(): void {
   try {
     init()
@@ -57,19 +59,114 @@ export function notifyAppReady(): void {
 
 export function getTelegramUserFromInitData(): TelegramUser | undefined {
   try {
-    const launchParams = retrieveLaunchParams(true)
-    const raw = launchParams.tgWebAppData?.user
-    if (!raw) return undefined
-    // SDK может вернуть camelCase; в сыром initData — snake_case
-    return {
-      id: (raw as { id?: number }).id,
-      firstName: (raw as { first_name?: string }).first_name ?? (raw as { firstName?: string }).firstName,
-      lastName: (raw as { last_name?: string }).last_name ?? (raw as { lastName?: string }).lastName,
-      username: (raw as { username?: string }).username,
-      photoUrl:
-        (raw as { photo_url?: string }).photo_url ?? (raw as { photoUrl?: string }).photoUrl,
+    if (cachedTelegramUser !== undefined) {
+      // Уже пытались определить пользователя в этой сессии.
+      return cachedTelegramUser ?? undefined
     }
+
+    const mapRaw = (raw: {
+      id?: number
+      first_name?: string
+      last_name?: string
+      username?: string
+      photo_url?: string
+      firstName?: string
+      lastName?: string
+      photoUrl?: string
+    }): TelegramUser | undefined => {
+      if (!raw) return undefined
+      return {
+        id: raw.id,
+        firstName: raw.first_name ?? raw.firstName,
+        lastName: raw.last_name ?? raw.lastName,
+        username: raw.username,
+        photoUrl: raw.photo_url ?? raw.photoUrl,
+      }
+    }
+
+    // 0) Попробуем взять пользователя из query-параметра `u`, который бот добавляет к URL.
+    // Этот путь должен работать даже если Mini App открыта как обычный сайт без Telegram WebApp.
+    try {
+      const params = new URLSearchParams(window.location.search)
+      const userJson = params.get('u')
+      if (userJson) {
+        const raw = JSON.parse(userJson) as {
+          id?: number
+          first_name?: string
+          last_name?: string
+          username?: string
+        }
+        const mappedFromUrl = mapRaw(raw as any)
+        if (mappedFromUrl?.id || mappedFromUrl?.username || mappedFromUrl?.firstName) {
+          cachedTelegramUser = mappedFromUrl
+          return cachedTelegramUser
+        }
+      }
+    } catch {
+      // игнорируем, пойдём дальше
+    }
+
+    const webApp = window.Telegram?.WebApp
+
+    // 1) Попробуем взять пользователя из launchParams (SDK)
+    try {
+      const launchParams = retrieveLaunchParams(true) as any
+      const fromSdk = launchParams?.tgWebAppData?.user ?? launchParams?.user
+      const mappedFromSdk = mapRaw(fromSdk ?? {})
+      if (mappedFromSdk?.id || mappedFromSdk?.username || mappedFromSdk?.firstName) {
+        cachedTelegramUser = mappedFromSdk
+        return cachedTelegramUser
+      }
+    } catch {
+      // игнорируем, пойдём дальше
+    }
+
+    // 2) Пытаемся распарсить initData
+    if (webApp?.initData) {
+      try {
+        const params = new URLSearchParams(webApp.initData)
+        const userJson = params.get('user')
+        if (userJson) {
+          const raw = JSON.parse(userJson) as {
+            id?: number
+            first_name?: string
+            last_name?: string
+            username?: string
+            photo_url?: string
+          }
+          const mapped = mapRaw(raw)
+          if (mapped?.id || mapped?.username || mapped?.firstName) {
+            cachedTelegramUser = mapped
+            return cachedTelegramUser
+          }
+        }
+      } catch {
+        // если что-то пошло не так — попробуем initDataUnsafe
+      }
+    }
+
+    // 3) Фоллбек на initDataUnsafe.user
+    const unsafeUser = webApp?.initDataUnsafe?.user
+    if (unsafeUser) {
+      const mapped = mapRaw(
+        unsafeUser as {
+          id?: number
+          first_name?: string
+          last_name?: string
+          username?: string
+          photo_url?: string
+        },
+      )
+      if (mapped?.id || mapped?.username || mapped?.firstName) {
+        cachedTelegramUser = mapped
+        return cachedTelegramUser
+      }
+    }
+
+    cachedTelegramUser = null
+    return undefined
   } catch {
+    cachedTelegramUser = null
     return undefined
   }
 }

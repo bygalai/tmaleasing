@@ -10,6 +10,18 @@ type TelegramSafeAreaInsets = {
   left?: number
 }
 
+type TelegramWebAppInitDataUnsafeUser = {
+  id?: number
+  first_name?: string
+  last_name?: string
+  username?: string
+  photo_url?: string
+}
+
+type TelegramWebAppInitDataUnsafe = {
+  user?: TelegramWebAppInitDataUnsafeUser
+}
+
 type TelegramWebApp = {
   ready: () => void
   expand: () => void
@@ -17,6 +29,9 @@ type TelegramWebApp = {
   sendData?: (data: string) => void
   themeParams?: TelegramThemeParams
   safeAreaInset?: TelegramSafeAreaInsets
+   // Строка initData, которую Telegram пробрасывает в Mini App
+  initData?: string
+  initDataUnsafe?: TelegramWebAppInitDataUnsafe
 }
 
 interface Window {
