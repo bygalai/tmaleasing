@@ -26,6 +26,7 @@ type TelegramWebApp = {
   ready: () => void
   expand: () => void
   close: () => void
+  openTelegramLink?: (url: string) => void
   sendData?: (data: string) => void
   themeParams?: TelegramThemeParams
   safeAreaInset?: TelegramSafeAreaInsets
