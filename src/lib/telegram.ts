@@ -20,6 +20,15 @@ export type TelegramUser = {
   photoUrl?: string
 }
 
+export type LeadPayload = {
+  kind: 'lead'
+  listingId: string
+  listingTitle: string
+  priceRub: number
+  detailUrl: string
+  imageUrl?: string
+}
+
 const FALLBACK_THEME: AppTheme = {
   bgColor: '#0b0f19',
   textColor: '#f8fafc',
@@ -133,4 +142,16 @@ export function getTelegramAvatarInitial(): string {
   if (!user) return 'Г'
   const first = user.firstName?.trim().charAt(0) ?? user.username?.charAt(0)
   return (first ?? '?').toUpperCase()
+}
+
+/** Отправляет данные заявки в бот через WebApp.sendData. Возвращает true, если отправка удалась. */
+export function sendLeadToTelegram(payload: LeadPayload): boolean {
+  const webApp = window.Telegram?.WebApp
+  if (!webApp?.sendData) return false
+  try {
+    webApp.sendData(JSON.stringify(payload))
+    return true
+  } catch {
+    return false
+  }
 }

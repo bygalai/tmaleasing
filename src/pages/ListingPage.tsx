@@ -1,6 +1,7 @@
 import { Link, useParams } from 'react-router-dom'
 import { PriceAnalysisBar } from '../components/listing/PriceAnalysisBar'
 import { formatMileage, formatMileageHours, splitPriceRub } from '../lib/format'
+import { sendLeadToTelegram } from '../lib/telegram'
 import type { Listing } from '../types/marketplace'
 
 const isTrailer = (item: Listing) => item.category === 'pricepy'
@@ -86,14 +87,26 @@ export function ListingPage({ items, isFavorite, toggleFavorite }: ListingPagePr
         </p>
       </div>
 
-      <a
-        href="https://t.me/GONKACONFBOT"
-        target="_blank"
-        rel="noreferrer"
+      <button
+        type="button"
         className="inline-flex rounded-xl bg-[#FF5C34] px-4 py-2 text-sm font-sf font-semibold text-white transition hover:opacity-90"
+        onClick={() => {
+          const ok = sendLeadToTelegram({
+            kind: 'lead',
+            listingId: item.id,
+            listingTitle: item.title,
+            priceRub: item.priceRub,
+            detailUrl: item.detailUrl,
+            imageUrl: item.imageUrl,
+          })
+          if (!ok) {
+            // Fallback: открыть диалог с ботом, если Mini App запущено не в Telegram
+            window.open('https://t.me/GONKACONFBOT', '_blank', 'noreferrer')
+          }
+        }}
       >
         Оставить заявку
-      </a>
+      </button>
     </article>
   )
 }
