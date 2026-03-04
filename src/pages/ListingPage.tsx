@@ -2,7 +2,12 @@ import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { PriceAnalysisBar } from '../components/listing/PriceAnalysisBar'
 import { formatMileage, formatMileageHours, splitPriceRub } from '../lib/format'
-import { closeTelegramMiniApp, sendLeadToTelegram, submitLeadViaApi } from '../lib/telegram'
+import {
+  closeTelegramMiniApp,
+  getTelegramUserFromInitData,
+  sendLeadToTelegram,
+  submitLeadViaApi,
+} from '../lib/telegram'
 import type { Listing } from '../types/marketplace'
 
 const isTrailer = (item: Listing) => item.category === 'pricepy'
@@ -102,20 +107,22 @@ export function ListingPage({ items, isFavorite, toggleFavorite }: ListingPagePr
             detailUrl: item.detailUrl,
             imageUrl: item.imageUrl,
           }
-          // Сначала пробуем WebApp.sendData (работает при входе через нижнюю кнопку в чате)
-          if (sendLeadToTelegram(payload)) {
-            closeTelegramMiniApp()
+          const user = getTelegramUserFromInitData()
+          // Если известен пользователь — всегда отправляем через API (надёжно и для кнопки в чате, и для «Открыть приложение»)
+          if (user?.id) {
+            setSubmitting(true)
+            try {
+              const ok = await submitLeadViaApi(payload)
+              if (ok) closeTelegramMiniApp()
+              else window.open('https://t.me/GONKACONFBOT', '_blank', 'noreferrer')
+            } finally {
+              setSubmitting(false)
+            }
             return
           }
-          // Иначе отправляем через API (вход через «Открыть приложение» в профиле бота)
-          setSubmitting(true)
-          try {
-            const ok = await submitLeadViaApi(payload)
-            if (ok) closeTelegramMiniApp()
-            else window.open('https://t.me/GONKACONFBOT', '_blank', 'noreferrer')
-          } finally {
-            setSubmitting(false)
-          }
+          // Иначе пробуем WebApp.sendData и при неудаче открываем бота
+          if (sendLeadToTelegram(payload)) closeTelegramMiniApp()
+          else window.open('https://t.me/GONKACONFBOT', '_blank', 'noreferrer')
         }}
       >
         {submitting ? 'Отправка…' : 'Оставить заявку'}
