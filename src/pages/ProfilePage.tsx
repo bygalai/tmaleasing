@@ -2,14 +2,12 @@ import {
   getTelegramAvatarInitial,
   getTelegramNickname,
   getTelegramPhotoUrl,
-  getTelegramUserFromInitData,
 } from '../lib/telegram'
 
 export function ProfilePage() {
   const photoUrl = getTelegramPhotoUrl()
   const nickname = getTelegramNickname()
   const initial = getTelegramAvatarInitial()
-  const rawUser = getTelegramUserFromInitData()
 
   return (
     <section className="flex flex-col items-center gap-6 pt-6">
@@ -41,18 +39,9 @@ export function ProfilePage() {
         </div>
 
         {/* Никнейм в San Francisco */}
-        <div className="flex flex-col items-center gap-1">
-          <p className="text-center font-sf text-xl font-medium tracking-tight text-slate-900">
-            {nickname}
-          </p>
-          {/* Временный отладочный текст прямо под никнеймом, чтобы точно был виден */}
-          <p className="max-w-[320px] break-all text-center text-[10px] text-slate-500">
-            debug user: {rawUser ? JSON.stringify(rawUser) : 'none'}
-          </p>
-          <p className="max-w-[320px] break-all text-center text-[10px] text-slate-500">
-            search: {typeof window !== 'undefined' ? window.location.search : 'n/a'}
-          </p>
-        </div>
+        <p className="text-center font-sf text-xl font-medium tracking-tight text-slate-900">
+          {nickname}
+        </p>
       </div>
 
       {/* Нижний блок — «Здесь пока пусто» */}
