@@ -59,9 +59,8 @@ export function notifyAppReady(): void {
 
 export function getTelegramUserFromInitData(): TelegramUser | undefined {
   try {
-    if (cachedTelegramUser !== undefined) {
-      // Уже пытались определить пользователя в этой сессии.
-      return cachedTelegramUser ?? undefined
+    if (cachedTelegramUser) {
+      return cachedTelegramUser
     }
 
     const mapRaw = (raw: {
@@ -164,10 +163,8 @@ export function getTelegramUserFromInitData(): TelegramUser | undefined {
       }
     }
 
-    cachedTelegramUser = null
     return undefined
   } catch {
-    cachedTelegramUser = null
     return undefined
   }
 }
