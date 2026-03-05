@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { AppLayout } from './components/layout/AppLayout'
 import { ScrollToTop } from './components/ScrollToTop'
@@ -101,6 +101,39 @@ function App() {
 
   const handleSplashReady = useCallback(() => {
     setSplashVisible(false)
+  }, [])
+
+  useEffect(() => {
+    function handleFocusIn(event: FocusEvent) {
+      const target = event.target as HTMLElement | null
+      if (!target) return
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        setIsSearchFocused(true)
+      }
+    }
+
+    function handleFocusOut() {
+      // Небольшая задержка, чтобы успел сфокусироваться следующий инпут (если есть).
+      window.setTimeout(() => {
+        const active = document.activeElement as HTMLElement | null
+        if (!active) {
+          setIsSearchFocused(false)
+          return
+        }
+        if (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA') {
+          setIsSearchFocused(true)
+        } else {
+          setIsSearchFocused(false)
+        }
+      }, 50)
+    }
+
+    window.addEventListener('focusin', handleFocusIn)
+    window.addEventListener('focusout', handleFocusOut)
+    return () => {
+      window.removeEventListener('focusin', handleFocusIn)
+      window.removeEventListener('focusout', handleFocusOut)
+    }
   }, [])
 
   if (splashVisible) {
