@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { ListingCard } from '../components/listing/ListingCard'
 import { SearchBar } from '../components/listing/SearchBar'
 import type { Listing } from '../types/marketplace'
 import type { CategoryId } from './CategorySelectionPage'
+import { getTelegramUserFromInitData } from '../lib/telegram'
 
 function normalizeForSearch(value: string | undefined | null): string {
   if (!value) return ''
@@ -190,6 +191,52 @@ export function CatalogPage({
   const categoryId = category as CategoryId | undefined
 
   const [query, setQuery] = useState('')
+  const [history, setHistory] = useState<string[]>([])
+
+  useEffect(() => {
+    try {
+      const user = getTelegramUserFromInitData()
+      const userKey = user?.id ?? user?.username ?? 'guest'
+      const storageKey = `tma:searchHistory:${userKey}`
+      const raw = window.localStorage.getItem(storageKey)
+      if (!raw) return
+      const parsed = JSON.parse(raw) as unknown
+      if (Array.isArray(parsed)) {
+        const normalized = parsed
+          .filter((v): v is string => typeof v === 'string')
+          .map((v) => v.trim())
+          .filter((v) => v.length > 0)
+        setHistory(normalized)
+      }
+    } catch {
+      // ignore
+    }
+  }, [])
+
+  useEffect(() => {
+    const trimmed = query.trim()
+    if (!trimmed) return
+
+    const timeoutId = window.setTimeout(() => {
+      try {
+        const user = getTelegramUserFromInitData()
+        const userKey = user?.id ?? user?.username ?? 'guest'
+        const storageKey = `tma:searchHistory:${userKey}`
+
+        setHistory((prev) => {
+          const next = [trimmed, ...prev.filter((q) => q !== trimmed)].slice(0, 10)
+          window.localStorage.setItem(storageKey, JSON.stringify(next))
+          return next
+        })
+      } catch {
+        // ignore
+      }
+    }, 700)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [query])
 
   const filtered = useMemo(() => {
     let result = items
@@ -201,9 +248,19 @@ export function CatalogPage({
     return result.filter((item) => matchesSearch(item, trimmed))
   }, [items, query, categoryId])
 
+  const isEmptyQuery = query.trim().length === 0
+  const defaultSuggestions = ['Shacman', 'Sitrak', 'Scania', 'Lada', 'Toyota']
+  const effectiveSuggestions =
+    isEmptyQuery && history.length > 0 ? history.slice(0, 3) : isEmptyQuery ? defaultSuggestions : []
+
   return (
     <section className="space-y-4">
-      <SearchBar value={query} onChange={setQuery} />
+      <SearchBar
+        value={query}
+        onChange={setQuery}
+        suggestions={effectiveSuggestions}
+        onSuggestionClick={(value) => setQuery(value)}
+      />
 
       {error ? (
         <div className="mx-auto max-w-[560px] rounded-xl border border-[#FF5C34]/40 bg-[#FF5C34]/10 px-3 py-2 text-xs text-[#9A3412]">
