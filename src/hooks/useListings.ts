@@ -104,40 +104,6 @@ function normalizeTransmission(value: string | null): string | null {
   return raw
 }
 
-/** Fisher-Yates shuffle. */
-function shuffle<T>(arr: T[]): T[] {
-  const out = [...arr]
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [out[i], out[j]] = [out[j], out[i]]
-  }
-  return out
-}
-
-/** Перемешивает объявления по source: случайный порядок в каждой группе, затем хаотичный выбор (рандомно тянем из оставшихся источников). */
-function interleaveBySource<T extends { source?: string | null }>(rows: T[]): T[] {
-  const bySource = new Map<string, T[]>()
-  for (const row of rows) {
-    const key = row.source?.trim() || 'unknown'
-    if (!bySource.has(key)) bySource.set(key, [])
-    bySource.get(key)!.push(row)
-  }
-  const groups = Array.from(bySource.values()).map((g) => shuffle(g))
-  if (groups.length <= 1) return groups[0] ?? rows
-  const out: T[] = []
-  const indices = groups.map(() => 0)
-  const total = rows.length
-  while (out.length < total) {
-    const available = groups
-      .map((_, i) => i)
-      .filter((i) => indices[i] < groups[i].length)
-    if (available.length === 0) break
-    const pick = available[Math.floor(Math.random() * available.length)]
-    out.push(groups[pick][indices[pick]++])
-  }
-  return out
-}
-
 function lowercaseFirstLetter(value: string | null): string | null {
   if (!value) return null
   const trimmed = value.trim()
@@ -263,9 +229,18 @@ export function useListings() {
           dedupedRows.push(row)
         }
 
-        // Чередуем по источнику (vtb / europlan), чтобы в начале были и те и другие
-        const interleaved = interleaveBySource(dedupedRows)
-        const mapped = interleaved.map(mapRowToListing)
+        // Все объявления от Европлана опускаем в самый низ,
+        // сохраняя изначальный порядок внутри каждой группы.
+        const europlanKey = 'europlan'
+        const nonEuroplan = dedupedRows.filter(
+          (row) => row.source?.trim().toLowerCase() !== europlanKey,
+        )
+        const europlan = dedupedRows.filter(
+          (row) => row.source?.trim().toLowerCase() === europlanKey,
+        )
+        const ordered = [...nonEuroplan, ...europlan]
+
+        const mapped = ordered.map(mapRowToListing)
 
         if (!cancelled) {
           setItems(mapped)
