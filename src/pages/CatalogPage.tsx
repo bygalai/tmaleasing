@@ -251,7 +251,6 @@ export function CatalogPage({
     return result.filter((item) => matchesSearch(item, trimmed))
   }, [items, query, categoryId])
 
-  const isEmptyQuery = query.trim().length === 0
   const defaultSuggestionsByCategory: Record<string, string[]> = {
     legkovye: ['Lada', 'Toyota', 'Camry', 'KIA', 'Haval'],
     gruzovye: ['Shacman', 'Sitrak', 'Scania', 'Howo', 'MAN'],
