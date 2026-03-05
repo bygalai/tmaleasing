@@ -200,7 +200,8 @@ export function CatalogPage({
     try {
       const user = getTelegramUserFromInitData()
       const userKey = user?.id ?? user?.username ?? 'guest'
-      const storageKey = `tma:searchHistory:${userKey}`
+      const categoryKey = categoryId ?? 'all'
+      const storageKey = `tma:searchHistory:${userKey}:${categoryKey}`
       const raw = window.localStorage.getItem(storageKey)
       if (!raw) return
       const parsed = JSON.parse(raw) as unknown
@@ -224,7 +225,8 @@ export function CatalogPage({
       try {
         const user = getTelegramUserFromInitData()
         const userKey = user?.id ?? user?.username ?? 'guest'
-        const storageKey = `tma:searchHistory:${userKey}`
+        const categoryKey = categoryId ?? 'all'
+        const storageKey = `tma:searchHistory:${userKey}:${categoryKey}`
 
         setHistory((prev) => {
           const next = [trimmed, ...prev.filter((q) => q !== trimmed)].slice(0, 10)
