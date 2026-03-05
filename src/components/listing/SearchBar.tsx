@@ -4,6 +4,7 @@ type SearchBarProps = {
   value: string
   onChange: (value: string) => void
   suggestions?: string[]
+  onSuggestionClick?: (value: string) => void
   onFocusChange?: (isFocused: boolean) => void
 }
 
@@ -11,6 +12,7 @@ export function SearchBar({
   value,
   onChange,
   suggestions = [],
+  onSuggestionClick,
   onFocusChange,
 }: SearchBarProps) {
   const glassRef = useRef<HTMLDivElement>(null)
@@ -40,11 +42,11 @@ export function SearchBar({
 
   const handleSuggestionClick = useCallback(
     (item: string) => {
-      // Подменяем текст в инпуте и запускаем поиск
-      onChange(item)
+      // Сообщаем родителю выбранное слово и закрываем клавиатуру
+      onSuggestionClick?.(item)
       inputRef.current?.blur()
     },
-    [onChange],
+    [onSuggestionClick],
   )
 
   const handleIconClick = useCallback(() => {

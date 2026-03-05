@@ -297,12 +297,18 @@ export function CatalogPage({
     onSearchFocusedChange?.(focused)
   }
 
+  const handleSuggestionClick = (value: string) => {
+    // Явно подменяем запрос на выбранное слово
+    setQuery(value)
+  }
+
   return (
     <section className="space-y-4">
       <SearchBar
         value={query}
         onChange={setQuery}
         suggestions={effectiveSuggestions}
+        onSuggestionClick={handleSuggestionClick}
         onFocusChange={handleSearchFocusChange}
       />
 
