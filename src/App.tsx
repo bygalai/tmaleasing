@@ -97,6 +97,7 @@ function App() {
   const { items, isLoading, error } = useListings()
   const { favorites, isFavorite, toggleFavorite } = useFavorites()
   const [splashVisible, setSplashVisible] = useState(true)
+  const [isSearchFocused, setIsSearchFocused] = useState(false)
 
   const handleSplashReady = useCallback(() => {
     setSplashVisible(false)
@@ -126,6 +127,7 @@ function App() {
               error={error}
               isFavorite={isFavorite}
               toggleFavorite={toggleFavorite}
+              onSearchFocusedChange={setIsSearchFocused}
             />
           }
         />
@@ -147,7 +149,7 @@ function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
 
-      <BottomNav favoritesCount={favorites.length} />
+      {!isSearchFocused && <BottomNav favoritesCount={favorites.length} />}
     </AppLayout>
   )
 }

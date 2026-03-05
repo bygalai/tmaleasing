@@ -178,6 +178,7 @@ type CatalogPageProps = {
   error: string | null
   isFavorite: (id: string) => boolean
   toggleFavorite: (id: string) => void
+  onSearchFocusedChange?: (isFocused: boolean) => void
 }
 
 export function CatalogPage({
@@ -186,12 +187,14 @@ export function CatalogPage({
   error,
   isFavorite,
   toggleFavorite,
+  onSearchFocusedChange,
 }: CatalogPageProps) {
   const { category } = useParams<{ category?: string }>()
   const categoryId = category as CategoryId | undefined
 
   const [query, setQuery] = useState('')
   const [history, setHistory] = useState<string[]>([])
+  const [isSearchFocused, setIsSearchFocused] = useState(false)
 
   useEffect(() => {
     try {
@@ -249,9 +252,49 @@ export function CatalogPage({
   }, [items, query, categoryId])
 
   const isEmptyQuery = query.trim().length === 0
-  const defaultSuggestions = ['Shacman', 'Sitrak', 'Scania', 'Lada', 'Toyota']
+  const defaultSuggestionsByCategory: Record<string, string[]> = {
+    legkovye: ['Lada', 'Toyota', 'Camry', 'KIA', 'Haval'],
+    gruzovye: ['Shacman', 'Sitrak', 'Scania', 'Howo', 'MAN'],
+    speztechnika: ['Lonking', 'Sany'],
+    pricepy: ['Полуприцеп', 'Прицеп'],
+    default: ['Shacman', 'Sitrak', 'Scania', 'Lada', 'Toyota'],
+  }
+  const baseDefaults =
+    (categoryId && defaultSuggestionsByCategory[categoryId]) ?? defaultSuggestionsByCategory.default
+  const normalizedQuery = query.trim()
+  const allCandidates = Array.from(
+    new Set<string>([
+      ...baseDefaults,
+      ...history,
+      ...Object.keys(BRAND_SYNONYMS),
+    ]),
+  )
+
+  const typedSuggestions =
+    normalizedQuery.length > 0
+      ? allCandidates
+          .filter((item) => {
+            const normItem = normalizeForSearch(item)
+            const normQuery = normalizeForSearch(normalizedQuery)
+            if (!normItem || !normQuery) return false
+            return normItem.includes(normQuery) || normQuery.includes(normItem)
+          })
+          .slice(0, 6)
+      : []
+
   const effectiveSuggestions =
-    isEmptyQuery && history.length > 0 ? history.slice(0, 3) : isEmptyQuery ? defaultSuggestions : []
+    isSearchFocused && normalizedQuery.length > 0
+      ? typedSuggestions
+      : isSearchFocused && history.length > 0
+        ? history.slice(0, 3)
+        : isSearchFocused
+          ? baseDefaults
+          : []
+
+  const handleSearchFocusChange = (focused: boolean) => {
+    setIsSearchFocused(focused)
+    onSearchFocusedChange?.(focused)
+  }
 
   return (
     <section className="space-y-4">
@@ -260,6 +303,7 @@ export function CatalogPage({
         onChange={setQuery}
         suggestions={effectiveSuggestions}
         onSuggestionClick={(value) => setQuery(value)}
+        onFocusChange={handleSearchFocusChange}
       />
 
       {error ? (
@@ -281,8 +325,8 @@ export function CatalogPage({
             />
           ))}
           {filtered.length === 0 ? (
-            <div className="mx-auto w-full max-w-[560px] rounded-2xl border border-black/10 bg-black/5 p-6 text-center text-sm text-slate-600">
-              По вашему запросу ничего не найдено.
+            <div className="mx-auto w-full max-w-[560px] px-2 text-center text-sm font-sf text-slate-900">
+              Ничего не найдено. Попробуйте ещё раз
             </div>
           ) : null}
         </div>
