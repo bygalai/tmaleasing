@@ -1,8 +1,8 @@
 /**
  * Газпромбанк Автолизинг (autogpbl.ru) — парсер автомобилей и техники с пробегом.
- * Каталоги: filter-type=4 — легковые, filter-type=6 — грузовые.
- * Пишет в таблицу listings (source='gazprom', category='legkovye' | 'gruzovye').
- * В Mini App объявления отображаются в разделах «Легковые» и «Грузовые» соответственно.
+ * Каталоги: filter-type=4 — легковые, filter-type=6 — грузовые, filter-type=2 — спецтехника, filter-type=8 — прицепы.
+ * Пишет в таблицу listings (source='gazprom', category='legkovye' | 'gruzovye' | 'speztechnika' | 'pricepy').
+ * В Mini App объявления отображаются в соответствующих разделах.
  */
 
 import { createHash } from 'node:crypto'
@@ -46,7 +46,7 @@ const SOURCE = 'gazprom'
 const GAZPROM_BASE_URL = 'https://autogpbl.ru'
 const ALLOWED_DOMAIN = 'autogpbl.ru'
 
-/** Секции каталога: легковые (filter-type=4) и грузовые (filter-type=6). */
+/** Секции каталога: легковые, грузовые, спецтехника, прицепы. */
 const GAZPROM_SECTIONS: Array<{ catalogUrl: string; category: string }> = [
   {
     catalogUrl: 'https://autogpbl.ru/avtomobili-i-tekhnika-s-probegom/?filter-type=4',
@@ -55,6 +55,14 @@ const GAZPROM_SECTIONS: Array<{ catalogUrl: string; category: string }> = [
   {
     catalogUrl: 'https://autogpbl.ru/avtomobili-i-tekhnika-s-probegom/?filter-type=6',
     category: 'gruzovye',
+  },
+  {
+    catalogUrl: 'https://autogpbl.ru/avtomobili-i-tekhnika-s-probegom/?condition=100000002&filter-type=2',
+    category: 'speztechnika',
+  },
+  {
+    catalogUrl: 'https://autogpbl.ru/avtomobili-i-tekhnika-s-probegom/?condition=100000002&filter-type=8',
+    category: 'pricepy',
   },
 ]
 
@@ -256,6 +264,8 @@ function sanitizeTitle(value: string | null | undefined): string {
   let cleaned = value.replace(/\s+/g, ' ').trim()
   // Убираем колёсную формулу из названия (6х6, 4x2 и т.д.) — она идёт в отдельное поле
   cleaned = cleaned.replace(/\s*\d+[xхX]\d+\s*/gi, ' ').replace(/\s+/g, ' ').trim()
+  // Убираем звёздочки в названиях спецтехники (напр. "SL763* Фронтальный")
+  cleaned = cleaned.replace(/\s*\*\s*/g, ' ').replace(/\s+/g, ' ').trim()
   return cleaned.length > 0 ? cleaned : fallback
 }
 
@@ -560,12 +570,14 @@ function extractDetailFromHtml(html: string, pageUrl: string): {
     }
   }
 
-  // Пробег: не брать число, если на странице есть «Пробег не указан»
+  // Пробег (км) или наработка (м.ч.) для прицепов
   const mileageNotSpecified = /пробег\s+не\s+указан/i.test(plainText)
   const mileageText = mileageNotSpecified
     ? null
     : plainText.match(/(\d[\d\s\u00A0]{2,})\s*(?:км|km)/i)?.[1] ??
       html.match(/Пробег\s*<\/[^>]+>[\s\S]{0,80}?(\d[\d\s\u00A0]+)/i)?.[1] ??
+      plainText.match(/(\d[\d\s\u00A0]+)\s*(?:м\.?\s*ч\.?|моточасов?)/i)?.[1] ??
+      html.match(/Наработка\s*<\/[^>]+>[\s\S]{0,80}?(\d[\d\s\u00A0]+)/i)?.[1] ??
       null
 
   const yearText =
