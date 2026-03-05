@@ -303,7 +303,6 @@ export function CatalogPage({
         value={query}
         onChange={setQuery}
         suggestions={effectiveSuggestions}
-        onSuggestionClick={(value) => setQuery(value)}
         onFocusChange={handleSearchFocusChange}
       />
 
