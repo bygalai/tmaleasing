@@ -80,19 +80,24 @@ export function ListingCard({ item, isFavorite, onToggleFavorite }: ListingCardP
           <span>Проверенный лот</span>
         </div>
 
-        <div className="relative z-10 flex items-center justify-between gap-3">
-          {(() => {
-            const { amount, currency } = splitPriceRub(item.priceRub)
-            return (
+        <div className="relative z-10 flex flex-col gap-0.5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-col gap-0.5">
+              {item.originalPriceRub != null && item.originalPriceRub > item.priceRub ? (
+                <p className="font-sf text-base tabular-nums text-slate-500 line-through">
+                  {splitPriceRub(item.originalPriceRub).amount}
+                  <span className="align-top text-slate-400 text-[0.75em]"> ₽</span>
+                </p>
+              ) : null}
               <p className="font-sf text-2xl font-bold tabular-nums tracking-tight text-[#FF5C34]">
-                {amount}
-                <span className="align-top text-slate-400 text-[0.75em]">{currency}</span>
+                {splitPriceRub(item.priceRub).amount}
+                <span className="align-top text-slate-400 text-[0.75em]"> ₽</span>
               </p>
-            )
-          })()}
-          <span className="font-sf rounded-xl bg-[#FF5C34] px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90">
-            Подробнее
-          </span>
+            </div>
+            <span className="font-sf rounded-xl bg-[#FF5C34] px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90">
+              Подробнее
+            </span>
+          </div>
         </div>
       </div>
     </article>

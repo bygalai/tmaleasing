@@ -10,6 +10,7 @@ type ListingsRow = {
   category: string | null
   title: string
   price: string | number | null
+  original_price: string | number | null
   mileage: string | number | null
   year: number | null
   images: string[] | null
@@ -111,8 +112,18 @@ function lowercaseFirstLetter(value: string | null): string | null {
   return trimmed[0].toLowerCase() + trimmed.slice(1)
 }
 
+// Показываем старую цену только при правдоподобной скидке (обычно до ~33%). Иначе не показываем «скидку».
+const MAX_ORIGINAL_TO_PRICE_RATIO = 1.5
+
 function mapRowToListing(row: ListingsRow): Listing {
   const priceRub = Math.round(toNumber(row.price) ?? 0)
+  const originalPriceRubRaw = toNumber(row.original_price)
+  const originalPriceRub =
+    originalPriceRubRaw != null &&
+    originalPriceRubRaw > priceRub &&
+    originalPriceRubRaw <= priceRub * MAX_ORIGINAL_TO_PRICE_RATIO
+      ? Math.round(originalPriceRubRaw)
+      : undefined
   const mileageKm = toNumber(row.mileage)
   const year = row.year ?? undefined
 
@@ -144,8 +155,8 @@ function mapRowToListing(row: ListingsRow): Listing {
         : `Пробег: ${Math.round(mileageKm)} км`
       : null,
     !isTrailer && engine ? `Двигатель: ${engine}` : null,
-    !isTrailer && transmission ? `КПП: ${transmission}` : null,
-    !isTrailer && drivetrainForDescription ? `Привод: ${drivetrainForDescription}` : null,
+    !isTrailer && transmission ? `Коробка: ${transmission}` : null,
+    !isTrailer && drivetrainForDescription ? `Колёсная формула: ${drivetrainForDescription}` : null,
     bodyColorForDescription ? `Цвет: ${bodyColorForDescription}` : null,
     row.vin ? `VIN: ${row.vin}` : null,
   ].filter((part): part is string => Boolean(part))
@@ -156,6 +167,7 @@ function mapRowToListing(row: ListingsRow): Listing {
     title: row.title,
     subtitle: subtitleParts.length ? subtitleParts.join(' • ') : subtitleFallback,
     priceRub,
+    ...(originalPriceRub != null ? { originalPriceRub } : {}),
     // Пока у нас нет анализа рынка в БД — заполняем значения, чтобы UI работал стабильно.
     marketLowRub: Math.round(priceRub * 0.93),
     marketAvgRub: priceRub,
@@ -172,7 +184,13 @@ function mapRowToListing(row: ListingsRow): Listing {
         : isTrailer
           ? 'Прицеп/полуприцеп от лизинговой компании.'
           : 'Конфискованная техника от лизинговой компании.',
-    badges: ['in_stock'],
+    badges:
+      originalPriceRub != null
+        ? ['in_stock', 'discount']
+        : ['in_stock'],
+    ...(originalPriceRub != null
+      ? { discountPercent: Math.round((1 - priceRub / originalPriceRub) * 100) }
+      : {}),
   }
 }
 
@@ -207,7 +225,7 @@ export function useListings() {
         const { data, error: supabaseError } = await supabase
           .from('listings')
           .select(
-            'id,category,title,price,mileage,year,images,listing_url,created_at,city,vin,engine,transmission,drivetrain,body_color,source',
+            'id,category,title,price,original_price,mileage,year,images,listing_url,created_at,city,vin,engine,transmission,drivetrain,body_color,source',
           )
           .not('price', 'is', null)
           .order('created_at', { ascending: false })

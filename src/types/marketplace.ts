@@ -6,6 +6,8 @@ export type Listing = {
   title: string
   subtitle: string
   priceRub: number
+  /** Старая цена до скидки — показываем зачёркнутой серым. */
+  originalPriceRub?: number
   marketLowRub: number
   marketAvgRub: number
   marketHighRub: number

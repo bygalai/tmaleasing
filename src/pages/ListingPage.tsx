@@ -59,15 +59,16 @@ export function ListingPage({ items, isFavorite, toggleFavorite }: ListingPagePr
       </div>
 
       <div className="rounded-2xl border border-black/10 bg-black/5 p-4 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur-xl">
-        {(() => {
-          const { amount, currency } = splitPriceRub(item.priceRub)
-          return (
-            <p className="text-3xl font-bold tabular-nums tracking-tight text-[#FF5C34]">
-              {amount}
-              <span className="align-top text-slate-400 text-[0.75em]">{currency}</span>
-            </p>
-          )
-        })()}
+        {item.originalPriceRub != null && item.originalPriceRub > item.priceRub ? (
+          <p className="font-sf text-lg tabular-nums text-slate-500 line-through">
+            {splitPriceRub(item.originalPriceRub).amount}
+            <span className="align-top text-slate-400 text-[0.75em]"> ₽</span>
+          </p>
+        ) : null}
+        <p className="font-sf text-3xl font-bold tabular-nums tracking-tight text-[#FF5C34]">
+          {splitPriceRub(item.priceRub).amount}
+          <span className="align-top text-slate-400 text-[0.75em]"> ₽</span>
+        </p>
         <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-600">
           <span>Год: {item.year ?? '—'}</span>
           {isTrailer(item) ? (
