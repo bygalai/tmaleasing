@@ -92,9 +92,14 @@ export function ListingPage({ items, isFavorite, toggleFavorite }: ListingPagePr
 
       <section className="space-y-2">
         <p className="text-sm font-medium text-slate-900">Описание</p>
-        <p className="font-sf whitespace-pre-line text-sm leading-relaxed text-slate-700">
-          {item.description}
-        </p>
+        <div className="font-sf grid grid-cols-2 gap-x-4 gap-y-1 text-sm leading-relaxed text-slate-700">
+          {item.description
+            .split('\n')
+            .filter(Boolean)
+            .map((line, index) => (
+              <span key={index}>{line}</span>
+            ))}
+        </div>
       </section>
 
       <button
