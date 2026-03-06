@@ -40,13 +40,13 @@ export function SearchBar({
     onFocusChange?.(false)
   }, [onFocusChange])
 
-  const handleSuggestionClick = useCallback(
+  const handleSuggestionSelect = useCallback(
     (item: string) => {
-      // Сообщаем родителю выбранное слово и закрываем клавиатуру
+      onChange(item)
       onSuggestionClick?.(item)
       inputRef.current?.blur()
     },
-    [onSuggestionClick],
+    [onChange, onSuggestionClick],
   )
 
   const handleIconClick = useCallback(() => {
@@ -102,7 +102,11 @@ export function SearchBar({
             <button
               key={`${item}-${index}`}
               type="button"
-              onClick={() => handleSuggestionClick(item)}
+              onPointerDown={(e) => {
+                e.preventDefault()
+                handleSuggestionSelect(item)
+              }}
+              onClick={(e) => e.preventDefault()}
               className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-sf text-black transition-colors hover:bg-slate-50 active:bg-[#FFE1D5]"
             >
               <span className="inline-flex h-4 w-4 items-center justify-center text-slate-400">

@@ -94,10 +94,14 @@ function Header() {
 }
 
 function App() {
+  const location = useLocation()
   const { items, isLoading, error } = useListings()
   const { favorites, isFavorite, toggleFavorite } = useFavorites()
   const [splashVisible, setSplashVisible] = useState(true)
   const [isSearchFocused, setIsSearchFocused] = useState(false)
+
+  const isStickyHeader =
+    location.pathname.startsWith('/catalog/') || location.pathname.startsWith('/listing/')
 
   const handleSplashReady = useCallback(() => {
     setSplashVisible(false)
@@ -145,7 +149,13 @@ function App() {
   return (
     <AppLayout>
       <ScrollToTop />
-      <header className="mb-5 flex items-center justify-center">
+      <header
+        className={
+          isStickyHeader
+            ? 'sticky top-0 z-20 -mx-4 -mt-5 flex items-center justify-center px-4 pt-[max(env(safe-area-inset-top,0px),1.25rem)] pb-3 mb-5 bg-white/95 shadow-sm backdrop-blur-md'
+            : 'mb-5 flex items-center justify-center'
+        }
+      >
         <Header />
       </header>
 
