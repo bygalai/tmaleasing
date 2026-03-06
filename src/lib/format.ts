@@ -20,12 +20,12 @@ export function splitPriceRub(value: number): { amount: string; currency: string
 }
 
 export function formatMileage(value?: number): string {
-  if (!value) return 'Пробег не указан'
+  if (!value) return 'пробег не указан'
   return `${new Intl.NumberFormat('ru-RU').format(value)} км`
 }
 
 /** Для прицепов: наработка в м.ч. */
 export function formatMileageHours(value?: number): string {
-  if (!value) return 'Наработка не указана'
+  if (!value) return 'наработка не указана'
   return `${new Intl.NumberFormat('ru-RU').format(value)} м.ч.`
 }

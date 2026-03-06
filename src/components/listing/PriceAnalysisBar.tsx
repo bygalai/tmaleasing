@@ -23,7 +23,7 @@ export function PriceAnalysisBar({
   const label = priceRub <= marketAvgRub ? 'Цена ниже рынка' : 'Цена выше рынка'
 
   return (
-    <section className="rounded-2xl border border-black/10 bg-black/5 p-4 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur-xl">
+    <section>
       <div className="mb-3 flex items-center justify-between font-sf text-xs text-slate-600">
         <span>Анализ цены</span>
         <span>{label}</span>

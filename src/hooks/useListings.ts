@@ -112,6 +112,52 @@ function lowercaseFirstLetter(value: string | null): string | null {
   return trimmed[0].toLowerCase() + trimmed.slice(1)
 }
 
+/** Значения из поля body_color, которые являются типом кузова (из парсера Газпрома), а не цветом. */
+const BODY_TYPE_WORDS = [
+  // легковые
+  'внедорожник',
+  'лифтбэк',
+  'лифтбек',
+  'седан',
+  'универсал',
+  'хэтчбек',
+  'хетчбек',
+  'купе',
+  'минивэн',
+  'минивен',
+  'пикап',
+  'кроссовер',
+  'кабриолет',
+  'фургон',
+  'лимузин',
+  'родстер',
+  // грузовые и спецтехника
+  'седельный',
+  'самосвал',
+  'бортовой',
+  'цистерна',
+  'рефрижератор',
+  'тентованный',
+  'изотермический',
+  'тягач',
+  'контейнеровоз',
+  'эвакуатор',
+  'автокран',
+  'бортовая платформа',
+  // прицепы
+  'прицеп',
+  'полуприцеп',
+]
+
+function isBodyType(value: string | null): boolean {
+  if (!value) return false
+  const lower = value.trim().toLowerCase()
+  if (!lower) return false
+  return BODY_TYPE_WORDS.some(
+    (word) => lower === word || lower.startsWith(`${word} `) || lower.startsWith(`${word},`),
+  )
+}
+
 // Показываем старую цену только при правдоподобной скидке (обычно до ~33%). Иначе не показываем «скидку».
 const MAX_ORIGINAL_TO_PRICE_RATIO = 1.5
 
@@ -145,6 +191,13 @@ function mapRowToListing(row: ListingsRow): Listing {
 
   const bodyColorForDescription = lowercaseFirstLetter(bodyColor)
   const drivetrainForDescription = lowercaseFirstLetter(drivetrain)
+  // В парсере Газпрома в body_color попадает тип кузова (внедорожник, лифтбэк и т.д.) — выводим как «Тип кузова», не как «Цвет».
+  const bodyColorOrTypeLine =
+    bodyColorForDescription == null
+      ? null
+      : isBodyType(bodyColor)
+        ? `Тип кузова: ${bodyColorForDescription}`
+        : `Цвет: ${bodyColorForDescription}`
 
   const descriptionParts = [
     row.city ? `Город: ${row.city}` : null,
@@ -157,7 +210,7 @@ function mapRowToListing(row: ListingsRow): Listing {
     !isTrailer && engine ? `Двигатель: ${engine}` : null,
     !isTrailer && transmission ? `Коробка: ${transmission}` : null,
     !isTrailer && drivetrainForDescription ? `Колёсная формула: ${drivetrainForDescription}` : null,
-    bodyColorForDescription ? `Цвет: ${bodyColorForDescription}` : null,
+    bodyColorOrTypeLine,
     row.vin ? `VIN: ${row.vin}` : null,
   ].filter((part): part is string => Boolean(part))
 
