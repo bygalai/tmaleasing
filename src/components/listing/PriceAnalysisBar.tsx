@@ -19,7 +19,6 @@ export function PriceAnalysisBar({
 }: PriceAnalysisBarProps) {
   const range = Math.max(1, marketHighRub - marketLowRub)
   const marker = clamp(((priceRub - marketLowRub) / range) * 100, 0, 100)
-  const average = clamp(((marketAvgRub - marketLowRub) / range) * 100, 0, 100)
   const label = priceRub <= marketAvgRub ? 'Цена ниже рынка' : 'Цена выше рынка'
 
   return (
@@ -32,7 +31,7 @@ export function PriceAnalysisBar({
       <div className="relative h-2 rounded-full bg-black/10">
         <div
           className="absolute left-0 top-0 h-2 rounded-full bg-gradient-to-r from-[#2aa871] to-[#FF5C34]"
-          style={{ width: `${average}%` }}
+          style={{ width: '100%' }}
         />
         <span
           className="absolute -top-2 h-6 w-0.5 bg-slate-900"

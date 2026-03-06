@@ -150,7 +150,16 @@ function App() {
       </header>
 
       <Routes>
-        <Route path="/" element={<CategorySelectionPage />} />
+        <Route
+          path="/"
+          element={
+            <CategorySelectionPage
+              items={items}
+              isFavorite={isFavorite}
+              toggleFavorite={toggleFavorite}
+            />
+          }
+        />
         <Route
           path="/catalog/:category"
           element={

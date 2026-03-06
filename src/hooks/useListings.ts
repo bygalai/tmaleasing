@@ -23,6 +23,12 @@ type ListingsRow = {
   drivetrain: string | null
   body_color: string | null
   source: string | null
+  listing_price_analysis?: {
+    market_low: string | number | null
+    market_avg: string | number | null
+    market_high: string | number | null
+    sample_size: number | null
+  } | null
 }
 
 function toNumber(value: string | number | null | undefined): number | undefined {
@@ -214,6 +220,27 @@ function mapRowToListing(row: ListingsRow): Listing {
     row.vin ? `VIN: ${row.vin}` : null,
   ].filter((part): part is string => Boolean(part))
 
+  // Значения для анализа цены:
+  const analysis = row.listing_price_analysis
+  const serverLow = analysis?.market_low != null ? toNumber(analysis.market_low) : undefined
+  const serverAvg = analysis?.market_avg != null ? toNumber(analysis.market_avg) : undefined
+  const serverHigh = analysis?.market_high != null ? toNumber(analysis.market_high) : undefined
+
+  let marketLowRub: number
+  let marketAvgRub: number
+  let marketHighRub: number
+
+  if (serverLow && serverAvg && serverHigh && serverLow > 0 && serverAvg > 0 && serverHigh > 0) {
+    marketLowRub = Math.round(serverLow)
+    marketAvgRub = Math.round(serverAvg)
+    marketHighRub = Math.round(serverHigh)
+  } else {
+    // Аккуратный fallback: узкий коридор вокруг текущей цены.
+    marketLowRub = Math.round(priceRub * 0.95)
+    marketAvgRub = priceRub
+    marketHighRub = Math.round(priceRub * 1.05)
+  }
+
   return {
     id: row.id,
     category: row.category ?? undefined,
@@ -221,10 +248,9 @@ function mapRowToListing(row: ListingsRow): Listing {
     subtitle: subtitleParts.length ? subtitleParts.join(' • ') : subtitleFallback,
     priceRub,
     ...(originalPriceRub != null ? { originalPriceRub } : {}),
-    // Пока у нас нет анализа рынка в БД — заполняем значения, чтобы UI работал стабильно.
-    marketLowRub: Math.round(priceRub * 0.93),
-    marketAvgRub: priceRub,
-    marketHighRub: Math.round(priceRub * 1.07),
+    marketLowRub,
+    marketAvgRub,
+    marketHighRub,
     year,
     mileageKm: mileageKm !== undefined ? Math.round(mileageKm) : undefined,
     location: row.city ?? undefined,
@@ -278,7 +304,7 @@ export function useListings() {
         const { data, error: supabaseError } = await supabase
           .from('listings')
           .select(
-            'id,category,title,price,original_price,mileage,year,images,listing_url,created_at,city,vin,engine,transmission,drivetrain,body_color,source',
+            'id,category,title,price,original_price,mileage,year,images,listing_url,created_at,city,vin,engine,transmission,drivetrain,body_color,source,listing_price_analysis(market_low,market_avg,market_high,sample_size)',
           )
           .not('price', 'is', null)
           .order('created_at', { ascending: false })

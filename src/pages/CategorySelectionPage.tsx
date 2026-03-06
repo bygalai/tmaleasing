@@ -1,4 +1,6 @@
 import { Link } from 'react-router-dom'
+import { ListingCard } from '../components/listing/ListingCard'
+import type { Listing } from '../types/marketplace'
 
 export type CategoryId = 'legkovye' | 'gruzovye' | 'speztechnika' | 'pricepy'
 
@@ -129,7 +131,19 @@ function CategoryCard({
   )
 }
 
-export function CategorySelectionPage() {
+type CategorySelectionPageProps = {
+  items: Listing[]
+  isFavorite: (id: string) => boolean
+  toggleFavorite: (id: string) => void
+}
+
+export function CategorySelectionPage({
+  items,
+  isFavorite,
+  toggleFavorite,
+}: CategorySelectionPageProps) {
+  const discountedItems = items.filter((item) => item.badges.includes('discount'))
+
   return (
     <section className="space-y-6">
       <header className="flex items-center justify-between">
@@ -154,6 +168,24 @@ export function CategorySelectionPage() {
         <CategoryCard category={CATEGORIES.find((c) => c.id === 'speztechnika')!} />
         <CategoryCard category={CATEGORIES.find((c) => c.id === 'pricepy')!} />
       </div>
+
+      {discountedItems.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="font-sf font-bold tracking-tight text-slate-900 [font-size:clamp(28px,7vw,34px)]">
+            Выгодно
+          </h2>
+          <div className="grid gap-4 pb-4">
+            {discountedItems.map((item) => (
+              <ListingCard
+                key={item.id}
+                item={item}
+                isFavorite={isFavorite(item.id)}
+                onToggleFavorite={toggleFavorite}
+              />
+            ))}
+          </div>
+        </section>
+      )}
     </section>
   )
 }

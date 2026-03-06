@@ -1,0 +1,44 @@
+name: Rebuild price analysis
+
+on:
+  schedule:
+    # Every night at 02:00 UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch: {}
+
+concurrency:
+  group: price-analysis
+  cancel-in-progress: false
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify environment
+        run: |
+          echo "Node $(node -v), npm $(npm -v)"
+          [ -n "$SUPABASE_URL" ] || { echo "::error::SUPABASE_URL secret is not set"; exit 1; }
+          [ -n "$SUPABASE_KEY" ] || { echo "::error::SUPABASE_KEY secret is not set"; exit 1; }
+          echo "Supabase credentials OK"
+
+      - name: Rebuild price analysis
+        run: npm run price:rebuild
+
