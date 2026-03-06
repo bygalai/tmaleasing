@@ -23,12 +23,21 @@ type ListingsRow = {
   drivetrain: string | null
   body_color: string | null
   source: string | null
-  listing_price_analysis?: {
-    market_low: string | number | null
-    market_avg: string | number | null
-    market_high: string | number | null
-    sample_size: number | null
-  } | null
+  /** Supabase returns FK relation as array (one row per listing); we use the first. */
+  listing_price_analysis?:
+    | {
+        market_low: string | number | null
+        market_avg: string | number | null
+        market_high: string | number | null
+        sample_size: number | null
+      }[]
+    | {
+        market_low: string | number | null
+        market_avg: string | number | null
+        market_high: string | number | null
+        sample_size: number | null
+      }
+    | null
 }
 
 function toNumber(value: string | number | null | undefined): number | undefined {
@@ -220,8 +229,9 @@ function mapRowToListing(row: ListingsRow): Listing {
     row.vin ? `VIN: ${row.vin}` : null,
   ].filter((part): part is string => Boolean(part))
 
-  // Значения для анализа цены:
-  const analysis = row.listing_price_analysis
+  // Значения для анализа цены (Supabase возвращает связь как массив с одним элементом).
+  const rawAnalysis = row.listing_price_analysis
+  const analysis = Array.isArray(rawAnalysis) ? rawAnalysis[0] ?? null : rawAnalysis
   const serverLow = analysis?.market_low != null ? toNumber(analysis.market_low) : undefined
   const serverAvg = analysis?.market_avg != null ? toNumber(analysis.market_avg) : undefined
   const serverHigh = analysis?.market_high != null ? toNumber(analysis.market_high) : undefined
