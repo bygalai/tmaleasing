@@ -58,28 +58,30 @@ export function ListingPage({ items, isFavorite, toggleFavorite }: ListingPagePr
         <p className="text-sm text-slate-600">{item.subtitle}</p>
       </div>
 
-      <div className="rounded-2xl border border-black/10 bg-black/5 p-4 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur-xl">
-        {item.originalPriceRub != null && item.originalPriceRub > item.priceRub ? (
-          <p className="font-sf text-lg tabular-nums text-slate-500 line-through">
-            {splitPriceRub(item.originalPriceRub).amount}
+      <section className="relative overflow-hidden rounded-3xl border border-white/30 bg-white/10 p-4 shadow-[0_18px_45px_rgba(15,23,42,0.22)] backdrop-blur-2xl">
+        <div className="space-y-2">
+          {item.originalPriceRub != null && item.originalPriceRub > item.priceRub ? (
+            <p className="font-sf text-lg tabular-nums text-slate-500 line-through">
+              {splitPriceRub(item.originalPriceRub).amount}
+              <span className="align-top text-slate-400 text-[0.75em]"> ₽</span>
+            </p>
+          ) : null}
+          <p className="font-sf text-3xl font-bold tabular-nums tracking-tight text-[#FF5C34]">
+            {splitPriceRub(item.priceRub).amount}
             <span className="align-top text-slate-400 text-[0.75em]"> ₽</span>
           </p>
-        ) : null}
-        <p className="font-sf text-3xl font-bold tabular-nums tracking-tight text-[#FF5C34]">
-          {splitPriceRub(item.priceRub).amount}
-          <span className="align-top text-slate-400 text-[0.75em]"> ₽</span>
-        </p>
-        <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-600">
-          <span>Год: {item.year ?? '—'}</span>
-          {isTrailer(item) ? (
-            <span>Наработка: {formatMileageHours(item.mileageKm)}</span>
-          ) : (
-            <span>Пробег: {formatMileage(item.mileageKm)}</span>
-          )}
-          <span>{item.location ?? '—'}</span>
-          <span>Юридическая проверка</span>
+          <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-600">
+            <span>Год: {item.year ?? '—'}</span>
+            {isTrailer(item) ? (
+              <span>Наработка: {formatMileageHours(item.mileageKm)}</span>
+            ) : (
+              <span>Пробег: {formatMileage(item.mileageKm)}</span>
+            )}
+            <span>{item.location ?? '—'}</span>
+            <span>Юридическая проверка</span>
+          </div>
         </div>
-      </div>
+      </section>
 
       <PriceAnalysisBar
         priceRub={item.priceRub}
@@ -88,12 +90,12 @@ export function ListingPage({ items, isFavorite, toggleFavorite }: ListingPagePr
         marketHighRub={item.marketHighRub}
       />
 
-      <div className="rounded-2xl border border-black/10 bg-black/5 p-4 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur-xl">
-        <p className="mb-2 text-sm font-medium text-slate-900">Описание</p>
+      <section className="space-y-2">
+        <p className="text-sm font-medium text-slate-900">Описание</p>
         <p className="font-sf whitespace-pre-line text-sm leading-relaxed text-slate-700">
           {item.description}
         </p>
-      </div>
+      </section>
 
       <button
         type="button"
