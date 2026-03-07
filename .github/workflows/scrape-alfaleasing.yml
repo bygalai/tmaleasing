@@ -36,7 +36,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             libnss3 libnspr4 libatk-bridge2.0-0 libatk1.0-0 libx11-6 libpangocairo-1.0-0 \
             libx11-xcb1 libcups2 libxcomposite1 libxdamage1 libxfixes3 libpango-1.0-0 \
-            libgbm1 libasound2 libatspi2.0-0 libdrm2 libxkbcommon0
+            libgbm1 libasound2t64 libatspi2.0-0 libdrm2 libxkbcommon0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
