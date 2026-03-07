@@ -235,6 +235,30 @@ export function CategorySelectionPage({
 
   return (
     <section className="space-y-6">
+      {normalizedQuery.length > 0 ? (
+        <div className="sticky top-0 z-10 -mx-4 -mt-1 flex w-full items-center justify-start bg-white/95 px-4 pb-2 pt-2 backdrop-blur-sm">
+          <button
+            type="button"
+            onClick={() => setQuery('')}
+            aria-label="Назад к каталогу"
+            className="flex h-10 w-10 shrink-0 items-center justify-center text-slate-900"
+          >
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              className="h-8 w-8"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="butt"
+              strokeLinejoin="miter"
+            >
+              <path d="M15 18l-6-6 6-6" />
+            </svg>
+          </button>
+        </div>
+      ) : null}
+
       <SearchBar
         value={query}
         onChange={setQuery}
