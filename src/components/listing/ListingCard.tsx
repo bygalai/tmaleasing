@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { formatMileage, formatMileageHours, splitPriceRub } from '../../lib/format'
 import type { Listing } from '../../types/marketplace'
+import { ImageWithFallback } from './ImageWithFallback'
 
 const isTrailer = (item: Listing) => item.category === 'pricepy'
 
@@ -17,6 +19,10 @@ function badgeLabel(item: Listing, badge: Listing['badges'][number]) {
 }
 
 export function ListingCard({ item, isFavorite, onToggleFavorite }: ListingCardProps) {
+  const [hideDueToBrokenImages, setHideDueToBrokenImages] = useState(false)
+
+  if (hideDueToBrokenImages) return null
+
   return (
     <Link
       to={`/listing/${item.id}`}
@@ -25,12 +31,12 @@ export function ListingCard({ item, isFavorite, onToggleFavorite }: ListingCardP
     >
     <article>
       <div className="relative h-48 w-full">
-        <img
-          src={item.imageUrl}
+        <ImageWithFallback
+          imageUrls={item.imageUrls}
           alt={item.title}
           className="h-full w-full object-cover"
           loading="lazy"
-          referrerPolicy="no-referrer"
+          onAllFailed={() => setHideDueToBrokenImages(true)}
         />
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
         <div className="absolute left-3 right-3 top-3 z-20 flex items-center justify-between gap-2">
@@ -84,8 +90,8 @@ export function ListingCard({ item, isFavorite, onToggleFavorite }: ListingCardP
           <div className="flex items-center justify-between gap-3">
             <div className="flex flex-col gap-0.5">
               {item.originalPriceRub != null && item.originalPriceRub > item.priceRub ? (
-                <p className="font-sf text-base tabular-nums text-slate-500 line-through">
-                  {splitPriceRub(item.originalPriceRub).amount}
+                <p className="font-sf text-base tabular-nums text-slate-500">
+                  <span className="line-through">{splitPriceRub(item.originalPriceRub).amount}</span>
                   <span className="align-top text-slate-400 text-[0.75em]"> ₽</span>
                 </p>
               ) : null}

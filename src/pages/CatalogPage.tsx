@@ -5,172 +5,12 @@ import { SearchBar } from '../components/listing/SearchBar'
 import type { Listing } from '../types/marketplace'
 import type { CategoryId } from './CategorySelectionPage'
 import { getTelegramUserFromInitData } from '../lib/telegram'
-
-function normalizeForSearch(value: string | undefined | null): string {
-  if (!value) return ''
-  const lower = value.toLowerCase()
-
-  const cyrToLat: Record<string, string> = {
-    а: 'a',
-    б: 'b',
-    в: 'v',
-    г: 'g',
-    д: 'd',
-    е: 'e',
-    ё: 'e',
-    ж: 'zh',
-    з: 'z',
-    и: 'i',
-    й: 'i',
-    к: 'k',
-    л: 'l',
-    м: 'm',
-    н: 'n',
-    о: 'o',
-    п: 'p',
-    р: 'r',
-    с: 's',
-    т: 't',
-    у: 'u',
-    ф: 'f',
-    х: 'h',
-    ц: 'c',
-    ч: 'ch',
-    ш: 'sh',
-    щ: 'sh',
-    ъ: '',
-    ы: 'y',
-    ь: '',
-    э: 'e',
-    ю: 'yu',
-    я: 'ya',
-  }
-
-  let out = ''
-  for (const ch of lower) {
-    if (cyrToLat[ch] !== undefined) {
-      out += cyrToLat[ch]
-    } else if (/[a-z0-9]/.test(ch)) {
-      out += ch
-    } else {
-      out += ' '
-    }
-  }
-
-  // Небольшая нормализация для часто путаемых букв (Shacman vs «Шакман» и т.п.)
-  out = out.replace(/[ck]/g, 'k')
-
-  // Чуть сглаживаем повторы букв в запросе: «мерседесс» → «merse dess» и т.п.
-  out = out.replace(/(.)\1{2,}/g, '$1$1')
-
-  return out.replace(/\s+/g, ' ').trim()
-}
-
-const BRAND_SYNONYMS: Record<string, string[]> = {
-  // грузовики
-  'шакман': ['shacman', 'shakman'],
-  'shakman': ['shacman', 'shakman'],
-  'scania': ['scania', 'skania'],
-  'скания': ['scania', 'skania'],
-  'даф': ['daf'],
-  'daf': ['daf'],
-  'ман': ['man'],
-  'мерс': ['mercedes', 'mersedes'],
-  'мерседес': ['mercedes', 'mersedes'],
-  'volvo': ['volvo'],
-  'вольво': ['volvo'],
-  'iveco': ['iveco'],
-  'ивеко': ['iveco'],
-  // китайские и популярные бренды
-  'донфенг': ['dongfeng', 'dfm'],
-  'донгфенг': ['dongfeng', 'dfm'],
-  'dongfeng': ['dongfeng', 'dfm'],
-  'dfm': ['dongfeng', 'dfm'],
-  'ситрак': ['sitrak'],
-  'sitrak': ['sitrak'],
-  'бмв': ['bmw'],
-  'bmw': ['bmw'],
-  'нива': ['niva', 'lada niva', 'lada-niva', 'lada 4x4'],
-  'niva': ['niva', 'lada niva', 'lada-niva', 'lada 4x4'],
-  'киа': ['kia'],
-  'kia': ['kia'],
-  'черри': ['chery', 'cherry', 'cheryexeed'],
-  'чери': ['chery', 'cherry', 'cheryexeed'],
-  'chery': ['chery', 'cherry', 'cheryexeed'],
-  'geely': ['geely'],
-  'джили': ['geely'],
-  'haval': ['haval'],
-  'хавал': ['haval'],
-  // классика и популярные модели
-  'камри': ['camry', 'toyota camry'],
-  'camry': ['camry', 'toyota camry'],
-  'ауди': ['audi'],
-  'audi': ['audi'],
-  'тойота': ['toyota'],
-  'тайота': ['toyota'],
-  'toyota': ['toyota'],
-  'исузу': ['isuzu'],
-  'изудзу': ['isuzu'],
-  'isuzu': ['isuzu'],
-  'газель': ['gazelle', 'gazel', 'gaz'],
-  'газел': ['gazelle', 'gazel', 'gaz'],
-  'gazelle': ['gazelle', 'gazel', 'gaz'],
-  'джак': ['jac'],
-  'жак': ['jac'],
-  'jac': ['jac'],
-  'шевроле': ['chevrolet', 'shevrolet'],
-  'шевролле': ['chevrolet', 'shevrolet'],
-  'chevrolet': ['chevrolet', 'shevrolet'],
-  'инфинити': ['infiniti'],
-  'infiniti': ['infiniti'],
-  'ниссан': ['nissan'],
-  'nissan': ['nissan'],
-  'чанган': ['changan'],
-  'changan': ['changan'],
-  'лексус': ['lexus'],
-  'lexus': ['lexus'],
-  'лифан': ['lifan'],
-  'lifan': ['lifan'],
-  'солярис': ['solaris', 'hyundai solaris'],
-  'solaris': ['solaris', 'hyundai solaris'],
-  'омода': ['omoda'],
-  'omoda': ['omoda'],
-  'хово': ['howo', 'cnhtc'],
-  'howo': ['howo', 'cnhtc'],
-  'тонли': ['tonly', 'tonly truck'],
-  'tonly': ['tonly', 'tonly truck'],
-  'форд': ['ford'],
-  'ford': ['ford'],
-  'лонкинг': ['lonking'],
-  'lonking': ['lonking'],
-  'шитц': ['shacman', 'shakman', 'sitrak'],
-  'сани': ['sany'],
-  'sany': ['sany'],
-  'шанмон': ['shacman', 'shakman', 'sitrak'],
-}
-
-function matchesSearch(listing: Listing, rawQuery: string): boolean {
-  const haystack = normalizeForSearch(
-    [listing.title, listing.subtitle, listing.location].filter(Boolean).join(' '),
-  )
-  const normalizedQuery = normalizeForSearch(rawQuery)
-  if (!normalizedQuery) return true
-
-  if (haystack.includes(normalizedQuery)) return true
-
-  const rawLower = rawQuery.toLowerCase()
-  for (const [key, synonyms] of Object.entries(BRAND_SYNONYMS)) {
-    if (!rawLower.includes(key)) continue
-    for (const synonym of synonyms) {
-      const normSynonym = normalizeForSearch(synonym)
-      if (normSynonym && haystack.includes(normSynonym)) {
-        return true
-      }
-    }
-  }
-
-  return false
-}
+import {
+  BRAND_SYNONYMS,
+  DEFAULT_SUGGESTIONS_BY_CATEGORY,
+  matchesSearch,
+  normalizeForSearch,
+} from '../lib/search'
 
 type CatalogPageProps = {
   items: Listing[]
@@ -253,15 +93,8 @@ export function CatalogPage({
     return result.filter((item) => matchesSearch(item, trimmed))
   }, [items, query, categoryId])
 
-  const defaultSuggestionsByCategory: Record<string, string[]> = {
-    legkovye: ['Lada', 'Toyota', 'Camry', 'KIA', 'Haval'],
-    gruzovye: ['Shacman', 'Sitrak', 'Scania', 'Howo', 'MAN'],
-    speztechnika: ['Lonking', 'Sany'],
-    pricepy: ['Полуприцеп', 'Прицеп'],
-    default: ['Shacman', 'Sitrak', 'Scania', 'Lada', 'Toyota'],
-  }
   const baseDefaults =
-    (categoryId && defaultSuggestionsByCategory[categoryId]) ?? defaultSuggestionsByCategory.default
+    (categoryId && DEFAULT_SUGGESTIONS_BY_CATEGORY[categoryId]) ?? DEFAULT_SUGGESTIONS_BY_CATEGORY.default
   const normalizedQuery = query.trim()
   const allCandidates = Array.from(
     new Set<string>([

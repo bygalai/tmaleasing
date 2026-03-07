@@ -167,6 +167,7 @@ function App() {
               items={items}
               isFavorite={isFavorite}
               toggleFavorite={toggleFavorite}
+              onSearchFocusedChange={setIsSearchFocused}
             />
           }
         />

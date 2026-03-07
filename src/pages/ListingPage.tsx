@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { ImageWithFallback } from '../components/listing/ImageWithFallback'
 import { PriceAnalysisBar } from '../components/listing/PriceAnalysisBar'
 import { formatMileage, formatMileageHours, splitPriceRub } from '../lib/format'
 import {
@@ -36,12 +37,14 @@ export function ListingPage({ items, isFavorite, toggleFavorite }: ListingPagePr
 
   return (
     <article className="space-y-4 pb-6">
-      <img
-        src={item.imageUrl}
-        alt={item.title}
-        className="h-56 w-full rounded-2xl object-cover"
-        referrerPolicy="no-referrer"
-      />
+      <div className="h-56 w-full overflow-hidden rounded-2xl">
+        <ImageWithFallback
+          imageUrls={item.imageUrls}
+          alt={item.title}
+          className="h-full w-full object-cover"
+          showPlaceholderWhenFailed
+        />
+      </div>
 
       <div className="space-y-2">
         <div className="flex items-start justify-between gap-2">
@@ -61,8 +64,8 @@ export function ListingPage({ items, isFavorite, toggleFavorite }: ListingPagePr
       <section className="relative overflow-hidden rounded-3xl border border-white/30 bg-white/10 p-4 shadow-[0_18px_45px_rgba(15,23,42,0.22)] backdrop-blur-2xl">
         <div className="space-y-2">
           {item.originalPriceRub != null && item.originalPriceRub > item.priceRub ? (
-            <p className="font-sf text-lg tabular-nums text-slate-500 line-through">
-              {splitPriceRub(item.originalPriceRub).amount}
+            <p className="font-sf text-lg tabular-nums text-slate-500">
+              <span className="line-through">{splitPriceRub(item.originalPriceRub).amount}</span>
               <span className="align-top text-slate-400 text-[0.75em]"> ₽</span>
             </p>
           ) : null}
