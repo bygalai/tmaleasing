@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ListingCard } from '../components/listing/ListingCard'
 import { SearchBar } from '../components/listing/SearchBar'
@@ -233,20 +233,37 @@ export function CategorySelectionPage({
 
   const discountedItems = items.filter((item) => item.badges.includes('discount'))
 
+  const backBtnRef = useRef<HTMLButtonElement>(null)
+  const handleBackPointerMove = useCallback((e: React.PointerEvent) => {
+    const rect = backBtnRef.current?.getBoundingClientRect()
+    if (!rect) return
+    const x = ((e.clientX - rect.left) / rect.width) * 100
+    const y = ((e.clientY - rect.top) / rect.height) * 100
+    backBtnRef.current!.style.setProperty('--mx', `${x}%`)
+    backBtnRef.current!.style.setProperty('--my', `${y}%`)
+  }, [])
+  const handleBackPointerLeave = useCallback(() => {
+    backBtnRef.current?.style.setProperty('--mx', '50%')
+    backBtnRef.current?.style.setProperty('--my', '50%')
+  }, [])
+
   return (
     <section className="space-y-6">
       {normalizedQuery.length > 0 ? (
-        <div className="sticky top-0 z-10 -mx-4 -mt-1 flex w-full items-center justify-start bg-white/95 px-4 pb-2 pt-2 backdrop-blur-sm">
+        <div className="sticky top-0 z-10 -mx-4 -mt-1 flex w-full items-center justify-start px-4 pb-2 pt-2">
           <button
+            ref={backBtnRef}
             type="button"
             onClick={() => setQuery('')}
+            onPointerMove={handleBackPointerMove}
+            onPointerLeave={handleBackPointerLeave}
             aria-label="Назад к каталогу"
-            className="flex h-10 w-10 shrink-0 items-center justify-center text-slate-900"
+            className="liquid-glass flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
           >
             <svg
               aria-hidden="true"
               viewBox="0 0 24 24"
-              className="h-8 w-8"
+              className="relative z-10 h-8 w-8"
               fill="none"
               stroke="currentColor"
               strokeWidth="2.5"
