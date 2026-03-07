@@ -224,7 +224,11 @@ function mapRowToListing(row: ListingsRow): Listing {
       : null,
     !isTrailer && engine ? `Двигатель: ${engine}` : null,
     !isTrailer && transmission ? `Коробка: ${transmission}` : null,
-    !isTrailer && drivetrainForDescription ? `Колёсная формула: ${drivetrainForDescription}` : null,
+    !isTrailer && drivetrainForDescription
+      ? row.category === 'legkovye'
+        ? `Привод: ${drivetrainForDescription}`
+        : `Колёсная формула: ${drivetrainForDescription}`
+      : null,
     bodyColorOrTypeLine,
     row.vin ? `VIN: ${row.vin}` : null,
   ].filter((part): part is string => Boolean(part))
@@ -325,13 +329,22 @@ export function useListings() {
 
         // The source can contain duplicates (e.g. same VIN posted multiple times).
         // Since we sort by created_at desc, keep the newest row per VIN.
+        // When VIN is missing (common for спецтехника), dedupe by title+year+mileage to avoid identical listings.
         const dedupedRows: ListingsRow[] = []
         const seenVins = new Set<string>()
+        const seenTitleYearMileage = new Set<string>()
         for (const row of rows) {
           const vin = row.vin?.trim().toUpperCase()
           if (vin) {
             if (seenVins.has(vin)) continue
             seenVins.add(vin)
+          } else {
+            const titleNorm = (row.title ?? '').trim().replace(/\s+/g, ' ').toLowerCase()
+            const year = row.year ?? ''
+            const mileage = row.mileage != null ? String(row.mileage).trim() : ''
+            const key = `${titleNorm}|${year}|${mileage}`
+            if (titleNorm && seenTitleYearMileage.has(key)) continue
+            seenTitleYearMileage.add(key)
           }
           dedupedRows.push(row)
         }

@@ -3,7 +3,6 @@ import { Link, useParams } from 'react-router-dom'
 import { PriceAnalysisBar } from '../components/listing/PriceAnalysisBar'
 import { formatMileage, formatMileageHours, splitPriceRub } from '../lib/format'
 import {
-  closeTelegramMiniApp,
   getTelegramUserFromInitData,
   sendLeadToTelegram,
   submitLeadViaApi,
@@ -21,6 +20,7 @@ type ListingPageProps = {
 export function ListingPage({ items, isFavorite, toggleFavorite }: ListingPageProps) {
   const { id } = useParams()
   const [submitting, setSubmitting] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
   const item = items.find((entry) => entry.id === id)
 
   if (!item) {
@@ -104,7 +104,7 @@ export function ListingPage({ items, isFavorite, toggleFavorite }: ListingPagePr
 
       <button
         type="button"
-        disabled={submitting}
+        disabled={submitting || submitted}
         className="inline-flex rounded-xl bg-[#FF5C34] px-4 py-2 text-sm font-sf font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
         onClick={async () => {
           const payload = {
@@ -121,7 +121,7 @@ export function ListingPage({ items, isFavorite, toggleFavorite }: ListingPagePr
             setSubmitting(true)
             try {
               const ok = await submitLeadViaApi(payload)
-              if (ok) closeTelegramMiniApp()
+              if (ok) setSubmitted(true)
               else window.open('https://t.me/GONKACONFBOT', '_blank', 'noreferrer')
             } finally {
               setSubmitting(false)
@@ -129,11 +129,11 @@ export function ListingPage({ items, isFavorite, toggleFavorite }: ListingPagePr
             return
           }
           // Иначе пробуем WebApp.sendData и при неудаче открываем бота
-          if (sendLeadToTelegram(payload)) closeTelegramMiniApp()
+          if (sendLeadToTelegram(payload)) setSubmitted(true)
           else window.open('https://t.me/GONKACONFBOT', '_blank', 'noreferrer')
         }}
       >
-        {submitting ? 'Отправка…' : 'Оставить заявку'}
+        {submitting ? 'Отправка…' : submitted ? 'Заявка отправлена!' : 'Оставить заявку'}
       </button>
     </article>
   )
