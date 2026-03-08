@@ -375,7 +375,7 @@ function getBrandModelFromDetailUrl(detailUrl: string): { brand: string; model: 
   return null
 }
 
-/** Собираем читаемый заголовок: "Volkswagen" + "TIGUAN" или найденная строка со страницы, начинающаяся с бренда. */
+/** Собираем читаемый заголовок. Приоритет: h1 → поиск по странице → fallback из URL (латиница). */
 function extractTitle(html: string, detailUrl: string): string | null {
   const brandModel = getBrandModelFromDetailUrl(detailUrl)
   const brandCap = brandModel
@@ -409,6 +409,33 @@ function extractTitle(html: string, detailUrl: string): string | null {
       }
     }
     if (best) return best
+
+    const ogTitle =
+      html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["'][^>]*>/i)?.[1] ??
+      html.match(/<meta[^>]+content=["']([^"']+)[^>]+property=["']og:title["'][^>]*>/i)?.[1]
+    if (ogTitle) {
+      const cleaned = ogTitle
+        .replace(/\s*[|\|]\s*.*$/i, '')
+        .replace(/\s*с пробегом в лизинг.*$/i, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+      if (cleaned.length >= 10 && cleaned.length <= 120 && isRealCarTitle(cleaned)) {
+        return cleaned
+      }
+    }
+
+    const headBlock = html.slice(0, 25000)
+    const cyrillicRe = /([А-Яа-яЁё][А-Яа-яЁё0-9\s\-\.\*\(\)]{14,100})/g
+    let cyrillicBest: string | null = null
+    let m: RegExpExecArray | null
+    while ((m = cyrillicRe.exec(headBlock)) !== null) {
+      const c = m[1].replace(/\s+/g, ' ').trim()
+      if (c.length >= 15 && c.length <= 100 && isRealCarTitle(c) && !/^каталог|^акци|^главная/i.test(c)) {
+        if (!cyrillicBest || c.length > cyrillicBest.length) cyrillicBest = c
+      }
+    }
+    if (cyrillicBest) return cyrillicBest
+
     return `${brandCap} ${modelCap}`
   }
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { ListingCard } from '../components/listing/ListingCard'
 import { SearchBar } from '../components/listing/SearchBar'
 import type { Listing } from '../types/marketplace'
@@ -153,9 +153,28 @@ export function CategorySelectionPage({
   toggleFavorite,
   onSearchFocusedChange,
 }: CategorySelectionPageProps) {
-  const [query, setQuery] = useState('')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const qFromUrl = searchParams.get('q') ?? ''
+  const [query, setQuery] = useState(qFromUrl)
   const [history, setHistory] = useState<string[]>([])
   const [isSearchFocused, setIsSearchFocused] = useState(false)
+
+  useEffect(() => {
+    if (qFromUrl !== query) setQuery(qFromUrl)
+  }, [qFromUrl])
+
+  const setQueryAndUrl = useCallback(
+    (value: string) => {
+      setQuery(value)
+      const trimmed = value.trim()
+      if (trimmed) {
+        setSearchParams({ q: trimmed }, { replace: true })
+      } else {
+        setSearchParams({}, { replace: true })
+      }
+    },
+    [setSearchParams],
+  )
 
   useEffect(() => {
     try {
@@ -254,7 +273,7 @@ export function CategorySelectionPage({
           <button
             ref={backBtnRef}
             type="button"
-            onClick={() => setQuery('')}
+            onClick={() => setQueryAndUrl('')}
             onPointerMove={handleBackPointerMove}
             onPointerLeave={handleBackPointerLeave}
             aria-label="Назад к каталогу"
@@ -278,9 +297,9 @@ export function CategorySelectionPage({
 
       <SearchBar
         value={query}
-        onChange={setQuery}
+        onChange={setQueryAndUrl}
         suggestions={effectiveSuggestions}
-        onSuggestionClick={(value) => setQuery(value)}
+        onSuggestionClick={(value) => setQueryAndUrl(value)}
         onFocusChange={(focused) => {
           setIsSearchFocused(focused)
           onSearchFocusedChange?.(focused)
