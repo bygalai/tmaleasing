@@ -1203,7 +1203,11 @@ async function closeUnexpectedPages(browser: Awaited<ReturnType<typeof puppeteer
   }
 }
 
-async function scrapeListings(): Promise<ScrapedListing[]> {
+/** Обрабатывает одну секцию: каталог + обогащение. Браузер перезапускается между секциями для снижения OOM. */
+async function scrapeOneSection(
+  sectionIndex: number,
+  maxPages: number
+): Promise<ScrapedListing[]> {
   const isCI = !!process.env.CI
   const browser = await puppeteer.launch({
     headless: isCI,
@@ -1239,6 +1243,7 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
   const collected = new Map<string, ScrapedListing>()
   const visitedPageUrls = new Set<string>()
   const interceptedApiRawCards = new Map<string, RawCard>()
+  const MAX_API_PAYLOAD_BYTES = 2 * 1024 * 1024
   const onResponse = async (response: Awaited<ReturnType<Page['waitForResponse']>>) => {
     try {
       const responseUrl = response.url()
@@ -1248,8 +1253,14 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
       const contentType = response.headers()['content-type'] ?? ''
       if (!contentType.includes('application/json') && !/api|graphql/i.test(responseUrl)) return
 
-      const payload = await response.json().catch(() => null)
-      if (!payload) return
+      let payload: unknown
+      try {
+        const buf = await response.buffer()
+        if (buf.length > MAX_API_PAYLOAD_BYTES) return
+        payload = JSON.parse(buf.toString('utf-8'))
+      } catch {
+        return
+      }
 
       const cards = extractRawCardsFromUnknownPayload(payload)
       if (cards.length > 0) {
@@ -1266,26 +1277,22 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
   page.on('response', onResponse)
 
   try {
-    const maxPagesRaw = Number(process.env.VTB_MAX_PAGES ?? '5')
-    const maxPages = Number.isFinite(maxPagesRaw) && maxPagesRaw > 0 ? Math.floor(maxPagesRaw) : 5
+    const currentSection = VTB_SECTIONS[sectionIndex]!
+    if (shutdownRequested) {
+      console.log('Shutdown requested')
+      return []
+    }
+    console.log(
+      `\n========== SECTION ${sectionIndex + 1}/${VTB_SECTIONS.length}: ${currentSection.category.toUpperCase()} ==========`,
+    )
+    console.log(`Start URL: ${currentSection.startUrl}`)
+    interceptedApiRawCards.clear()
+    visitedPageUrls.clear()
+    let currentUrl: string | null = currentSection.startUrl
+    let pageIndex = 0
+    let emptyPagesInARow = 0
 
-    for (let sectionIndex = 0; sectionIndex < VTB_SECTIONS.length; sectionIndex += 1) {
-      const currentSection = VTB_SECTIONS[sectionIndex]!
-      if (shutdownRequested) {
-        console.log('Shutdown requested, proceeding to enrichment')
-        break
-      }
-      console.log(
-        `\n========== SECTION ${sectionIndex + 1}/${VTB_SECTIONS.length}: ${currentSection.category.toUpperCase()} ==========`,
-      )
-      console.log(`Start URL: ${currentSection.startUrl}`)
-      interceptedApiRawCards.clear()
-      const visitedPageUrls = new Set<string>()
-      let currentUrl: string | null = currentSection.startUrl
-      let pageIndex = 0
-      let emptyPagesInARow = 0
-
-      while (currentUrl && pageIndex < maxPages) {
+    while (currentUrl && pageIndex < maxPages) {
         if (shutdownRequested) break
         if (!isVtbCatalogUrl(currentUrl)) {
           throw new Error(`Blocked non-target URL before navigation: ${currentUrl}`)
@@ -1352,7 +1359,9 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
       })
 
       const hiddenCards: RawCard[] = []
+      const MAX_JSON_BYTES = 3 * 1024 * 1024
       for (const payloadText of hiddenJsonPayloads) {
+        if (payloadText.length > MAX_JSON_BYTES) continue
         try {
           const parsed = JSON.parse(payloadText)
           hiddenCards.push(...extractRawCardsFromUnknownPayload(parsed))
@@ -1401,10 +1410,7 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
         const pageDelayMax = process.env.CI ? 900 : 2500
         await randomDelay(pageDelayMin, pageDelayMax)
       }
-      console.log(`Section ${currentSection.category} complete. Total unique listings so far: ${collected.size}`)
-    }
-
-    console.log(`\nAll sections done. Enriching ${collected.size} listings...`)
+    console.log(`Section ${currentSection.category} complete. Enriching ${collected.size} listings...`)
     await enrichListingsFromDetailsViaBrowserPage(page, collected)
     return [...collected.values()]
   } finally {
@@ -1425,83 +1431,66 @@ async function run(): Promise<void> {
   }
 
   const supabase = createClient(supabaseUrl, supabaseKey)
+  const scrapedIds = new Set<string>()
+  const maxPagesRaw = Number(process.env.VTB_MAX_PAGES ?? '5')
+  const maxPages = Number.isFinite(maxPagesRaw) && maxPagesRaw > 0 ? Math.floor(maxPagesRaw) : 5
 
   try {
-    const listings = await scrapeListings()
-    console.log(`Found ${listings.length} unique listings from catalog (same URLs = same DB rows, upsert will update)`)
+    for (let sectionIndex = 0; sectionIndex < VTB_SECTIONS.length; sectionIndex += 1) {
+      if (shutdownRequested) break
+      const listings = await scrapeOneSection(sectionIndex, maxPages)
+      for (const l of listings) scrapedIds.add(l.external_id)
 
-    if (listings.length === 0) {
-      console.log('Upserted 0 cars')
-      return
-    }
+      if (listings.length === 0) continue
 
-    // Only persist enriched listings (ones that have real images).
-    // Unenriched catalog skeletons are discarded — they'll be re-discovered
-    // on the next run and have a chance to be enriched then.
-    const enriched = listings.filter((l) => l.images.length > 0)
-    console.log(`Enriched listings to upsert: ${enriched.length} / ${listings.length} total`)
+      const enriched = listings.filter((l) => l.images.length > 0)
+      console.log(`Section ${sectionIndex + 1}: upserting ${enriched.length} / ${listings.length} enriched`)
 
-    if (enriched.length > 0) {
-      const existingIds = new Set<string>()
-      const { data: existingRows } = await supabase
-        .from('listings')
-        .select('external_id')
-        .eq('source', SOURCE)
-      for (const row of existingRows ?? []) {
-        const id = (row as { external_id?: string }).external_id
-        if (id) existingIds.add(id)
-      }
-
-      const upsertPayload = enriched.map((listing) => {
-        const row: Record<string, unknown> = {
-          external_id: listing.external_id,
-          title: listing.title,
-          listing_url: listing.listing_url,
-          source: listing.source,
-          category: listing.category,
-          images: listing.images,
-        }
-
-        if (listing.price != null) row.price = listing.price
-        if (listing.mileage != null) row.mileage = listing.mileage
-        if (listing.year != null) row.year = listing.year
-        if (listing.city != null) row.city = listing.city
-        if (listing.vin != null) row.vin = listing.vin
-        if (listing.engine != null) row.engine = listing.engine
-        if (listing.transmission != null) row.transmission = listing.transmission
-        if (listing.drivetrain != null) row.drivetrain = listing.drivetrain
-        if (listing.body_color != null) row.body_color = listing.body_color
-
-        return row
-      })
-
-      const BATCH_SIZE = 500
-      for (let i = 0; i < upsertPayload.length; i += BATCH_SIZE) {
-        const batch = upsertPayload.slice(i, i + BATCH_SIZE)
-        const { error } = await supabase
-          .from('listings')
-          .upsert(batch, { onConflict: 'external_id' })
-
-        if (error) {
-          if ((error as { code?: string }).code === 'PGRST204') {
-            console.error(
-              "Supabase schema cache doesn't include new columns yet. Apply migrations " +
-                "`202602150002_add_listing_specs.sql` and `202602220001_add_listing_category.sql` " +
-                "in Supabase SQL editor, then reload PostgREST schema (Dashboard: Settings -> API -> Reload schema)."
-            )
+      if (enriched.length > 0) {
+        const upsertPayload = enriched.map((listing) => {
+          const row: Record<string, unknown> = {
+            external_id: listing.external_id,
+            title: listing.title,
+            listing_url: listing.listing_url,
+            source: listing.source,
+            category: listing.category,
+            images: listing.images,
           }
-          throw error
-        }
-      }
+          if (listing.price != null) row.price = listing.price
+          if (listing.mileage != null) row.mileage = listing.mileage
+          if (listing.year != null) row.year = listing.year
+          if (listing.city != null) row.city = listing.city
+          if (listing.vin != null) row.vin = listing.vin
+          if (listing.engine != null) row.engine = listing.engine
+          if (listing.transmission != null) row.transmission = listing.transmission
+          if (listing.drivetrain != null) row.drivetrain = listing.drivetrain
+          if (listing.body_color != null) row.body_color = listing.body_color
+          return row
+        })
 
-      const updated = enriched.filter((l) => existingIds.has(l.external_id)).length
-      const inserted = enriched.length - updated
-      console.log(
-        `Upserted ${enriched.length} listings: ${updated} updated (already in DB), ${inserted} inserted (new).`
-      )
+        const BATCH_SIZE = 500
+        for (let i = 0; i < upsertPayload.length; i += BATCH_SIZE) {
+          const batch = upsertPayload.slice(i, i + BATCH_SIZE)
+          const { error } = await supabase
+            .from('listings')
+            .upsert(batch, { onConflict: 'external_id' })
+
+          if (error) {
+            if ((error as { code?: string }).code === 'PGRST204') {
+              console.error(
+                "Supabase schema cache doesn't include new columns yet. Apply migrations " +
+                  "`202602150002_add_listing_specs.sql` and `202602220001_add_listing_category.sql` " +
+                  "in Supabase SQL editor, then reload PostgREST schema (Dashboard: Settings -> API -> Reload schema)."
+              )
+            }
+            throw error
+          }
+        }
+        console.log(`Upserted ${enriched.length} listings from section ${sectionIndex + 1}`)
+      }
     }
 
-    const scrapedIds = new Set(listings.map((l) => l.external_id))
+    console.log(`Total scraped: ${scrapedIds.size} unique listings`)
 
     const { data: skeletonDeleted, error: skeletonErr } = await supabase
       .from('listings')
