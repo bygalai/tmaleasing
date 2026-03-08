@@ -2,7 +2,10 @@
  * Газпромбанк Автолизинг (autogpbl.ru) — парсер автомобилей и техники с пробегом.
  * Каталоги: filter-type=4 — легковые, filter-type=6 — грузовые, filter-type=2 — спецтехника, filter-type=8 — прицепы.
  * Пишет в таблицу listings (source='gazprom', category='legkovye' | 'gruzovye' | 'speztechnika' | 'pricepy').
- * В Mini App объявления отображаются в соответствующих разделах.
+ *
+ * Env (для GitHub Actions workflow_dispatch):
+ *   GAZPROMP_MAX_PER_SECTION — макс объявлений на категорию (0 = без лимита)
+ *   GAZPROMP_MAX_PAGES      — точное число страниц на категорию (0 = авто)
  */
 
 import { createHash } from 'node:crypto'
@@ -387,6 +390,7 @@ function extractBodyTypeSuffixFromTitle(value: string): {
 
   cleaned = cleaned.replace(/\s*\d+[xхX]\d+\s*/gi, ' ').replace(/\s+/g, ' ').trim()
   cleaned = cleaned.replace(/\s*\*\s*/g, ' ').replace(/\s+/g, ' ').trim()
+  cleaned = cleaned.replace(/[-\s]+$/, '').trim()
   return { cleanedTitle: cleaned.length > 0 ? cleaned : fallback, bodyTypeRu }
 }
 
@@ -1048,12 +1052,17 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
       const maxPerSectionRaw = Number(process.env.GAZPROMP_MAX_PER_SECTION ?? '0')
       const maxPerSection =
         Number.isFinite(maxPerSectionRaw) && maxPerSectionRaw > 0 ? maxPerSectionRaw : 0
+      const maxPagesRaw = Number(process.env.GAZPROMP_MAX_PAGES ?? '0')
+      const maxPagesLimit =
+        Number.isFinite(maxPagesRaw) && maxPagesRaw > 0 ? Math.min(maxPagesRaw, 50) : 0
       const targetCount = maxPerSection > 0 ? maxPerSection : 200
+      const itemsPerPage = 12
+      const maxPages =
+        maxPagesLimit > 0
+          ? maxPagesLimit
+          : Math.ceil(targetCount / itemsPerPage) + 2
 
       const allUrls = new Set<string>()
-      const itemsPerPage = 12
-      const maxPages = Math.ceil(targetCount / itemsPerPage) + 2
-
       for (let pageNum = 1; pageNum <= maxPages; pageNum += 1) {
         const url = pageNum === 1 ? section.catalogUrl : withPagination(section.catalogUrl, pageNum)
         try {
@@ -1072,14 +1081,19 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
         for (const u of pageUrls) allUrls.add(u)
         const added = allUrls.size - before
 
-        if (added === 0 && pageNum > 1) break
-        if (allUrls.size >= targetCount) break
+        if (maxPagesLimit === 0) {
+          if (added === 0 && pageNum > 1) break
+          if (allUrls.size >= targetCount) break
+        }
       }
 
       const detailUrls = [...allUrls]
       const urlsToProcess = maxPerSection > 0 ? detailUrls.slice(0, maxPerSection) : detailUrls
-      if (maxPerSection > 0) {
-        console.log(`Found ${detailUrls.length} detail links, processing first ${urlsToProcess.length} (max_per_section=${maxPerSection})`)
+      if (maxPerSection > 0 || maxPagesLimit > 0) {
+        const limits: string[] = []
+        if (maxPerSection > 0) limits.push(`max_listings=${maxPerSection}`)
+        if (maxPagesLimit > 0) limits.push(`pages=${maxPagesLimit}`)
+        console.log(`Found ${detailUrls.length} detail links, processing ${urlsToProcess.length} (${limits.join(', ')})`)
       } else {
         console.log(`Found ${detailUrls.length} detail links on catalog page`)
       }
