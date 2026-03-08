@@ -104,6 +104,7 @@ const TITLE_REJECT_PATTERNS = [
   /оставить\s+заявку/i,
   /в\s+лизинг\s+от/i,
   /финансовы[ем]+\s+услови/i,
+  /с\s+пробегом\s+в\s+лизинг\s+для\s+юр/i,
 ]
 
 const CITY_BLOCKLIST = new Set(['оборудование', 'недвижимость', 'подвижной состав'])
@@ -354,42 +355,35 @@ async function extractDetailUrlsFromPage(page: Page): Promise<string[]> {
   return urls.filter((u) => isDetailUrl(u))
 }
 
-/** Прокрутка и клик «Показать еще» — один проход. */
+/** Добавляет параметр пагинации к URL. Пробуем PAGEN_1 (Bitrix) и page. */
+function withPagination(baseUrl: string, pageNum: number): string {
+  try {
+    const u = new URL(baseUrl, GAZPROM_BASE_URL)
+    u.searchParams.set('PAGEN_1', String(pageNum))
+    return u.toString()
+  } catch {
+    return baseUrl
+  }
+}
+
+/** Прокрутка для подгрузки ленивого контента на одной странице. */
 async function scrollToLoadMorePass(page: Page): Promise<void> {
   await page.evaluate(async () => {
-    for (let i = 0; i < 5; i += 1) {
-      window.scrollBy(0, 600)
-      await new Promise((r) => setTimeout(r, 800))
+    for (let i = 0; i < 8; i += 1) {
+      window.scrollBy(0, 800)
+      await new Promise((r) => setTimeout(r, 600))
     }
-    const btns = Array.from(document.querySelectorAll('button, a, [role="button"]'))
+    const btns = Array.from(document.querySelectorAll('button, a[href], [role="button"]'))
     for (const btn of btns) {
       const text = (btn?.textContent || '').toLowerCase()
-      if (text.includes('показать') || text.includes('еще')) {
+      if (text.includes('показать') || text.includes('еще') || text.includes('загрузить')) {
         ;(btn as HTMLElement)?.click()
-        await new Promise((r) => setTimeout(r, 1500))
+        await new Promise((r) => setTimeout(r, 2000))
         break
       }
     }
     window.scrollTo({ top: 0, behavior: 'auto' })
   })
-}
-
-/** Подгружаем контент до целевого количества ссылок или пока не перестанут появляться. */
-async function scrollToLoadMoreUntil(
-  page: Page,
-  extractUrls: () => Promise<string[]>,
-  targetCount: number
-): Promise<void> {
-  const maxPasses = 15
-  let prevCount = 0
-  for (let pass = 0; pass < maxPasses; pass += 1) {
-    await scrollToLoadMorePass(page)
-    await randomDelay(600, 1200)
-    const urls = await extractUrls()
-    if (urls.length >= targetCount) break
-    if (urls.length === prevCount) break
-    prevCount = urls.length
-  }
 }
 
 /** Из URL карточки достаём бренд и модель: .../volkswagen/tiguan/73154/ → ['volkswagen','tiguan'] */
@@ -916,24 +910,38 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
       if (shutdownRequested) break
       console.log(`\n=== Section: ${section.category} (${section.catalogUrl}) ===`)
 
-      try {
-        await page.goto(section.catalogUrl, { waitUntil: 'domcontentloaded' })
-      } catch (navErr) {
-        if (isShutdownError(navErr)) break
-        throw navErr
-      }
-
-      await sleep(process.env.CI ? 3000 : 5000)
-
       const maxPerSectionRaw = Number(process.env.GAZPROMP_MAX_PER_SECTION ?? '0')
       const maxPerSection =
         Number.isFinite(maxPerSectionRaw) && maxPerSectionRaw > 0 ? maxPerSectionRaw : 0
       const targetCount = maxPerSection > 0 ? maxPerSection : 200
 
-      await scrollToLoadMoreUntil(page, () => extractDetailUrlsFromPage(page), targetCount)
-      await randomDelay(500, 1200)
+      const allUrls = new Set<string>()
+      const itemsPerPage = 12
+      const maxPages = Math.ceil(targetCount / itemsPerPage) + 2
 
-      const detailUrls = await extractDetailUrlsFromPage(page)
+      for (let pageNum = 1; pageNum <= maxPages; pageNum += 1) {
+        const url = pageNum === 1 ? section.catalogUrl : withPagination(section.catalogUrl, pageNum)
+        try {
+          await page.goto(url, { waitUntil: 'domcontentloaded' })
+        } catch (navErr) {
+          if (isShutdownError(navErr)) break
+          if (pageNum > 1) break
+          throw navErr
+        }
+        await sleep(process.env.CI ? 3000 : 5000)
+        await scrollToLoadMorePass(page)
+        await randomDelay(500, 1000)
+
+        const pageUrls = await extractDetailUrlsFromPage(page)
+        const before = allUrls.size
+        for (const u of pageUrls) allUrls.add(u)
+        const added = allUrls.size - before
+
+        if (added === 0 && pageNum > 1) break
+        if (allUrls.size >= targetCount) break
+      }
+
+      const detailUrls = [...allUrls]
       const urlsToProcess = maxPerSection > 0 ? detailUrls.slice(0, maxPerSection) : detailUrls
       if (maxPerSection > 0) {
         console.log(`Found ${detailUrls.length} detail links, processing first ${urlsToProcess.length} (max_per_section=${maxPerSection})`)
