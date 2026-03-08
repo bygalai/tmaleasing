@@ -846,9 +846,17 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
       await randomDelay(500, 1200)
 
       const detailUrls = await extractDetailUrlsFromPage(page)
-      console.log(`Found ${detailUrls.length} detail links on catalog page`)
+      const maxPerSectionRaw = Number(process.env.GAZPROMP_MAX_PER_SECTION ?? '0')
+      const maxPerSection =
+        Number.isFinite(maxPerSectionRaw) && maxPerSectionRaw > 0 ? maxPerSectionRaw : 0
+      const urlsToProcess = maxPerSection > 0 ? detailUrls.slice(0, maxPerSection) : detailUrls
+      if (maxPerSection > 0) {
+        console.log(`Found ${detailUrls.length} detail links, processing first ${urlsToProcess.length} (max_per_section=${maxPerSection})`)
+      } else {
+        console.log(`Found ${detailUrls.length} detail links on catalog page`)
+      }
 
-      for (const url of detailUrls) {
+      for (const url of urlsToProcess) {
         if (shutdownRequested) break
         if (collected.has(buildExternalId(url))) continue
 

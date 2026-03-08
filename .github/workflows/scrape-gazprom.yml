@@ -2,6 +2,11 @@ name: Scrape Gazprom Autoleasing
 
 on:
   workflow_dispatch:
+    inputs:
+      max_per_section:
+        description: 'Max listings to process per category (0 = unlimited)'
+        required: false
+        default: '0'
 
 concurrency:
   group: gazprom-scraper
@@ -15,6 +20,7 @@ jobs:
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+      GAZPROMP_MAX_PER_SECTION: ${{ github.event.inputs.max_per_section || '0' }}
 
     steps:
       - name: Checkout repository
