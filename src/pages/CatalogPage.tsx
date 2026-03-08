@@ -49,17 +49,34 @@ export function CatalogPage({
         const normalized = parsed
           .filter((v): v is string => typeof v === 'string')
           .map((v) => v.trim())
-          .filter((v) => v.length > 0)
+          .filter((v) => v.length >= 3)
         setHistory(normalized)
+        if (normalized.length !== parsed.length) {
+          window.localStorage.setItem(storageKey, JSON.stringify(normalized))
+        }
       }
     } catch {
       // ignore
     }
   }, [])
 
+  const filtered = useMemo(() => {
+    let result = items
+    if (categoryId) {
+      result = result.filter((item) => (item.category ?? 'legkovye') === categoryId)
+    }
+    const trimmed = query.trim()
+    if (!trimmed) return result
+    return result.filter((item) => matchesSearch(item, trimmed))
+  }, [items, query, categoryId])
+
+  const MIN_HISTORY_QUERY_LENGTH = 3
+
   useEffect(() => {
     const trimmed = query.trim()
     if (!trimmed) return
+    if (trimmed.length < MIN_HISTORY_QUERY_LENGTH) return
+    if (filtered.length === 0) return
 
     const timeoutId = window.setTimeout(() => {
       try {
@@ -78,20 +95,8 @@ export function CatalogPage({
       }
     }, 700)
 
-    return () => {
-      window.clearTimeout(timeoutId)
-    }
-  }, [query])
-
-  const filtered = useMemo(() => {
-    let result = items
-    if (categoryId) {
-      result = result.filter((item) => (item.category ?? 'legkovye') === categoryId)
-    }
-    const trimmed = query.trim()
-    if (!trimmed) return result
-    return result.filter((item) => matchesSearch(item, trimmed))
-  }, [items, query, categoryId])
+    return () => window.clearTimeout(timeoutId)
+  }, [query, filtered.length, categoryId])
 
   const baseDefaults =
     (categoryId && DEFAULT_SUGGESTIONS_BY_CATEGORY[categoryId]) ?? DEFAULT_SUGGESTIONS_BY_CATEGORY.default

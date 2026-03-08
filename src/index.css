@@ -255,6 +255,13 @@ body {
   }
 }
 
+/* Search input — скрываем нативный крестик, используем свой */
+.search-bar-input::-webkit-search-cancel-button,
+.search-bar-input::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
 h1,
 h2,
 h3,

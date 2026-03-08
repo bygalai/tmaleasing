@@ -188,17 +188,30 @@ export function CategorySelectionPage({
         const normalized = parsed
           .filter((v): v is string => typeof v === 'string')
           .map((v) => v.trim())
-          .filter((v) => v.length > 0)
+          .filter((v) => v.length >= 3)
         setHistory(normalized)
+        if (normalized.length !== parsed.length) {
+          window.localStorage.setItem(storageKey, JSON.stringify(normalized))
+        }
       }
     } catch {
       // ignore
     }
   }, [])
 
+  const filtered = useMemo(() => {
+    const trimmed = query.trim()
+    if (!trimmed) return items
+    return items.filter((item) => matchesSearch(item, trimmed))
+  }, [items, query])
+
+  const MIN_HISTORY_QUERY_LENGTH = 3
+
   useEffect(() => {
     const trimmed = query.trim()
     if (!trimmed) return
+    if (trimmed.length < MIN_HISTORY_QUERY_LENGTH) return
+    if (filtered.length === 0) return
 
     const timeoutId = window.setTimeout(() => {
       try {
@@ -217,13 +230,7 @@ export function CategorySelectionPage({
     }, 700)
 
     return () => window.clearTimeout(timeoutId)
-  }, [query])
-
-  const filtered = useMemo(() => {
-    const trimmed = query.trim()
-    if (!trimmed) return items
-    return items.filter((item) => matchesSearch(item, trimmed))
-  }, [items, query])
+  }, [query, filtered.length])
 
   const baseDefaults = DEFAULT_SUGGESTIONS_BY_CATEGORY.default
   const normalizedQuery = query.trim()

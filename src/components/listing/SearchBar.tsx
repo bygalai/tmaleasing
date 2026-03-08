@@ -53,6 +53,11 @@ export function SearchBar({
     inputRef.current?.blur()
   }, [])
 
+  const handleClear = useCallback(() => {
+    onChange('')
+    inputRef.current?.focus()
+  }, [onChange])
+
   return (
     <div className="mx-auto w-full max-w-[560px] space-y-2">
       <label className="block">
@@ -71,8 +76,31 @@ export function SearchBar({
             onFocus={handleFocus}
             onBlur={handleBlur}
             placeholder="Марка, модель, город..."
-            className="relative z-10 w-full bg-transparent px-4 py-3 pr-11 text-sm text-slate-900 outline-none placeholder:italic placeholder:text-slate-500 font-sf"
+            className={`search-bar-input relative z-10 w-full bg-transparent px-4 py-3 text-sm text-slate-900 outline-none placeholder:italic placeholder:text-slate-500 font-sf ${
+              value.trim().length > 0 ? 'pr-20' : 'pr-11'
+            }`}
           />
+          {value.trim().length > 0 ? (
+            <button
+              type="button"
+              aria-label="Очистить"
+              onClick={handleClear}
+              className="absolute right-12 top-1/2 z-10 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+            >
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 24 24"
+                className="h-6 w-6"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
+          ) : null}
           <button
             type="button"
             aria-label="Поиск"
