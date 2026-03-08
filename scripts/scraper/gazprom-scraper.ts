@@ -94,6 +94,18 @@ const TITLE_BLOCKLIST = new Set([
   'с пробегом',
 ])
 
+/** Шаблоны маркетинговых/финансовых фраз — не названия техники. */
+const TITLE_REJECT_PATTERNS = [
+  /купить\s+на\s+выгодных/i,
+  /ежемесячным\s+платежом/i,
+  /платеж\s+от\s+\d{5,}/i,
+  /\d{7,}\s*₽?/,
+  /оформить\s+заявку/i,
+  /оставить\s+заявку/i,
+  /в\s+лизинг\s+от/i,
+  /финансовы[ем]+\s+услови/i,
+]
+
 const CITY_BLOCKLIST = new Set(['оборудование', 'недвижимость', 'подвижной состав'])
 
 type ScrapedListing = {
@@ -274,6 +286,7 @@ function isRealCarTitle(value: string | null | undefined): boolean {
   const normalized = value.replace(/\s+/g, ' ').trim()
   if (normalized.length < 4) return false
   if (TITLE_BLOCKLIST.has(normalized.toLowerCase())) return false
+  if (TITLE_REJECT_PATTERNS.some((re) => re.test(normalized))) return false
   return /[A-Za-zА-Яа-я0-9]/.test(normalized)
 }
 
@@ -341,21 +354,42 @@ async function extractDetailUrlsFromPage(page: Page): Promise<string[]> {
   return urls.filter((u) => isDetailUrl(u))
 }
 
-/** Прокрутка вниз для подгрузки контента («Показать еще» или ленивая подгрузка). */
-async function scrollToLoadMore(page: Page): Promise<void> {
+/** Прокрутка и клик «Показать еще» — один проход. */
+async function scrollToLoadMorePass(page: Page): Promise<void> {
   await page.evaluate(async () => {
     for (let i = 0; i < 5; i += 1) {
       window.scrollBy(0, 600)
       await new Promise((r) => setTimeout(r, 800))
     }
-    const btn = document.querySelector('button, a, [role="button"]')
-    const text = (btn?.textContent || '').toLowerCase()
-    if (text.includes('показать') || text.includes('еще')) {
-      ;(btn as HTMLElement)?.click()
-      await new Promise((r) => setTimeout(r, 1500))
+    const btns = Array.from(document.querySelectorAll('button, a, [role="button"]'))
+    for (const btn of btns) {
+      const text = (btn?.textContent || '').toLowerCase()
+      if (text.includes('показать') || text.includes('еще')) {
+        ;(btn as HTMLElement)?.click()
+        await new Promise((r) => setTimeout(r, 1500))
+        break
+      }
     }
     window.scrollTo({ top: 0, behavior: 'auto' })
   })
+}
+
+/** Подгружаем контент до целевого количества ссылок или пока не перестанут появляться. */
+async function scrollToLoadMoreUntil(
+  page: Page,
+  extractUrls: () => Promise<string[]>,
+  targetCount: number
+): Promise<void> {
+  const maxPasses = 15
+  let prevCount = 0
+  for (let pass = 0; pass < maxPasses; pass += 1) {
+    await scrollToLoadMorePass(page)
+    await randomDelay(600, 1200)
+    const urls = await extractUrls()
+    if (urls.length >= targetCount) break
+    if (urls.length === prevCount) break
+    prevCount = urls.length
+  }
 }
 
 /** Из URL карточки достаём бренд и модель: .../volkswagen/tiguan/73154/ → ['volkswagen','tiguan'] */
@@ -692,15 +726,17 @@ function extractDetailFromHtml(html: string, pageUrl: string): {
   }
 }
 
-/** Картинка из живой DOM (после отрисовки JS). Только из основного блока до «Похожие предложения» — иначе можем подхватить фото из карусели/баннера (KAMAZ вместо HITACHI). */
+/** Картинка из живой DOM. Только из зоны: после h1 и до «Похожие предложения» — баннеры/акции (LEASING, автомобиль) выше h1. */
 const EXTRACT_IMAGE_SCRIPT = `
 (function() {
-  var bad = ['logo', 'favicon', 'icon', 'sprite', 'button', 'banner', 'cookie', '1x1', 'pixel'];
+  var bad = ['logo', 'favicon', 'icon', 'sprite', 'button', 'banner', 'cookie', '1x1', 'pixel', 'akcii', 'aktsii', 'promo'];
   function isBad(src) {
     if (!src) return true;
     var s = src.toLowerCase();
     return bad.some(function(p) { return s.indexOf(p) >= 0; }) || s.indexOf('.svg') === s.length - 4 || s.indexOf('data:') === 0;
   }
+  var h1 = document.querySelector('h1');
+  var afterH1 = h1 || document.body;
   var cutOff = null;
   var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT);
   var el;
@@ -711,21 +747,22 @@ const EXTRACT_IMAGE_SCRIPT = `
       break;
     }
   }
-  function isBeforeCutOff(img) {
-    if (!cutOff) return true;
-    return (cutOff.compareDocumentPosition(img) & Node.DOCUMENT_POSITION_PRECEDING) !== 0;
+  function inValidZone(img) {
+    if (afterH1 && (afterH1.compareDocumentPosition(img) & Node.DOCUMENT_POSITION_FOLLOWING) === 0) return false;
+    if (cutOff && (cutOff.compareDocumentPosition(img) & Node.DOCUMENT_POSITION_PRECEDING) === 0) return false;
+    return true;
   }
   var imgs = Array.from(document.querySelectorAll('img'));
   for (var i = 0; i < imgs.length; i++) {
     var img = imgs[i];
-    if (!isBeforeCutOff(img)) continue;
+    if (!inValidZone(img)) continue;
     var src = (img.src || img.getAttribute('data-src') || '').trim();
     if (!src || isBad(src)) continue;
     var rect = img.getBoundingClientRect();
     if (rect.width >= 200 && rect.height >= 120 && /\\.(jpe?g|png|webp)/i.test(src)) return src;
   }
   for (var j = 0; j < imgs.length; j++) {
-    if (!isBeforeCutOff(imgs[j])) continue;
+    if (!inValidZone(imgs[j])) continue;
     var s = (imgs[j].src || imgs[j].getAttribute('data-src') || '').trim();
     if (!s || isBad(s)) continue;
     if (/\\.(jpe?g|png|webp)/i.test(s) || /upload|media|photo|image/i.test(s)) return s;
@@ -818,10 +855,12 @@ async function enrichAndCollectListing(
       return null
     }
 
-    let absoluteImage = data.imageUrl ? toAbsoluteUrl(data.imageUrl) : null
-    if (!absoluteImage) {
-      const fromDom = await extractImageFromLiveDom(page)
-      absoluteImage = fromDom ? toAbsoluteUrl(fromDom) : null
+    let absoluteImage: string | null = null
+    const fromDom = await extractImageFromLiveDom(page)
+    if (fromDom) {
+      absoluteImage = toAbsoluteUrl(fromDom)
+    } else if (data.imageUrl) {
+      absoluteImage = toAbsoluteUrl(data.imageUrl)
     }
     if (!absoluteImage) absoluteImage = FALLBACK_IMAGE
 
@@ -885,13 +924,16 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
       }
 
       await sleep(process.env.CI ? 3000 : 5000)
-      await scrollToLoadMore(page)
-      await randomDelay(500, 1200)
 
-      const detailUrls = await extractDetailUrlsFromPage(page)
       const maxPerSectionRaw = Number(process.env.GAZPROMP_MAX_PER_SECTION ?? '0')
       const maxPerSection =
         Number.isFinite(maxPerSectionRaw) && maxPerSectionRaw > 0 ? maxPerSectionRaw : 0
+      const targetCount = maxPerSection > 0 ? maxPerSection : 200
+
+      await scrollToLoadMoreUntil(page, () => extractDetailUrlsFromPage(page), targetCount)
+      await randomDelay(500, 1200)
+
+      const detailUrls = await extractDetailUrlsFromPage(page)
       const urlsToProcess = maxPerSection > 0 ? detailUrls.slice(0, maxPerSection) : detailUrls
       if (maxPerSection > 0) {
         console.log(`Found ${detailUrls.length} detail links, processing first ${urlsToProcess.length} (max_per_section=${maxPerSection})`)
