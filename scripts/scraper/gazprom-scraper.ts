@@ -746,6 +746,33 @@ function extractDetailFromHtml(html: string, pageUrl: string): {
     }
   }
 
+  const h1CloseForSpecs = html.search(/<\/h1>/i)
+  const mainBlockEndForSpecs =
+    h1CloseForSpecs !== -1
+      ? Math.min(
+          html.length,
+          ...[
+            h1CloseForSpecs + 8000,
+            html.indexOf('Выберите условия', h1CloseForSpecs),
+            html.indexOf('Похожие предложения', h1CloseForSpecs),
+          ]
+            .filter((p) => p >= 0)
+            .concat(html.length)
+        )
+      : 0
+  const specsBlock =
+    h1CloseForSpecs !== -1 && mainBlockEndForSpecs > h1CloseForSpecs
+      ? html
+          .slice(h1CloseForSpecs, mainBlockEndForSpecs)
+          .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+          .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/&nbsp;/gi, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+      : ''
+  const specsText = specsBlock.length > 500 ? specsBlock : plainText
+
   // Пробег (км) или наработка (м.ч.) для прицепов
   const mileageNotSpecified = /пробег\s+не\s+указан/i.test(plainText)
   const mileageText = mileageNotSpecified
@@ -761,41 +788,45 @@ function extractDetailFromHtml(html: string, pageUrl: string): {
     html.match(/Год выпуска\s*<\/[^>]+>[\s\S]{0,40}?(\d{4})/i)?.[1] ??
     null
 
-  // Город: только значение после «Город», без «Количество ключей» и т.п.
+  // Город, Кузов, Цвет, Двигатель — только из основного блока (не из фильтров сайдбара)
   const cityMatch =
-    plainText.match(/Город\s*[\s:]*([А-Яа-яЁё\-\s]{2,40}?)(?:\s|$|\d|Количество|Наличие|Пробег)/i)?.[1]?.trim() ??
+    specsText.match(/Город\s*[\s:]*([А-Яа-яЁё\-\s]{2,40}?)(?:\s|$|\d|Количество|Наличие|Пробег)/i)?.[1]?.trim() ??
     html.match(/Город\s*<\/[^>]+>[\s\S]{0,60}?([А-Яа-яЁё\-\s]{2,40})</i)?.[1]?.trim() ??
     null
   let city = cityMatch?.replace(/\s+/g, ' ').trim() || null
   if (city && /ключ|комплект|обременен|птс|псм/i.test(city)) city = null
   if (city && !isPlausibleCity(city)) city = null
 
-  // Цвет: только поле «Цвет». НЕ «Кузов» — там тип кузова.
+  // Цвет: только поле «Цвет», из блока карточки (не фильтры)
   const colorMatch =
-    plainText.match(/Цвет\s*[\s:]*([А-Яа-яЁёA-Za-z\s\-]{2,30}?)(?:\s|$|\d|Кузов|Коробка|Объем)/i)?.[1]?.trim() ??
+    specsText.match(/Цвет\s*[\s:]*([А-Яа-яЁёA-Za-z\s\-]{2,30}?)(?:\s|$|\d|Кузов|Коробка|Объем)/i)?.[1]?.trim() ??
     html.match(/Цвет\s*<\/[^>]+>[\s\S]{0,60}?([А-Яа-яЁёA-Za-z\s\-]{2,30})/i)?.[1]?.trim() ??
     null
   let bodyColor = colorMatch || null
   if (bodyColor && /ключ|комплект|количество/i.test(bodyColor)) bodyColor = null
   if (bodyColor && /^(мусоровоз|седан|внедорожник|грузовой|бортовой|фургон|пикап|универсал|хэтчбек|автобус|автокран|бульдозер|экскаватор)/i.test(bodyColor)) bodyColor = null
 
-  // Тип кузова: Мусоровоз, Седан, Внедорожник и т.д. — из поля «Кузов».
+  // Тип кузова: из блока карточки (не из фильтра сайдбара)
   const bodyTypeMatch =
-    plainText.match(/Кузов\s*[\s:]*([А-Яа-яЁёA-Za-z0-9\s\-\(\)\/]{2,50}?)(?:\s|$|\d|Количество|Цвет|Объем)/i)?.[1]?.trim() ??
+    specsText.match(/Кузов\s*[\s:]*([А-Яа-яЁёA-Za-z0-9\s\-\(\)\/]{2,50}?)(?:\s|$|\d|Количество|Цвет|Объем)/i)?.[1]?.trim() ??
     html.match(/Кузов\s*<\/[^>]+>[\s\S]{0,80}?([А-Яа-яЁёA-Za-z0-9\s\-\(\)\/]{2,50})/i)?.[1]?.trim() ??
     null
   let bodyType = bodyTypeMatch || null
   if (bodyType && /ключ|комплект|количество/i.test(bodyType)) bodyType = null
 
-  // Объем двигателя: только из блока «Объем двигателя», не из «Количество ключей»
-  const engineMatch = plainText.match(/Объем\s+двигателя\s*[\s:]*([\d.,]+\s*(?:л\.?)?)/i)?.[1]?.trim()
-  const engineVolume = engineMatch ? (engineMatch.includes('л') ? engineMatch : `${engineMatch} л`).trim() : null
+  // Объем двигателя: из блока карточки. Отсекаем мусор (100 л — мощность, не объём)
+  const engineMatch = specsText.match(/Объем\s+двигателя\s*[\s:]*([\d.,]+\s*(?:л\.?)?)/i)?.[1]?.trim()
+  const engineVolNum = engineMatch ? parseFloat(engineMatch.replace(/[^\d.,]/g, '').replace(',', '.')) : NaN
+  const engineVolume =
+    engineMatch && Number.isFinite(engineVolNum) && engineVolNum >= 0.5 && engineVolNum <= 12
+      ? (engineMatch.includes('л') ? engineMatch : `${engineMatch} л`).trim()
+      : null
 
-  // Тип топлива: Бензин, Дизель, Электро, Гибрид, Газ — из «Тип топлива», «Топливо», «Двигатель»
+  // Тип топлива: из блока карточки
   const fuelMatch =
-    plainText.match(/Тип\s+топлива\s*[\s:]*([А-Яа-яЁёA-Za-z\s\-]{3,30}?)(?:\s|$|\d|Кузов|Объем)/i)?.[1]?.trim() ??
-    plainText.match(/Топливо\s*[\s:]*([А-Яа-яЁёA-Za-z\s\-]{3,30}?)(?:\s|$|\d|Кузов|Объем)/i)?.[1]?.trim() ??
-    plainText.match(/Двигатель\s*[\s:]*([А-Яа-яЁёA-Za-z0-9\s\-,.]{3,50}?)(?:\s|$|Кузов|Объем)/i)?.[1]?.trim() ??
+    specsText.match(/Тип\s+топлива\s*[\s:]*([А-Яа-яЁёA-Za-z\s\-]{3,30}?)(?:\s|$|\d|Кузов|Объем)/i)?.[1]?.trim() ??
+    specsText.match(/Топливо\s*[\s:]*([А-Яа-яЁёA-Za-z\s\-]{3,30}?)(?:\s|$|\d|Кузов|Объем)/i)?.[1]?.trim() ??
+    specsText.match(/Двигатель\s*[\s:]*([А-Яа-яЁёA-Za-z0-9\s\-,.]{3,50}?)(?:\s|$|Кузов|Объем)/i)?.[1]?.trim() ??
     null
   const fuelNormalized = fuelMatch
     ? (() => {
@@ -819,13 +850,12 @@ function extractDetailFromHtml(html: string, pageUrl: string): {
   const wheelFormulaMatch = plainText.match(/Кол[её]сная\s+формула\s*[\s:]*(\d+[xхX]\d+)/i)?.[1]?.trim()
   const driveMatch =
     !wheelFormulaMatch &&
-    (plainText.match(/Привод\s*[\s:]*([А-Яа-яЁёA-Za-z0-9\s\-]{2,30}?)(?:\s|$|Кузов|Коробка|Объем)/i)?.[1]?.trim() ?? null)
+    (specsText.match(/Привод\s*[\s:]*([А-Яа-яЁёA-Za-z0-9\s\-]{2,30}?)(?:\s|$|Кузов|Коробка|Объем)/i)?.[1]?.trim() ?? null)
   const drivetrain = (wheelFormulaMatch || driveMatch)?.replace(/\s+/g, ' ').trim() || null
 
-  // Коробка передач / КПП
   const transmissionMatch =
-    plainText.match(/Коробка\s+передач\s*[\s:]*([А-Яа-яЁёA-Za-z0-9\s\-]{2,40}?)(?:\s|$|\d|Кузов|Привод|Объем)/i)?.[1]?.trim() ??
-    plainText.match(/КПП\s*[\s:]*([А-Яа-яЁёA-Za-z0-9\s\-]{2,40}?)(?:\s|$|\d|Кузов|Привод|Объем)/i)?.[1]?.trim() ??
+    specsText.match(/Коробка\s+передач\s*[\s:]*([А-Яа-яЁёA-Za-z0-9\s\-]{2,40}?)(?:\s|$|\d|Кузов|Привод|Объем)/i)?.[1]?.trim() ??
+    specsText.match(/КПП\s*[\s:]*([А-Яа-яЁёA-Za-z0-9\s\-]{2,40}?)(?:\s|$|\d|Кузов|Привод|Объем)/i)?.[1]?.trim() ??
     null
   const transmission = transmissionMatch?.replace(/\s+/g, ' ').trim() || null
 
