@@ -665,7 +665,7 @@ function extractDetailFromHtml(html: string, pageUrl: string): {
   }
 }
 
-/** Картинка из живой DOM (после отрисовки JS). Скрипт передаём строкой, чтобы в браузер не попадали __name и др. от tsx. */
+/** Картинка из живой DOM (после отрисовки JS). Только из основного блока до «Похожие предложения» — иначе можем подхватить фото из карусели/баннера (KAMAZ вместо HITACHI). */
 const EXTRACT_IMAGE_SCRIPT = `
 (function() {
   var bad = ['logo', 'favicon', 'icon', 'sprite', 'button', 'banner', 'cookie', '1x1', 'pixel'];
@@ -674,15 +674,31 @@ const EXTRACT_IMAGE_SCRIPT = `
     var s = src.toLowerCase();
     return bad.some(function(p) { return s.indexOf(p) >= 0; }) || s.indexOf('.svg') === s.length - 4 || s.indexOf('data:') === 0;
   }
+  var cutOff = null;
+  var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT);
+  var el;
+  while ((el = walker.nextNode())) {
+    var txt = (el.textContent || '').trim();
+    if (txt === 'Похожие предложения' || txt.indexOf('Похожие предложения') === 0) {
+      cutOff = el;
+      break;
+    }
+  }
+  function isBeforeCutOff(img) {
+    if (!cutOff) return true;
+    return (cutOff.compareDocumentPosition(img) & Node.DOCUMENT_POSITION_PRECEDING) !== 0;
+  }
   var imgs = Array.from(document.querySelectorAll('img'));
   for (var i = 0; i < imgs.length; i++) {
     var img = imgs[i];
+    if (!isBeforeCutOff(img)) continue;
     var src = (img.src || img.getAttribute('data-src') || '').trim();
     if (!src || isBad(src)) continue;
     var rect = img.getBoundingClientRect();
     if (rect.width >= 200 && rect.height >= 120 && /\\.(jpe?g|png|webp)/i.test(src)) return src;
   }
   for (var j = 0; j < imgs.length; j++) {
+    if (!isBeforeCutOff(imgs[j])) continue;
     var s = (imgs[j].src || imgs[j].getAttribute('data-src') || '').trim();
     if (!s || isBad(s)) continue;
     if (/\\.(jpe?g|png|webp)/i.test(s) || /upload|media|photo|image/i.test(s)) return s;
