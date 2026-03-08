@@ -484,35 +484,69 @@ async function extractDetailUrlsFromPage(page: Page): Promise<string[]> {
   return urls.filter((u) => isDetailUrl(u))
 }
 
-/** Добавляет параметр пагинации к URL. Пробуем PAGEN_1 (Bitrix) и page. */
-function withPagination(baseUrl: string, pageNum: number): string {
+/** Добавляет параметр пагинации. Bitrix: PAGEN_1. Некоторые сайты: page. */
+function withPagination(baseUrl: string, pageNum: number, param: 'PAGEN_1' | 'page' = 'PAGEN_1'): string {
   try {
     const u = new URL(baseUrl, GAZPROM_BASE_URL)
-    u.searchParams.set('PAGEN_1', String(pageNum))
+    u.searchParams.set(param, String(pageNum))
     return u.toString()
   } catch {
     return baseUrl
   }
 }
 
-/** Прокрутка для подгрузки ленивого контента на одной странице. */
-async function scrollToLoadMorePass(page: Page): Promise<void> {
-  await page.evaluate(async () => {
-    for (let i = 0; i < 8; i += 1) {
-      window.scrollBy(0, 800)
-      await new Promise((r) => setTimeout(r, 600))
+/** Прокрутка + клик «Показать еще» — один проход. */
+async function scrollAndClickLoadMore(page: Page): Promise<boolean> {
+  return page.evaluate(async () => {
+    for (let i = 0; i < 12; i += 1) {
+      window.scrollBy(0, 600)
+      await new Promise((r) => setTimeout(r, 400))
     }
-    const btns = Array.from(document.querySelectorAll('button, a[href], [role="button"]'))
+    const btns = Array.from(document.querySelectorAll('button, a[href], [role="button"], .show-more, [data-action="load-more"]'))
     for (const btn of btns) {
       const text = (btn?.textContent || '').toLowerCase()
-      if (text.includes('показать') || text.includes('еще') || text.includes('загрузить')) {
+      if (
+        text.includes('показать') ||
+        text.includes('еще') ||
+        text.includes('загрузить') ||
+        text.includes('ещё')
+      ) {
         ;(btn as HTMLElement)?.click()
-        await new Promise((r) => setTimeout(r, 2000))
-        break
+        await new Promise((r) => setTimeout(r, 2500))
+        return true
       }
     }
-    window.scrollTo({ top: 0, behavior: 'auto' })
+    window.scrollTo(0, document.body.scrollHeight)
+    await new Promise((r) => setTimeout(r, 1500))
+    return false
   })
+}
+
+/** Раскрывает весь каталог на странице: скролл + «Показать еще», пока не перестанут появляться ссылки. */
+async function expandCatalogUntilStable(
+  page: Page,
+  extractUrls: () => Promise<string[]>,
+  maxRounds = 8
+): Promise<string[]> {
+  let prevCount = 0
+  let stableRounds = 0
+  const all = new Set<string>()
+
+  for (let round = 0; round < maxRounds; round += 1) {
+    const clicked = await scrollAndClickLoadMore(page)
+    await sleep(800)
+    const urls = await extractUrls()
+    urls.forEach((u) => all.add(u))
+
+    if (all.size === prevCount) {
+      stableRounds += 1
+      if (stableRounds >= 2 || !clicked) break
+    } else {
+      stableRounds = 0
+    }
+    prevCount = all.size
+  }
+  return [...all]
 }
 
 /** Из URL карточки достаём бренд и модель: .../volkswagen/tiguan/73154/ → ['volkswagen','tiguan'] */
@@ -1094,27 +1128,29 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
 
       const allUrls = new Set<string>()
       for (let pageNum = 1; pageNum <= maxPages; pageNum += 1) {
-        const url = pageNum === 1 ? section.catalogUrl : withPagination(section.catalogUrl, pageNum)
+        const url =
+          pageNum === 1
+            ? section.catalogUrl
+            : withPagination(section.catalogUrl, pageNum, 'PAGEN_1')
         try {
-          await page.goto(url, { waitUntil: 'domcontentloaded' })
+          await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 })
         } catch (navErr) {
           if (isShutdownError(navErr)) break
           if (pageNum > 1) break
           throw navErr
         }
-        await sleep(process.env.CI ? 3000 : 5000)
-        await scrollToLoadMorePass(page)
-        await randomDelay(500, 1000)
-
-        const pageUrls = await extractDetailUrlsFromPage(page)
+        await sleep(process.env.CI ? 4000 : 6000)
+        const pageUrls = await expandCatalogUntilStable(page, () => extractDetailUrlsFromPage(page), 10)
         const before = allUrls.size
         for (const u of pageUrls) allUrls.add(u)
         const added = allUrls.size - before
-
+        console.log(`  Page ${pageNum}: +${added} links (total ${allUrls.size})`)
+        if (pageNum > 1 && maxPagesLimit > 0 && added === 0) break
         if (maxPagesLimit === 0) {
           if (added === 0 && pageNum > 1) break
           if (allUrls.size >= targetCount) break
         }
+        await randomDelay(600, 1200)
       }
 
       const detailUrls = [...allUrls]
