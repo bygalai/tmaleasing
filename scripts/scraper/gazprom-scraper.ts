@@ -626,9 +626,9 @@ function extractDetailFromHtml(html: string, pageUrl: string): {
       ? [engineVolume, fuelNormalized].filter(Boolean).join(', ')
       : null
 
-  // Колёсная формула (для грузовиков 4x2, 6x4 и т.д.) или привод (передний/задний/полный)
+  // Колёсная/Колесная формула (для грузовиков 4x2, 6x4 и т.д.) или привод (передний/задний/полный)
   const drivetrainMatch =
-    plainText.match(/Колёсная\s+формула\s*[\s:]*([A-Za-zА-Яа-я0-9xX\s\-]{2,30}?)(?:\s|$|\d|Кузов|Коробка)/i)?.[1]?.trim() ??
+    plainText.match(/Кол[её]сная\s+формула\s*[\s:]*([A-Za-zА-Яа-я0-9xXхХ\s\-]{2,30}?)(?:\s|$|\d|Кузов|Коробка)/i)?.[1]?.trim() ??
     plainText.match(/Привод\s*[\s:]*([A-Za-zА-Яа-я0-9xX\s\-]{2,30}?)(?:\s|$|\d|Кузов|Коробка)/i)?.[1]?.trim() ??
     null
   const drivetrain = drivetrainMatch?.replace(/\s+/g, ' ').trim() || null
