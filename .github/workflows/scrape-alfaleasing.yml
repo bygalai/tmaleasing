@@ -1,10 +1,6 @@
 name: Scrape Alfaleasing (legkovye)
 
 on:
-  schedule:
-    # Run after VTB/Europlan: 02:00, 06:30, 11:00, 15:30, 20:00 UTC
-    - cron: '0 2,11,20 * * *'
-    - cron: '30 6,15 * * *'
   workflow_dispatch:
     inputs:
       max_pages:

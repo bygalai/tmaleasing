@@ -1210,7 +1210,15 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
-      ...(isCI ? ['--disable-dev-shm-usage', '--disable-gpu'] : []),
+      ...(isCI
+        ? [
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+            '--disable-extensions',
+            '--disable-background-networking',
+            '--disable-software-rasterizer',
+          ]
+        : []),
     ],
   })
 

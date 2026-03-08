@@ -101,6 +101,8 @@ type ScrapedListing = {
   external_id: string
   title: string
   price: number | null
+  /** Старая цена до скидки — для отображения зачёркнутой и бейджа «Скидка X%». */
+  original_price: number | null
   mileage: number | null
   year: number | null
   images: string[]
@@ -339,6 +341,7 @@ function extractJsonLdBlocks(html: string): unknown[] {
 function extractDetailFromJsonLd(payloads: unknown[]): {
   title: string | null
   price: number | null
+  originalPrice: number | null
   mileage: number | null
   year: number | null
   imageUrls: string[]
@@ -459,9 +462,27 @@ function extractDetailFromJsonLd(payloads: unknown[]): {
   })()
 
   const MIN_VEHICLE_PRICE = 100_000
+  const MAX_VEHICLE_PRICE = 100_000_000
+  const MAX_ORIGINAL_TO_PRICE_RATIO = 1.5
+
+  const validPrices = prices.filter((v) => Number.isFinite(v) && v >= MIN_VEHICLE_PRICE && v <= MAX_VEHICLE_PRICE)
+  let price: number | null = validPrices.length > 0 ? Math.min(...validPrices) : null
+  let originalPrice: number | null = null
+  if (validPrices.length >= 2) {
+    const minP = Math.min(...validPrices)
+    const maxP = Math.max(...validPrices)
+    if (maxP > minP && maxP <= minP * MAX_ORIGINAL_TO_PRICE_RATIO) {
+      price = minP
+      originalPrice = maxP
+    } else if (price == null) {
+      price = minP
+    }
+  }
+
   return {
     title: bestTitle,
-    price: pickBestPrice(prices, MIN_VEHICLE_PRICE, 100_000_000),
+    price,
+    originalPrice,
     mileage: pickBest(mileages, 1),
     year: pickBest(years, 1900),
     imageUrls: images,
@@ -476,6 +497,7 @@ function extractDetailFromJsonLd(payloads: unknown[]): {
 function extractDetailFromHtmlFallback(html: string): {
   title: string | null
   price: number | null
+  originalPrice: number | null
   mileage: number | null
   year: number | null
   imageUrls: string[]
@@ -497,11 +519,124 @@ function extractDetailFromHtmlFallback(html: string): {
   const title =
     html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1]?.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim() ?? null
 
-  const priceMatches = [...html.matchAll(/(\d[\d\s\u00A0]{3,})\s*(?:₽|&#8381;|руб|р\.?)/gi)]
-    .map((m) => normalizeNumber(m[1]))
-    .filter((v): v is number => v != null)
-    .filter((v) => v >= 100_000 && v <= 100_000_000)
-  const price = priceMatches.length > 0 ? Math.min(...priceMatches) : null
+  const EXCLUDE_SNIPPET =
+    /мес|месяц|аванс|платеж\s+от|ежемесячный\s+платеж|экономия\s+до|налоговая\s+экономия|сумма\s+договора|полная\s+стоимость\s*—/
+  const priceRegex = /(\d[\d\s\u00A0.]{2,})\s*(?:<\/[^>]+>[\s\S]{0,30})?(?:₽|&#8381;|руб|р\.?)/gi
+  const MIN_PRICE = 500_000
+  const MAX_PRICE = 100_000_000
+  const MAX_ORIGINAL_TO_PRICE_RATIO = 1.5
+
+  function collectPricesWithPosition(segment: string, skipExclude = false): { num: number; pos: number }[] {
+    const out: { num: number; pos: number }[] = []
+    let m: RegExpExecArray | null
+    priceRegex.lastIndex = 0
+    while ((m = priceRegex.exec(segment)) !== null) {
+      const num = normalizeNumber(m[1])
+      if (num == null || num < MIN_PRICE || num > MAX_PRICE) continue
+      if (!skipExclude) {
+        const snippet = segment.slice(Math.max(0, m.index - 120), m.index + (m[0].length + 80)).toLowerCase()
+        if (EXCLUDE_SNIPPET.test(snippet)) continue
+      }
+      out.push({ num, pos: m.index })
+    }
+    return out
+  }
+
+  function collectPricesFromSegment(segment: string, skipExclude = false): number[] {
+    return collectPricesWithPosition(segment, skipExclude).map((p) => p.num)
+  }
+
+  let price: number | null = null
+  let originalPrice: number | null = null
+  const h1Close = html.search(/<\/h1>/i)
+  const MAIN_BLOCK_MIN_LEN = 2500
+
+  if (h1Close !== -1) {
+    const candidates = [
+      h1Close + 5000,
+      html.length,
+      html.indexOf('технические характеристики', h1Close),
+      html.indexOf('описание', h1Close),
+      html.indexOf('Характеристики', h1Close),
+    ].filter((p) => p >= 0)
+    const mainBlockEnd = Math.min(...candidates)
+    const mainBlock = html.slice(h1Close, Math.max(mainBlockEnd, h1Close + MAIN_BLOCK_MIN_LEN))
+
+    const costLabel = mainBlock.search(/Стоимость|стоимость|Цена|цена/i)
+    if (costLabel !== -1) {
+      const afterCost = mainBlock.slice(costLabel, costLabel + 500)
+      let byPos = collectPricesWithPosition(afterCost)
+      if (byPos.length === 0) byPos = collectPricesWithPosition(afterCost, true)
+      byPos.sort((a, b) => a.pos - b.pos)
+      if (byPos.length > 0) {
+        const first = byPos[0].num
+        const second = byPos[1]?.num
+        price = first
+        if (second != null && second > first && second <= first * MAX_ORIGINAL_TO_PRICE_RATIO) originalPrice = second
+        else if (second != null && second < first && first <= second * MAX_ORIGINAL_TO_PRICE_RATIO) {
+          price = second
+          originalPrice = first
+        }
+      }
+    }
+    if (price == null) {
+      const headOfBlock = mainBlock.slice(0, 1000)
+      let withPos = collectPricesWithPosition(headOfBlock)
+      if (withPos.length === 0) withPos = collectPricesWithPosition(headOfBlock, true)
+      if (withPos.length > 0) {
+        withPos.sort((a, b) => a.pos - b.pos)
+        price = withPos[0].num
+        if (withPos.length >= 2) {
+          const second = withPos[1].num
+          if (second > price && second <= price * MAX_ORIGINAL_TO_PRICE_RATIO) originalPrice = second
+          else if (second < price && price <= second * MAX_ORIGINAL_TO_PRICE_RATIO) {
+            originalPrice = price
+            price = second
+          }
+        }
+      }
+    }
+    if (price == null) {
+      let withPos = collectPricesWithPosition(mainBlock)
+      if (withPos.length === 0) withPos = collectPricesWithPosition(mainBlock, true)
+      if (withPos.length > 0) {
+        withPos.sort((a, b) => a.pos - b.pos)
+        price = withPos[0].num
+        if (withPos.length >= 2) {
+          const second = withPos[1].num
+          if (second > price && second <= price * MAX_ORIGINAL_TO_PRICE_RATIO) originalPrice = second
+        }
+      }
+    }
+  }
+
+  if (price == null) {
+    const segment = html.slice(0, 35000)
+    let plausiblePrices = collectPricesFromSegment(segment)
+    if (plausiblePrices.length === 0) plausiblePrices = collectPricesFromSegment(segment, true)
+    if (plausiblePrices.length > 0) {
+      price = Math.min(...plausiblePrices)
+      if (plausiblePrices.length >= 2) {
+        const minP = Math.min(...plausiblePrices)
+        const maxP = Math.max(...plausiblePrices)
+        if (maxP > minP && maxP <= minP * MAX_ORIGINAL_TO_PRICE_RATIO) {
+          price = minP
+          originalPrice = maxP
+        }
+      }
+    }
+  }
+  if (price == null) {
+    const withPos = collectPricesWithPosition(html)
+    if (withPos.length > 0) {
+      withPos.sort((a, b) => a.pos - b.pos)
+      price = withPos[0].num
+      if (withPos.length >= 2) {
+        const second = withPos[1].num
+        if (second > price && second <= price * MAX_ORIGINAL_TO_PRICE_RATIO) originalPrice = second
+      }
+    }
+  }
 
   const mileageText =
     plainText.match(/(\d[\d\s\u00A0]{2,})\s*(?:км|km|м\.ч\.?)/i)?.[1] ??
@@ -573,6 +708,7 @@ function extractDetailFromHtmlFallback(html: string): {
   return {
     title,
     price,
+    originalPrice,
     mileage: normalizeNumber(mileageText),
     year: parseYear(yearText),
     imageUrls: htmlImageUrls,
@@ -765,6 +901,7 @@ async function enrichAndCollectListing(
 
     const title = card?.title ?? fromLd.title ?? fromHtml.title ?? null
     const price = fromLd.price ?? fromHtml.price ?? card?.price ?? null
+    const originalPrice = fromHtml.originalPrice ?? fromLd.originalPrice ?? null
     const mileage = fromLd.mileage ?? fromHtml.mileage ?? card?.mileage ?? null
     const year = fromLd.year ?? fromHtml.year ?? card?.year ?? null
     const allImageCandidates = [
@@ -801,6 +938,7 @@ async function enrichAndCollectListing(
       external_id: buildExternalId(detailUrl),
       title: sanitizeTitle(title),
       price,
+      original_price: originalPrice ?? null,
       mileage,
       year,
       images: [absoluteImage],
@@ -932,6 +1070,7 @@ async function run(): Promise<void> {
         images: listing.images,
       }
       if (listing.price != null) row.price = listing.price
+      if (listing.original_price != null) row.original_price = listing.original_price
       if (listing.mileage != null) row.mileage = listing.mileage
       if (listing.year != null) row.year = listing.year
       if (listing.city != null) row.city = listing.city

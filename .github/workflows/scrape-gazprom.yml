@@ -1,15 +1,10 @@
-name: Scrape Europlan Leasing (trucks)
+name: Scrape Gazprom Autoleasing
 
 on:
   workflow_dispatch:
-    inputs:
-      max_pages:
-        description: 'Max catalog pages to scrape'
-        required: false
-        default: '3'
 
 concurrency:
-  group: europlan-scraper
+  group: gazprom-scraper
   cancel-in-progress: false
 
 jobs:
@@ -20,7 +15,6 @@ jobs:
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-      EUROPLAN_MAX_PAGES: ${{ github.event.inputs.max_pages || '3' }}
 
     steps:
       - name: Checkout repository
@@ -53,5 +47,5 @@ jobs:
           [ -n "$SUPABASE_KEY" ] || { echo "::error::SUPABASE_KEY secret is not set"; exit 1; }
           echo "Supabase credentials OK"
 
-      - name: Run Europlan scraper (trucks)
-        run: npm run scrape:europlan
+      - name: Run Gazprom scraper
+        run: npm run scrape:gazprom
