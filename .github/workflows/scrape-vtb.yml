@@ -21,7 +21,7 @@ jobs:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
       VTB_MAX_PAGES: ${{ github.event.inputs.max_pages || '5' }}
-      NODE_OPTIONS: --max-old-space-size=3072
+      NODE_OPTIONS: --max-old-space-size=6144
 
     steps:
       - name: Checkout repository
