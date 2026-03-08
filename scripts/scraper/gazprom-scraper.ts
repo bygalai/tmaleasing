@@ -85,29 +85,76 @@ const BAD_IMAGE_SUBSTRINGS = [
   'pixel',
 ]
 
+/**
+ * Позитивная валидация заголовка: принимаем ТОЛЬКО то, что похоже на название техники.
+ * Вместо бесконечного blacklist — чёткие признаки «мусора» и требования к форме.
+ */
+const TITLE_MIN_LEN = 4
+const TITLE_MAX_LEN = 90
+
+/** Признаки мусора: код, аналитика, UI, маркетинг. Один матч = отклоняем. */
+const JUNK_INDICATORS = [
+  /\bкод\b/i,
+  /\bскрипт/i,
+  /\bдолжен\b/i,
+  /загрузк/i,
+  /\bметрик/i,
+  /\bпользователь\b/i,
+  /\bфоллбэк\b/i,
+  /\s--\s/, // комментарии в коде
+  /\|\s*[а-яё]/i, // "title | какой-то текст"
+  /для\s+юридических\s+лиц/i,
+  /с\s+пробегом\s+в\s+лизинг\s+для/i,
+  /лизинг\s+для\s+юр/i,
+  /с\s+экономией\s+средств/i,
+  /оформить\s+заявку/i,
+  /оставить\s+заявку/i,
+  /купить\s+на\s+выгодных/i,
+  /ежемесячным\s+платежом/i,
+  /при\s+полной\s+загрузке/i,
+  /подключаем\s+метрику/i,
+  /яндекс[.\s]*метрика/i,
+  /google\s+analytics/i,
+]
+
 const TITLE_BLOCKLIST = new Set([
-  'автомобили и техника с пробегом',
   'каталог',
   'газпромбанк',
   'автолизинг',
   'лизинг',
   'с пробегом',
+  'автомобили с пробегом',
+  'автомобили и техника с пробегом',
 ])
 
-/** Шаблоны маркетинговых/финансовых фраз — не названия техники. */
-const TITLE_REJECT_PATTERNS = [
-  /купить\s+на\s+выгодных/i,
-  /ежемесячным\s+платежом/i,
-  /платеж\s+от\s+\d{5,}/i,
-  /\d{7,}\s*₽?/,
-  /оформить\s+заявку/i,
-  /оставить\s+заявку/i,
-  /в\s+лизинг\s+от/i,
-  /финансовы[ем]+\s+услови/i,
-  /с\s+пробегом\s+в\s+лизинг\s+для\s+юр/i,
-]
-
 const CITY_BLOCKLIST = new Set(['оборудование', 'недвижимость', 'подвижной состав'])
+
+/** Слаг типа кузова из заголовка → русское название (для body_type) */
+const BODY_TYPE_SLUG_TO_RU: Record<string, string> = {
+  'sedelnyy-tyagach': 'Седельный тягач',
+  'ekskavator-pogruzchik': 'Экскаватор-погрузчик',
+  'musorovoz': 'Мусоровоз',
+  'bortovoy': 'Бортовой',
+  'bortovoy-s-gp': 'Бортовой с ГП',
+  'bortovoy-s-kmu': 'Бортовой с КМУ',
+  'samosval': 'Самосвал',
+  'tsisterna': 'Цистерна',
+  'refrizherator': 'Рефрижератор',
+  'rephrizherator': 'Рефрижератор',
+  'furgon': 'Фургон',
+  'avtokran': 'Автокран',
+  'buldozer': 'Бульдозер',
+  'ekskavator': 'Экскаватор',
+  'frontalnyy': 'Фронтальный',
+  'vnedorozhnik': 'Внедорожник',
+  'sedan': 'Седан',
+  'universal': 'Универсал',
+  'pickup': 'Пикап',
+  'polupricep': 'Полуприцеп',
+  'pricep': 'Прицеп',
+  'izotermicheskiy': 'Изотермический',
+  'shornyy': 'Шторный',
+}
 
 type ScrapedListing = {
   external_id: string
@@ -126,6 +173,7 @@ type ScrapedListing = {
   transmission: string | null
   drivetrain: string | null
   body_color: string | null
+  body_type: string | null
 }
 
 // --- env & supabase ---
@@ -271,24 +319,101 @@ function buildExternalId(listingUrl: string): string {
   return createHash('sha256').update(listingUrl).digest('hex')
 }
 
-function sanitizeTitle(value: string | null | undefined): string {
+/** Типы кузова в конце заголовка (кириллица). Сначала длинные — «Седельный тягач» до «тягач». */
+const CYRILLIC_BODY_TYPE_SUFFIXES = [
+  'Седельный тягач',
+  'Экскаватор-погрузчик',
+  'Буровая установка',
+  'Изотермический/рефрижератор',
+  'Бортовой с ГП',
+  'Бортовой с КМУ',
+  'Мусоровоз',
+  'Экскаватор',
+  'Бульдозер',
+  'Автокран',
+  'Форвардер',
+  'Самосвал',
+  'Бортовой',
+  'Цистерна',
+  'Рефрижератор',
+  'Фронтальный',
+  'Полуприцеп',
+  'Прицеп',
+  'Седельный',
+  'Тягач',
+]
+
+/** Извлекает тип кузова из заголовка (латинский слаг или кириллица в конце). Возвращает очищенный заголовок и body_type. */
+function extractBodyTypeSuffixFromTitle(value: string): {
+  cleanedTitle: string
+  bodyTypeRu: string | null
+} {
   const fallback = 'Легковой автомобиль'
-  if (!value) return fallback
   let cleaned = value.replace(/\s+/g, ' ').trim()
-  // Убираем колёсную формулу из названия (6х6, 4x2 и т.д.) — она идёт в отдельное поле
+  let bodyTypeRu: string | null = null
+
+  // Кириллица в конце: "Hyundai R380 Экскаватор", "КАМАЗ 65117 Мусоровоз"
+  for (const bt of CYRILLIC_BODY_TYPE_SUFFIXES) {
+    const re = new RegExp(`\\s+${bt.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i')
+    if (re.test(cleaned)) {
+      bodyTypeRu = bt
+      cleaned = cleaned.replace(re, '').trim()
+      break
+    }
+  }
+
+  // Суффикс-слаг: " - -SEDELNYY-TYAGACH-1" или "-EKSKAVATOR-POGRUZCHIK-1"
+  const suffixMatch = !bodyTypeRu && cleaned.match(/[-\s]*-([A-Z][A-Za-z0-9\-]+)$/i)
+  if (suffixMatch) {
+    let slug = suffixMatch[1].replace(/-?\d+$/, '').toLowerCase()
+    bodyTypeRu = BODY_TYPE_SLUG_TO_RU[slug] ?? null
+    if (!bodyTypeRu && slug.length > 2) {
+      const parts = slug.split('-').map((p) => {
+        const m: Record<string, string> = {
+          ekskavator: 'Экскаватор',
+          pogruzchik: 'погрузчик',
+          sedelnyy: 'Седельный',
+          tyagach: 'тягач',
+          musorovoz: 'Мусоровоз',
+          bortovoy: 'Бортовой',
+          frontalnyy: 'Фронтальный',
+        }
+        return m[p] ?? p.charAt(0).toUpperCase() + p.slice(1)
+      })
+      bodyTypeRu = parts.join('-')
+    }
+    cleaned = cleaned.slice(0, suffixMatch.index).replace(/[-\s]+$/, '').trim()
+  }
+
   cleaned = cleaned.replace(/\s*\d+[xхX]\d+\s*/gi, ' ').replace(/\s+/g, ' ').trim()
-  // Убираем звёздочки в названиях спецтехники (напр. "SL763* Фронтальный")
   cleaned = cleaned.replace(/\s*\*\s*/g, ' ').replace(/\s+/g, ' ').trim()
-  return cleaned.length > 0 ? cleaned : fallback
+  return { cleanedTitle: cleaned.length > 0 ? cleaned : fallback, bodyTypeRu }
 }
 
-function isRealCarTitle(value: string | null | undefined): boolean {
+function sanitizeTitle(value: string | null | undefined): string {
+  if (!value) return 'Легковой автомобиль'
+  const { cleanedTitle } = extractBodyTypeSuffixFromTitle(value)
+  return cleanedTitle
+}
+
+/**
+ * Позитивная проверка: похоже ли на название техники.
+ * Должно: содержать латиницу или цифры (бренд/модель), длина 4-90, без признаков мусора.
+ */
+function looksLikeVehicleTitle(
+  value: string | null | undefined,
+  brandFromUrl?: string | null
+): boolean {
   if (!value) return false
-  const normalized = value.replace(/\s+/g, ' ').trim()
-  if (normalized.length < 4) return false
-  if (TITLE_BLOCKLIST.has(normalized.toLowerCase())) return false
-  if (TITLE_REJECT_PATTERNS.some((re) => re.test(normalized))) return false
-  return /[A-Za-zА-Яа-я0-9]/.test(normalized)
+  const n = value.replace(/\s+/g, ' ').trim()
+  if (n.length < TITLE_MIN_LEN || n.length > TITLE_MAX_LEN) return false
+  if (TITLE_BLOCKLIST.has(n.toLowerCase())) return false
+  if (JUNK_INDICATORS.some((re) => re.test(n))) return false
+  if (!/[A-Za-z0-9]/.test(n)) return false // бренд/модель — обычно латиница или цифры
+  if (brandFromUrl && !new RegExp(brandFromUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(n)) {
+    return false
+  }
+  return true
 }
 
 function isPlausibleCity(value: string | null | undefined): boolean {
@@ -403,9 +528,12 @@ function getBrandModelFromDetailUrl(detailUrl: string): { brand: string; model: 
   return null
 }
 
-/** Собираем читаемый заголовок. Приоритет: h1 → поиск по странице → fallback из URL (латиница). */
+/** URL-first: brand+model из URL — надёжный fallback. Страничные h1/og:title только при строгой валидации. */
 function extractTitle(html: string, detailUrl: string): string | null {
   const brandModel = getBrandModelFromDetailUrl(detailUrl)
+  const urlFallback = brandModel
+    ? `${brandModel.brand.charAt(0).toUpperCase() + brandModel.brand.slice(1).toLowerCase()} ${brandModel.model.charAt(0).toUpperCase() + brandModel.model.slice(1).toUpperCase()}`
+    : null
   const brandCap = brandModel
     ? brandModel.brand.charAt(0).toUpperCase() + brandModel.brand.slice(1).toLowerCase()
     : null
@@ -416,11 +544,11 @@ function extractTitle(html: string, detailUrl: string): string | null {
   const h1Match = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)
   const h1Raw = h1Match?.[1]?.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim() ?? null
   const fromH1 = h1Raw
-    ?.replace(/\s*с пробегом в лизинг.*$/i, '')
-    .replace(/\s*в лизинг.*$/i, '')
+    ?.replace(/\s*с пробегом в лизинг[\s\S]*$/i, '')
+    .replace(/\s*в лизинг[\s\S]*$/i, '')
     .trim() ?? null
 
-  if (fromH1 && isRealCarTitle(fromH1)) return fromH1
+  if (fromH1 && brandCap && looksLikeVehicleTitle(fromH1, brandCap)) return fromH1
 
   if (brandCap && modelCap) {
     const re = new RegExp(
@@ -432,7 +560,7 @@ function extractTitle(html: string, detailUrl: string): string | null {
     let match: RegExpExecArray | null
     while ((match = re.exec(bodySnippet)) !== null) {
       const candidate = match[1].replace(/\s+/g, ' ').trim()
-      if (candidate.length >= 10 && candidate.length <= 100 && isRealCarTitle(candidate)) {
+      if (looksLikeVehicleTitle(candidate, brandCap)) {
         if (!best || candidate.length > (best?.length ?? 0)) best = candidate
       }
     }
@@ -447,27 +575,15 @@ function extractTitle(html: string, detailUrl: string): string | null {
         .replace(/\s*с пробегом в лизинг.*$/i, '')
         .replace(/\s+/g, ' ')
         .trim()
-      if (cleaned.length >= 10 && cleaned.length <= 120 && isRealCarTitle(cleaned)) {
+      if (looksLikeVehicleTitle(cleaned, brandCap)) {
         return cleaned
       }
     }
 
-    const headBlock = html.slice(0, 25000)
-    const cyrillicRe = /([А-Яа-яЁё][А-Яа-яЁё0-9\s\-\.\*\(\)]{14,100})/g
-    let cyrillicBest: string | null = null
-    let m: RegExpExecArray | null
-    while ((m = cyrillicRe.exec(headBlock)) !== null) {
-      const c = m[1].replace(/\s+/g, ' ').trim()
-      if (c.length >= 15 && c.length <= 100 && isRealCarTitle(c) && !/^каталог|^акци|^главная/i.test(c)) {
-        if (!cyrillicBest || c.length > cyrillicBest.length) cyrillicBest = c
-      }
-    }
-    if (cyrillicBest) return cyrillicBest
-
     return `${brandCap} ${modelCap}`
   }
 
-  return fromH1
+  return urlFallback
 }
 
 // --- detail page: extract data from HTML ---
@@ -481,6 +597,7 @@ function extractDetailFromHtml(html: string, pageUrl: string): {
   imageUrl: string | null
   city: string | null
   bodyColor: string | null
+  bodyType: string | null
   engine: string | null
   drivetrain: string | null
   transmission: string | null
@@ -649,10 +766,22 @@ function extractDetailFromHtml(html: string, pageUrl: string): {
   if (city && /ключ|комплект|обременен|птс|псм/i.test(city)) city = null
   if (city && !isPlausibleCity(city)) city = null
 
-  // Кузов: тип кузова (Внедорожник, Седан и т.д.), не «Количество ключей»
-  let bodyColor =
-    plainText.match(/Кузов\s*[\s:]*([А-Яа-яЁёA-Za-z\s\-]{2,30}?)(?:\s|$|\d|Количество)/i)?.[1]?.trim() ?? null
+  // Цвет: только поле «Цвет». НЕ «Кузов» — там тип кузова.
+  const colorMatch =
+    plainText.match(/Цвет\s*[\s:]*([А-Яа-яЁёA-Za-z\s\-]{2,30}?)(?:\s|$|\d|Кузов|Коробка|Объем)/i)?.[1]?.trim() ??
+    html.match(/Цвет\s*<\/[^>]+>[\s\S]{0,60}?([А-Яа-яЁёA-Za-z\s\-]{2,30})/i)?.[1]?.trim() ??
+    null
+  let bodyColor = colorMatch || null
   if (bodyColor && /ключ|комплект|количество/i.test(bodyColor)) bodyColor = null
+  if (bodyColor && /^(мусоровоз|седан|внедорожник|грузовой|бортовой|фургон|пикап|универсал|хэтчбек|автобус|автокран|бульдозер|экскаватор)/i.test(bodyColor)) bodyColor = null
+
+  // Тип кузова: Мусоровоз, Седан, Внедорожник и т.д. — из поля «Кузов».
+  const bodyTypeMatch =
+    plainText.match(/Кузов\s*[\s:]*([А-Яа-яЁёA-Za-z0-9\s\-\(\)\/]{2,50}?)(?:\s|$|\d|Количество|Цвет|Объем)/i)?.[1]?.trim() ??
+    html.match(/Кузов\s*<\/[^>]+>[\s\S]{0,80}?([А-Яа-яЁёA-Za-z0-9\s\-\(\)\/]{2,50})/i)?.[1]?.trim() ??
+    null
+  let bodyType = bodyTypeMatch || null
+  if (bodyType && /ключ|комплект|количество/i.test(bodyType)) bodyType = null
 
   // Объем двигателя: только из блока «Объем двигателя», не из «Количество ключей»
   const engineMatch = plainText.match(/Объем\s+двигателя\s*[\s:]*([\d.,]+\s*(?:л\.?)?)/i)?.[1]?.trim()
@@ -681,12 +810,13 @@ function extractDetailFromHtml(html: string, pageUrl: string): {
       ? [engineVolume, fuelNormalized].filter(Boolean).join(', ')
       : null
 
-  // Колёсная/Колесная формула (для грузовиков 4x2, 6x4 и т.д.) или привод (передний/задний/полный)
-  const drivetrainMatch =
-    plainText.match(/Кол[её]сная\s+формула\s*[\s:]*([A-Za-zА-Яа-я0-9xXхХ\s\-]{2,30}?)(?:\s|$|\d|Кузов|Коробка)/i)?.[1]?.trim() ??
-    plainText.match(/Привод\s*[\s:]*([A-Za-zА-Яа-я0-9xX\s\-]{2,30}?)(?:\s|$|\d|Кузов|Коробка)/i)?.[1]?.trim() ??
-    null
-  const drivetrain = drivetrainMatch?.replace(/\s+/g, ' ').trim() || null
+  // Колёсная формула (4x4, 6x4, 4x2) — ловим полную формулу, не обрезаем на 4x.
+  // Привод (передний/задний/полный) — для легковых.
+  const wheelFormulaMatch = plainText.match(/Кол[её]сная\s+формула\s*[\s:]*(\d+[xхX]\d+)/i)?.[1]?.trim()
+  const driveMatch =
+    !wheelFormulaMatch &&
+    (plainText.match(/Привод\s*[\s:]*([А-Яа-яЁёA-Za-z0-9\s\-]{2,30}?)(?:\s|$|Кузов|Коробка|Объем)/i)?.[1]?.trim() ?? null)
+  const drivetrain = (wheelFormulaMatch || driveMatch)?.replace(/\s+/g, ' ').trim() || null
 
   // Коробка передач / КПП
   const transmissionMatch =
@@ -714,6 +844,7 @@ function extractDetailFromHtml(html: string, pageUrl: string): {
     imageUrl,
     city: city ?? null,
     bodyColor: bodyColor || null,
+    bodyType: bodyType || null,
     engine: engine || null,
     drivetrain: drivetrain || null,
     transmission: transmission || null,
@@ -834,7 +965,7 @@ async function enrichAndCollectListing(
       data.originalPrice = domPrice.originalPrice
     }
 
-    const title = data.title && isRealCarTitle(data.title) ? data.title : null
+    const title = data.title && looksLikeVehicleTitle(data.title) ? data.title : null
     if (!title) {
       console.warn(`  skip (no title): ${detailUrl}`)
       return null
@@ -842,6 +973,9 @@ async function enrichAndCollectListing(
 
     const wheelFormulaFromTitle = title.match(/\d+[xхX]\d+/)?.[0] ?? null
     const drivetrain = data.drivetrain?.trim() || wheelFormulaFromTitle || null
+
+    const { cleanedTitle, bodyTypeRu } = extractBodyTypeSuffixFromTitle(title)
+    const bodyType = data.bodyType?.trim() || bodyTypeRu || null
 
     const MIN_VEHICLE_PRICE = 100_000
     if (!data.price || data.price < MIN_VEHICLE_PRICE) {
@@ -860,7 +994,7 @@ async function enrichAndCollectListing(
 
     const listing: ScrapedListing = {
       external_id: buildExternalId(detailUrl),
-      title: sanitizeTitle(title),
+      title: cleanedTitle,
       price: data.price,
       original_price: data.originalPrice ?? null,
       mileage: data.mileage,
@@ -875,6 +1009,7 @@ async function enrichAndCollectListing(
       transmission: data.transmission ?? null,
       drivetrain,
       body_color: data.bodyColor,
+      body_type: bodyType,
     }
 
     return listing
@@ -1014,6 +1149,7 @@ async function run(): Promise<void> {
       if (listing.transmission != null) row.transmission = listing.transmission
       if (listing.drivetrain != null) row.drivetrain = listing.drivetrain
       if (listing.body_color != null) row.body_color = listing.body_color
+      if (listing.body_type != null) row.body_type = listing.body_type
       return row
     })
 

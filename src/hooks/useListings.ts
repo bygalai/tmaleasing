@@ -22,6 +22,7 @@ type ListingsRow = {
   transmission: string | null
   drivetrain: string | null
   body_color: string | null
+  body_type: string | null
   source: string | null
   /** Supabase returns FK relation as array (one row per listing); we use the first. */
   listing_price_analysis?:
@@ -199,22 +200,28 @@ function mapRowToListing(row: ListingsRow): Listing {
   const drivetrain = isTrailer ? null : normalizeDrivetrain(row.drivetrain)
   const transmission = isTrailer ? null : normalizeTransmission(row.transmission)
   const bodyColor = (row.body_color ?? '').replace(/\s+обивка\s*$/gi, '').trim() || null
+  const bodyType = (row.body_type ?? '').trim() || null
+  // Подзаголовок: тип кузова (если есть) + цвет + двигатель + КПП + привод/колёсная формула
   const subtitleParts = isTrailer
     ? [bodyColor].filter((part): part is string => Boolean(part && part.trim()))
-    : [bodyColor, engine, transmission, drivetrain].filter(
+    : [bodyType, bodyColor, engine, transmission, drivetrain].filter(
         (part): part is string => Boolean(part && part.trim()),
       )
   const subtitleFallback = isTrailer ? 'Прицеп / полуприцеп' : 'Проверенный лот'
 
   const bodyColorForDescription = lowercaseFirstLetter(bodyColor)
+  const bodyTypeForDescription = lowercaseFirstLetter(bodyType)
   const drivetrainForDescription = lowercaseFirstLetter(drivetrain)
-  // В парсере Газпрома в body_color попадает тип кузова (внедорожник, лифтбэк и т.д.) — выводим как «Тип кузова», не как «Цвет».
-  const bodyColorOrTypeLine =
-    bodyColorForDescription == null
-      ? null
-      : isBodyType(bodyColor)
+  // body_type — явный тип кузова (Мусоровоз, Седан и т.д.). body_color — цвет.
+  // Обратная совместимость: если body_type пуст, а в body_color попал тип кузова (старые данные) — показываем как «Тип кузова».
+  const bodyTypeLine =
+    bodyTypeForDescription != null
+      ? `Тип кузова: ${bodyTypeForDescription}`
+      : bodyColorForDescription != null && isBodyType(bodyColor)
         ? `Тип кузова: ${bodyColorForDescription}`
-        : `Цвет: ${bodyColorForDescription}`
+        : null
+  const bodyColorLine =
+    bodyColorForDescription != null && !isBodyType(bodyColor) ? `Цвет: ${bodyColorForDescription}` : null
 
   const descriptionParts = [
     row.city ? `Город: ${row.city}` : null,
@@ -231,7 +238,8 @@ function mapRowToListing(row: ListingsRow): Listing {
         ? `Привод: ${drivetrainForDescription}`
         : `Колёсная формула: ${drivetrainForDescription}`
       : null,
-    bodyColorOrTypeLine,
+    bodyTypeLine,
+    bodyColorLine,
     row.vin ? `VIN: ${row.vin}` : null,
   ].filter((part): part is string => Boolean(part))
 
@@ -320,7 +328,7 @@ export function useListings() {
         const { data, error: supabaseError } = await supabase
           .from('listings')
           .select(
-            'id,category,title,price,original_price,mileage,year,images,listing_url,created_at,city,vin,engine,transmission,drivetrain,body_color,source,listing_price_analysis(market_low,market_avg,market_high,sample_size)',
+            'id,category,title,price,original_price,mileage,year,images,listing_url,created_at,city,vin,engine,transmission,drivetrain,body_color,body_type,source,listing_price_analysis(market_low,market_avg,market_high,sample_size)',
           )
           .not('price', 'is', null)
           .order('created_at', { ascending: false })
