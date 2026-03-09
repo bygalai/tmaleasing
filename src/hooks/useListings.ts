@@ -372,6 +372,20 @@ export function useListings() {
 
         const mapped = ordered.map(mapRowToListing)
 
+        // Debug: expose items and per-category counts in browser console
+        if (typeof window !== 'undefined') {
+          const anyWindow = window as unknown as { __tmaListings?: Listing[] }
+          anyWindow.__tmaListings = mapped
+
+          const byCategory: Record<string, number> = {}
+          for (const item of mapped) {
+            const cat = item.category ?? 'legkovye'
+            byCategory[cat] = (byCategory[cat] ?? 0) + 1
+          }
+          // eslint-disable-next-line no-console
+          console.log('useListings: items by category', byCategory)
+        }
+
         if (!cancelled) {
           setItems(mapped)
         }
