@@ -1125,8 +1125,10 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
         maxPagesLimit > 0
           ? maxPagesLimit
           : Math.ceil(targetCount / itemsPerPage) + 2
+      const useExplicitPaging = maxPagesLimit > 0
 
       const allUrls = new Set<string>()
+      let emptyPagesInARow = 0
       for (let pageNum = 1; pageNum <= maxPages; pageNum += 1) {
         const url =
           pageNum === 1
@@ -1140,13 +1142,24 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
           throw navErr
         }
         await sleep(process.env.CI ? 4000 : 6000)
-        const pageUrls = await expandCatalogUntilStable(page, () => extractDetailUrlsFromPage(page), 10)
+
+        // В режиме явного управления количеством страниц (GAZPROMP_MAX_PAGES > 0)
+        // не трогаем кнопку «Показать ещё» и не скроллим бесконечно — сайт сам даёт по ~N лотов на страницу.
+        const pageUrls = useExplicitPaging
+          ? await extractDetailUrlsFromPage(page)
+          : await expandCatalogUntilStable(page, () => extractDetailUrlsFromPage(page), 10)
+
         const before = allUrls.size
         for (const u of pageUrls) allUrls.add(u)
         const added = allUrls.size - before
         console.log(`  Page ${pageNum}: +${added} links (total ${allUrls.size})`)
-        if (pageNum > 1 && maxPagesLimit > 0 && added === 0) break
-        if (maxPagesLimit === 0) {
+
+        if (useExplicitPaging) {
+          // Если явно задали количество страниц, но на нескольких подряд не появляется ничего нового —
+          // считаем, что каталог закончился раньше заявленного лимита.
+          emptyPagesInARow = added === 0 ? emptyPagesInARow + 1 : 0
+          if (emptyPagesInARow >= 2) break
+        } else {
           if (added === 0 && pageNum > 1) break
           if (allUrls.size >= targetCount) break
         }
