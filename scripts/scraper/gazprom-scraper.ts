@@ -49,14 +49,18 @@ const SOURCE = 'gazprom'
 const GAZPROM_BASE_URL = 'https://autogpbl.ru'
 const ALLOWED_DOMAIN = 'autogpbl.ru'
 
-/** Секции каталога: легковые, грузовые, спецтехника, прицепы. */
+/**
+ * Секции каталога: легковые, грузовые, спецтехника, прицепы.
+ * condition=100000002 — «с пробегом», даёт пагинацию ?page=1,2,... (12 лотов на страницу).
+ * Без condition — load-more, нестабильно и меньше лотов.
+ */
 const GAZPROM_SECTIONS: Array<{ catalogUrl: string; category: string }> = [
   {
-    catalogUrl: 'https://autogpbl.ru/avtomobili-i-tekhnika-s-probegom/?filter-type=4',
+    catalogUrl: 'https://autogpbl.ru/avtomobili-i-tekhnika-s-probegom/?condition=100000002&filter-type=4',
     category: 'legkovye',
   },
   {
-    catalogUrl: 'https://autogpbl.ru/avtomobili-i-tekhnika-s-probegom/?filter-type=6',
+    catalogUrl: 'https://autogpbl.ru/avtomobili-i-tekhnika-s-probegom/?condition=100000002&filter-type=6',
     category: 'gruzovye',
   },
   {
@@ -1119,13 +1123,9 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
       const maxPagesRaw = Number(process.env.GAZPROMP_MAX_PAGES ?? '0')
       const maxPagesLimit =
         Number.isFinite(maxPagesRaw) && maxPagesRaw > 0 ? Math.min(maxPagesRaw, 50) : 0
-      const targetCount = maxPerSection > 0 ? maxPerSection : 200
-      const itemsPerPage = 12
+      // С condition=100000002 каталог пагинируется через ?page=N, по 12 лотов на страницу. Load-more нет.
       const maxPages =
-        maxPagesLimit > 0
-          ? maxPagesLimit
-          : Math.ceil(targetCount / itemsPerPage) + 2
-      const useExplicitPaging = maxPagesLimit > 0
+        maxPagesLimit > 0 ? maxPagesLimit : 60
 
       const allUrls = new Set<string>()
       let emptyPagesInARow = 0
@@ -1141,29 +1141,18 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
           if (pageNum > 1) break
           throw navErr
         }
-        await sleep(process.env.CI ? 4000 : 6000)
+        await sleep(process.env.CI ? 3000 : 4500)
 
-        // В режиме явного управления количеством страниц (GAZPROMP_MAX_PAGES > 0)
-        // не трогаем кнопку «Показать ещё» и не скроллим бесконечно — сайт сам даёт по ~N лотов на страницу.
-        const pageUrls = useExplicitPaging
-          ? await extractDetailUrlsFromPage(page)
-          : await expandCatalogUntilStable(page, () => extractDetailUrlsFromPage(page), 10)
-
+        const pageUrls = await extractDetailUrlsFromPage(page)
         const before = allUrls.size
         for (const u of pageUrls) allUrls.add(u)
         const added = allUrls.size - before
         console.log(`  Page ${pageNum}: +${added} links (total ${allUrls.size})`)
 
-        if (useExplicitPaging) {
-          // Если явно задали количество страниц, но на нескольких подряд не появляется ничего нового —
-          // считаем, что каталог закончился раньше заявленного лимита.
-          emptyPagesInARow = added === 0 ? emptyPagesInARow + 1 : 0
-          if (emptyPagesInARow >= 2) break
-        } else {
-          if (added === 0 && pageNum > 1) break
-          if (allUrls.size >= targetCount) break
-        }
-        await randomDelay(600, 1200)
+        emptyPagesInARow = added === 0 ? emptyPagesInARow + 1 : 0
+        if (emptyPagesInARow >= 2) break
+        if (maxPagesLimit > 0 && pageNum >= maxPagesLimit) break
+        await randomDelay(500, 1000)
       }
 
       const detailUrls = [...allUrls]
