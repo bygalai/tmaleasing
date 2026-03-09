@@ -1092,6 +1092,29 @@ async function enrichAndCollectListing(
   }
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T | null> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null
+  const timeoutPromise = new Promise<null>((resolve) => {
+    timeoutId = setTimeout(() => {
+      console.warn(`  timeout after ${ms}ms: ${label}`)
+      resolve(null)
+    }, ms)
+  })
+
+  return Promise.race([
+    promise
+      .then((value) => {
+        if (timeoutId != null) clearTimeout(timeoutId)
+        return value
+      })
+      .catch((err) => {
+        if (timeoutId != null) clearTimeout(timeoutId)
+        throw err
+      }),
+    timeoutPromise,
+  ])
+}
+
 // --- main scrape loop ---
 
 async function scrapeListings(): Promise<ScrapedListing[]> {
@@ -1170,7 +1193,11 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
         if (shutdownRequested) break
         if (collected.has(buildExternalId(url))) continue
 
-        const listing = await enrichAndCollectListing(page, url, section.category)
+        const listing = await withTimeout(
+          enrichAndCollectListing(page, url, section.category),
+          5 * 60_000,
+          `detail ${url}`
+        )
         if (listing) {
           collected.set(listing.external_id, listing)
           console.log(
