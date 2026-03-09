@@ -337,6 +337,25 @@ export function useListings() {
 
         const rows = (data ?? []) as ListingsRow[]
 
+        // Debug: what exactly вернул Supabase по категориям и источникам
+        if (typeof window !== 'undefined') {
+          const anyWindow = window as unknown as {
+            __tmaRows?: ListingsRow[]
+            __tmaDeduped?: ListingsRow[]
+          }
+          anyWindow.__tmaRows = rows
+
+          const rawCounts: Record<string, number> = {}
+          for (const row of rows) {
+            const cat = (row.category ?? 'null').toString()
+            const src = (row.source ?? 'null').toString().toLowerCase()
+            const key = `${src}:${cat}`
+            rawCounts[key] = (rawCounts[key] ?? 0) + 1
+          }
+          // eslint-disable-next-line no-console
+          console.log('useListings: raw rows by source/category', rawCounts)
+        }
+
         // The source can contain duplicates (e.g. same VIN posted multiple times).
         // Since we sort by created_at desc, keep the newest row per VIN.
         // When VIN is missing (common for спецтехника), dedupe by title+year+mileage to avoid identical listings.
@@ -369,6 +388,14 @@ export function useListings() {
           (row) => row.source?.trim().toLowerCase() === europlanKey,
         )
         const ordered = [...nonEuroplan, ...europlan]
+
+        if (typeof window !== 'undefined') {
+          const anyWindow = window as unknown as {
+            __tmaRows?: ListingsRow[]
+            __tmaDeduped?: ListingsRow[]
+          }
+          anyWindow.__tmaDeduped = ordered
+        }
 
         const mapped = ordered.map(mapRowToListing)
 
