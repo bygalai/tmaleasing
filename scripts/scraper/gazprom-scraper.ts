@@ -16,6 +16,7 @@ import dotenv from 'dotenv'
 import puppeteer from 'puppeteer-extra'
 import StealthPlugin from 'puppeteer-extra-plugin-stealth'
 import { createClient } from '@supabase/supabase-js'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Page } from 'puppeteer'
 
 dotenv.config({ path: resolve(process.cwd(), '.env') })
@@ -181,6 +182,43 @@ type ScrapedListing = {
   drivetrain: string | null
   body_color: string | null
   body_type: string | null
+}
+
+function listingToRow(listing: ScrapedListing): Record<string, unknown> {
+  const row: Record<string, unknown> = {
+    external_id: listing.external_id,
+    title: listing.title,
+    listing_url: listing.listing_url,
+    source: listing.source,
+    category: listing.category,
+    images: listing.images,
+  }
+  if (listing.price != null) row.price = listing.price
+  if (listing.original_price != null) row.original_price = listing.original_price
+  if (listing.mileage != null) row.mileage = listing.mileage
+  if (listing.year != null) row.year = listing.year
+  if (listing.city != null) row.city = listing.city
+  if (listing.vin != null) row.vin = listing.vin
+  if (listing.engine != null) row.engine = listing.engine
+  if (listing.transmission != null) row.transmission = listing.transmission
+  if (listing.drivetrain != null) row.drivetrain = listing.drivetrain
+  if (listing.body_color != null) row.body_color = listing.body_color
+  if (listing.body_type != null) row.body_type = listing.body_type
+  return row
+}
+
+const UPSERT_BATCH_SIZE = 500
+
+async function upsertListings(
+  supabase: SupabaseClient,
+  listings: ScrapedListing[]
+): Promise<void> {
+  if (listings.length === 0) return
+  for (let i = 0; i < listings.length; i += UPSERT_BATCH_SIZE) {
+    const batch = listings.slice(i, i + UPSERT_BATCH_SIZE).map(listingToRow)
+    const { error } = await supabase.from('listings').upsert(batch, { onConflict: 'external_id' })
+    if (error) throw error
+  }
 }
 
 // --- env & supabase ---
@@ -1121,7 +1159,7 @@ function withTimeout<T>(
 
 // --- main scrape loop ---
 
-async function scrapeListings(): Promise<ScrapedListing[]> {
+async function scrapeListings(supabase: SupabaseClient): Promise<Set<string>> {
   const isCI = !!process.env.CI
   const browser = await puppeteer.launch({
     headless: isCI,
@@ -1132,12 +1170,25 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
     ],
   })
 
-  const page = await browser.newPage()
+  let page = await browser.newPage()
   await configurePageForStealth(page)
   page.setDefaultNavigationTimeout(90_000)
   page.setDefaultTimeout(45_000)
 
   const collected = new Map<string, ScrapedListing>()
+  const allScrapedIds = new Set<string>()
+  const PAGE_REFRESH_INTERVAL = 200
+  let cardsSinceRefresh = 0
+
+  const refreshPage = async (): Promise<void> => {
+    await page.close()
+    page = await browser.newPage()
+    await configurePageForStealth(page)
+    page.setDefaultNavigationTimeout(90_000)
+    page.setDefaultTimeout(45_000)
+    cardsSinceRefresh = 0
+    console.log('  [memory] page recreated')
+  }
 
   try {
     for (const section of GAZPROM_SECTIONS) {
@@ -1201,6 +1252,10 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
           continue
         }
 
+        if (cardsSinceRefresh >= PAGE_REFRESH_INTERVAL) {
+          await refreshPage()
+        }
+
         const { value: listing, timedOut } = await withTimeout(
           enrichAndCollectListing(page, url, section.category),
           60_000,
@@ -1218,6 +1273,7 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
           }
         }
 
+        cardsSinceRefresh += 1
         if (listing) {
           collected.set(listing.external_id, listing)
           console.log(
@@ -1226,11 +1282,21 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
         }
         await randomDelay(400, 900)
       }
+
+      const sectionListings = [...collected.values()].filter((l) => l.category === section.category)
+      if (sectionListings.length > 0) {
+        await upsertListings(supabase, sectionListings)
+        for (const l of sectionListings) {
+          allScrapedIds.add(l.external_id)
+          collected.delete(l.external_id)
+        }
+        console.log(`  [supabase] upserted ${sectionListings.length} ${section.category}`)
+      }
       await randomDelay(800, 1800)
     }
 
-    console.log(`\nScraped ${collected.size} unique listings from Gazprom.`)
-    return [...collected.values()]
+    console.log(`\nScraped ${allScrapedIds.size} unique listings from Gazprom.`)
+    return allScrapedIds
   } finally {
     await page.close()
     await browser.close()
@@ -1252,46 +1318,11 @@ async function run(): Promise<void> {
   const supabase = createClient(supabaseUrl, supabaseKey)
 
   try {
-    const listings = await scrapeListings()
-
-    if (listings.length === 0) {
-      console.log('No listings to upsert.')
+    const scrapedIds = await scrapeListings(supabase)
+    if (scrapedIds.size === 0) {
+      console.log('No listings scraped, skipping cleanup.')
       return
     }
-
-    const upsertPayload = listings.map((listing) => {
-      const row: Record<string, unknown> = {
-        external_id: listing.external_id,
-        title: listing.title,
-        listing_url: listing.listing_url,
-        source: listing.source,
-        category: listing.category,
-        images: listing.images,
-      }
-      if (listing.price != null) row.price = listing.price
-      if (listing.original_price != null) row.original_price = listing.original_price
-      if (listing.mileage != null) row.mileage = listing.mileage
-      if (listing.year != null) row.year = listing.year
-      if (listing.city != null) row.city = listing.city
-      if (listing.vin != null) row.vin = listing.vin
-      if (listing.engine != null) row.engine = listing.engine
-      if (listing.transmission != null) row.transmission = listing.transmission
-      if (listing.drivetrain != null) row.drivetrain = listing.drivetrain
-      if (listing.body_color != null) row.body_color = listing.body_color
-      if (listing.body_type != null) row.body_type = listing.body_type
-      return row
-    })
-
-    const BATCH_SIZE = 500
-    for (let i = 0; i < upsertPayload.length; i += BATCH_SIZE) {
-      const batch = upsertPayload.slice(i, i + BATCH_SIZE)
-      const { error } = await supabase.from('listings').upsert(batch, { onConflict: 'external_id' })
-      if (error) throw error
-    }
-
-    console.log(`Upserted ${listings.length} Gazprom listings.`)
-
-    const scrapedIds = new Set(listings.map((l) => l.external_id))
 
     const { data: existingRows } = await supabase
       .from('listings')
