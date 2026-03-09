@@ -1133,7 +1133,7 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
         const url =
           pageNum === 1
             ? section.catalogUrl
-            : withPagination(section.catalogUrl, pageNum, 'PAGEN_1')
+            : withPagination(section.catalogUrl, pageNum, 'page')
         try {
           await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 })
         } catch (navErr) {
