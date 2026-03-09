@@ -325,17 +325,42 @@ export function useListings() {
 
       try {
         const supabase = getSupabaseClient()
-        const { data, error: supabaseError } = await supabase
-          .from('listings')
-          .select(
-            'id,category,title,price,original_price,mileage,year,images,listing_url,created_at,city,vin,engine,transmission,drivetrain,body_color,body_type,source,listing_price_analysis(market_low,market_avg,market_high,sample_size)',
-          )
-          .not('price', 'is', null)
-          .order('created_at', { ascending: false })
 
-        if (supabaseError) throw supabaseError
+        // Supabase SaaS по умолчанию отдаёт максимум ~1000 строк за запрос.
+        // Собираем данные батчами по 1000, чтобы поддерживать до 10k лотов.
+        const PAGE_SIZE = 1000
+        const MAX_ITEMS = 10_000
+        const allRows: ListingsRow[] = []
+        let from = 0
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          const { data, error: supabaseError, count } = await supabase
+            .from('listings')
+            .select(
+              'id,category,title,price,original_price,mileage,year,images,listing_url,created_at,city,vin,engine,transmission,drivetrain,body_color,body_type,source,listing_price_analysis(market_low,market_avg,market_high,sample_size)',
+              { count: from === 0 ? 'exact' : 'none' },
+            )
+            .order('created_at', { ascending: false })
+            .range(from, from + PAGE_SIZE - 1)
 
-        const rows = (data ?? []) as ListingsRow[]
+          if (supabaseError) throw supabaseError
+
+          const batch = (data ?? []) as ListingsRow[]
+          allRows.push(...batch)
+
+          if (batch.length < PAGE_SIZE || allRows.length >= MAX_ITEMS) {
+            // eslint-disable-next-line no-console
+            console.log(
+              'useListings: fetched rows',
+              allRows.length,
+              typeof count === 'number' ? `(server count ≈ ${count})` : '',
+            )
+            break
+          }
+          from += PAGE_SIZE
+        }
+
+        const rows = allRows
 
         // Debug: what exactly вернул Supabase по категориям и источникам
         if (typeof window !== 'undefined') {
