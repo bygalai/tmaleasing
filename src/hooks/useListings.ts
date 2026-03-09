@@ -332,18 +332,24 @@ export function useListings() {
         const MAX_ITEMS = 10_000
         const allRows: ListingsRow[] = []
         let from = 0
+        let totalCount: number | null = null
         // eslint-disable-next-line no-constant-condition
         while (true) {
-          const { data, error: supabaseError, count } = await supabase
+          const query = supabase
             .from('listings')
             .select(
               'id,category,title,price,original_price,mileage,year,images,listing_url,created_at,city,vin,engine,transmission,drivetrain,body_color,body_type,source,listing_price_analysis(market_low,market_avg,market_high,sample_size)',
-              { count: from === 0 ? 'exact' : 'none' },
+              from === 0 ? { count: 'exact' as const } : undefined,
             )
             .order('created_at', { ascending: false })
             .range(from, from + PAGE_SIZE - 1)
 
+          const { data, error: supabaseError, count } = await query
           if (supabaseError) throw supabaseError
+
+          if (from === 0 && typeof count === 'number') {
+            totalCount = count
+          }
 
           const batch = (data ?? []) as ListingsRow[]
           allRows.push(...batch)
@@ -353,7 +359,7 @@ export function useListings() {
             console.log(
               'useListings: fetched rows',
               allRows.length,
-              typeof count === 'number' ? `(server count ≈ ${count})` : '',
+              totalCount != null ? `(server count ≈ ${totalCount})` : '',
             )
             break
           }
