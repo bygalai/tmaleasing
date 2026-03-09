@@ -1192,10 +1192,14 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
       for (const url of urlsToProcess) {
         if (shutdownRequested) break
         if (collected.has(buildExternalId(url))) continue
+        if (/prolift/i.test(url)) {
+          console.warn(`  skip (known problematic): ${url}`)
+          continue
+        }
 
         const listing = await withTimeout(
           enrichAndCollectListing(page, url, section.category),
-          5 * 60_000,
+          90_000,
           `detail ${url}`
         )
         if (listing) {
