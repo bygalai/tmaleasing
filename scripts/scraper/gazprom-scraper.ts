@@ -1249,6 +1249,7 @@ async function scrapeListings(supabase: SupabaseClient): Promise<Set<string>> {
         if (collected.has(buildExternalId(url))) continue
         if (/prolift|richtrak/i.test(url)) {
           console.warn(`  skip (known problematic): ${url}`)
+          await refreshPage()
           continue
         }
 
