@@ -1092,12 +1092,16 @@ async function enrichAndCollectListing(
   }
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T | null> {
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string
+): Promise<{ value: T | null; timedOut: boolean }> {
   let timeoutId: ReturnType<typeof setTimeout> | null = null
-  const timeoutPromise = new Promise<null>((resolve) => {
+  const timeoutPromise = new Promise<{ value: null; timedOut: true }>((resolve) => {
     timeoutId = setTimeout(() => {
       console.warn(`  timeout after ${ms}ms: ${label}`)
-      resolve(null)
+      resolve({ value: null, timedOut: true })
     }, ms)
   })
 
@@ -1105,7 +1109,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
     promise
       .then((value) => {
         if (timeoutId != null) clearTimeout(timeoutId)
-        return value
+        return { value, timedOut: false as const }
       })
       .catch((err) => {
         if (timeoutId != null) clearTimeout(timeoutId)
@@ -1192,16 +1196,28 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
       for (const url of urlsToProcess) {
         if (shutdownRequested) break
         if (collected.has(buildExternalId(url))) continue
-        if (/prolift/i.test(url)) {
+        if (/prolift|richtrak/i.test(url)) {
           console.warn(`  skip (known problematic): ${url}`)
           continue
         }
 
-        const listing = await withTimeout(
+        const { value: listing, timedOut } = await withTimeout(
           enrichAndCollectListing(page, url, section.category),
-          90_000,
+          60_000,
           `detail ${url}`
         )
+
+        if (timedOut) {
+          try {
+            await Promise.race([
+              page.goto('about:blank', { waitUntil: 'domcontentloaded', timeout: 10_000 }),
+              sleep(12_000),
+            ])
+          } catch {
+            /* reset best-effort */
+          }
+        }
+
         if (listing) {
           collected.set(listing.external_id, listing)
           console.log(
