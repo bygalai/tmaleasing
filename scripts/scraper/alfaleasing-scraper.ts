@@ -1024,15 +1024,13 @@ async function scrapeListingsAndSync(supabase: SupabaseClient): Promise<void> {
       if (shutdownRequested) break
       console.log(`\n=== Section: ${section.category} (${section.catalogUrl}) ===`)
 
-      const visitedUrls = new Set<string>()
-      let currentUrl: string | null = section.catalogUrl
       let pageIndex = 0
 
-      while (currentUrl && pageIndex < maxPages) {
+      while (!shutdownRequested && pageIndex < maxPages) {
         if (shutdownRequested) break
-        if (visitedUrls.has(currentUrl)) break
-        visitedUrls.add(currentUrl)
         pageIndex += 1
+
+        const currentUrl = pageIndex === 1 ? section.catalogUrl : `${section.catalogUrl}?page=${pageIndex}`
 
         console.log(`\n--- Page ${pageIndex}/${maxPages}: ${currentUrl} ---`)
 
@@ -1049,6 +1047,11 @@ async function scrapeListingsAndSync(supabase: SupabaseClient): Promise<void> {
 
         const detailItems = await extractDetailUrlsWithCardData(page, section.detailPrefix)
         console.log(`Found ${detailItems.length} detail links on page`)
+
+        if (detailItems.length === 0) {
+          console.log('No detail links found, stopping pagination for this section.')
+          break
+        }
 
         for (const { url, cardData } of detailItems) {
           if (shutdownRequested) break
@@ -1073,9 +1076,6 @@ async function scrapeListingsAndSync(supabase: SupabaseClient): Promise<void> {
           await randomDelay(400, 900)
         }
 
-        const nextUrl = await extractNextPageUrl(page, currentUrl)
-        if (!nextUrl || visitedUrls.has(nextUrl)) break
-        currentUrl = nextUrl
         await randomDelay(800, 1800)
       }
     }
