@@ -1151,7 +1151,8 @@ function withTimeout<T>(
       })
       .catch((err) => {
         if (timeoutId != null) clearTimeout(timeoutId)
-        throw err
+        console.warn(`  error in ${label}:`, err)
+        return { value: null, timedOut: false as const }
       }),
     timeoutPromise,
   ])
@@ -1178,6 +1179,7 @@ async function scrapeListings(supabase: SupabaseClient): Promise<Set<string>> {
   const collected = new Map<string, ScrapedListing>()
   const allScrapedIds = new Set<string>()
   const PAGE_REFRESH_INTERVAL = 200
+  const DETAIL_TIMEOUT_MS = 30_000
   let cardsSinceRefresh = 0
 
   const refreshPage = async (): Promise<void> => {
@@ -1195,105 +1197,113 @@ async function scrapeListings(supabase: SupabaseClient): Promise<Set<string>> {
       if (shutdownRequested) break
       console.log(`\n=== Section: ${section.category} (${section.catalogUrl}) ===`)
 
-      const maxPerSectionRaw = Number(process.env.GAZPROMP_MAX_PER_SECTION ?? '0')
-      const maxPerSection =
-        Number.isFinite(maxPerSectionRaw) && maxPerSectionRaw > 0 ? maxPerSectionRaw : 0
-      const maxPagesRaw = Number(process.env.GAZPROMP_MAX_PAGES ?? '0')
-      const maxPagesLimit =
-        Number.isFinite(maxPagesRaw) && maxPagesRaw > 0 ? Math.min(maxPagesRaw, 50) : 0
-      // С condition=100000002 каталог пагинируется через ?page=N, по 12 лотов на страницу. Load-more нет.
-      const maxPages =
-        maxPagesLimit > 0 ? maxPagesLimit : 60
+      try {
+        const maxPerSectionRaw = Number(process.env.GAZPROMP_MAX_PER_SECTION ?? '0')
+        const maxPerSection =
+          Number.isFinite(maxPerSectionRaw) && maxPerSectionRaw > 0 ? maxPerSectionRaw : 0
+        const maxPagesRaw = Number(process.env.GAZPROMP_MAX_PAGES ?? '0')
+        const maxPagesLimit =
+          Number.isFinite(maxPagesRaw) && maxPagesRaw > 0 ? Math.min(maxPagesRaw, 50) : 0
+        // С condition=100000002 каталог пагинируется через ?page=N, по 12 лотов на страницу. Load-more нет.
+        const maxPages =
+          maxPagesLimit > 0 ? maxPagesLimit : 60
 
-      const allUrls = new Set<string>()
-      let emptyPagesInARow = 0
-      for (let pageNum = 1; pageNum <= maxPages; pageNum += 1) {
-        const url =
-          pageNum === 1
-            ? section.catalogUrl
-            : withPagination(section.catalogUrl, pageNum, 'page')
-        try {
-          await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 })
-        } catch (navErr) {
-          if (isShutdownError(navErr)) break
-          if (pageNum > 1) break
-          throw navErr
-        }
-        await sleep(process.env.CI ? 3000 : 4500)
-
-        const pageUrls = await extractDetailUrlsFromPage(page)
-        const before = allUrls.size
-        for (const u of pageUrls) allUrls.add(u)
-        const added = allUrls.size - before
-        console.log(`  Page ${pageNum}: +${added} links (total ${allUrls.size})`)
-
-        emptyPagesInARow = added === 0 ? emptyPagesInARow + 1 : 0
-        if (emptyPagesInARow >= 2) break
-        if (maxPagesLimit > 0 && pageNum >= maxPagesLimit) break
-        await randomDelay(500, 1000)
-      }
-
-      const detailUrls = [...allUrls]
-      const urlsToProcess = maxPerSection > 0 ? detailUrls.slice(0, maxPerSection) : detailUrls
-      if (maxPerSection > 0 || maxPagesLimit > 0) {
-        const limits: string[] = []
-        if (maxPerSection > 0) limits.push(`max_listings=${maxPerSection}`)
-        if (maxPagesLimit > 0) limits.push(`pages=${maxPagesLimit}`)
-        console.log(`Found ${detailUrls.length} detail links, processing ${urlsToProcess.length} (${limits.join(', ')})`)
-      } else {
-        console.log(`Found ${detailUrls.length} detail links on catalog page`)
-      }
-
-      for (const url of urlsToProcess) {
-        if (shutdownRequested) break
-        if (collected.has(buildExternalId(url))) continue
-        if (/prolift|richtrak/i.test(url)) {
-          console.warn(`  skip (known problematic): ${url}`)
-          await refreshPage()
-          continue
-        }
-
-        if (cardsSinceRefresh >= PAGE_REFRESH_INTERVAL) {
-          await refreshPage()
-        }
-
-        const { value: listing, timedOut } = await withTimeout(
-          enrichAndCollectListing(page, url, section.category),
-          60_000,
-          `detail ${url}`
-        )
-
-        if (timedOut) {
+        const allUrls = new Set<string>()
+        let emptyPagesInARow = 0
+        for (let pageNum = 1; pageNum <= maxPages; pageNum += 1) {
+          const url =
+            pageNum === 1
+              ? section.catalogUrl
+              : withPagination(section.catalogUrl, pageNum, 'page')
           try {
-            await Promise.race([
-              page.goto('about:blank', { waitUntil: 'domcontentloaded', timeout: 10_000 }),
-              sleep(12_000),
-            ])
-          } catch {
-            /* reset best-effort */
+            await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 })
+          } catch (navErr) {
+            if (isShutdownError(navErr)) break
+            if (pageNum > 1) break
+            throw navErr
           }
+          await sleep(process.env.CI ? 3000 : 4500)
+
+          const pageUrls = await extractDetailUrlsFromPage(page)
+          const before = allUrls.size
+          for (const u of pageUrls) allUrls.add(u)
+          const added = allUrls.size - before
+          console.log(`  Page ${pageNum}: +${added} links (total ${allUrls.size})`)
+
+          emptyPagesInARow = added === 0 ? emptyPagesInARow + 1 : 0
+          if (emptyPagesInARow >= 2) break
+          if (maxPagesLimit > 0 && pageNum >= maxPagesLimit) break
+          await randomDelay(500, 1000)
         }
 
-        cardsSinceRefresh += 1
-        if (listing) {
-          collected.set(listing.external_id, listing)
+        const detailUrls = [...allUrls]
+        const urlsToProcess = maxPerSection > 0 ? detailUrls.slice(0, maxPerSection) : detailUrls
+        if (maxPerSection > 0 || maxPagesLimit > 0) {
+          const limits: string[] = []
+          if (maxPerSection > 0) limits.push(`max_listings=${maxPerSection}`)
+          if (maxPagesLimit > 0) limits.push(`pages=${maxPagesLimit}`)
           console.log(
-            `+ [${section.category}] ${listing.title} | ${listing.price ?? '?'} ₽ | ${listing.year ?? '?'} г. | ${listing.city ?? '—'}`
+            `Found ${detailUrls.length} detail links, processing ${urlsToProcess.length} (${limits.join(', ')})`
           )
+        } else {
+          console.log(`Found ${detailUrls.length} detail links on catalog page`)
         }
-        await randomDelay(400, 900)
-      }
 
-      const sectionListings = [...collected.values()].filter((l) => l.category === section.category)
-      if (sectionListings.length > 0) {
-        await upsertListings(supabase, sectionListings)
-        for (const l of sectionListings) {
-          allScrapedIds.add(l.external_id)
-          collected.delete(l.external_id)
+        for (const url of urlsToProcess) {
+          if (shutdownRequested) break
+          if (collected.has(buildExternalId(url))) continue
+          if (/prolift|richtrak/i.test(url)) {
+            console.warn(`  skip (known problematic): ${url}`)
+            await refreshPage()
+            continue
+          }
+
+          if (cardsSinceRefresh >= PAGE_REFRESH_INTERVAL) {
+            await refreshPage()
+          }
+
+          const { value: listing, timedOut } = await withTimeout(
+            enrichAndCollectListing(page, url, section.category),
+            DETAIL_TIMEOUT_MS,
+            `detail ${url}`
+          )
+
+          if (timedOut) {
+            try {
+              await refreshPage()
+            } catch {
+              /* reset best-effort */
+            }
+          }
+
+          cardsSinceRefresh += 1
+          if (listing) {
+            collected.set(listing.external_id, listing)
+            console.log(
+              `+ [${section.category}] ${listing.title} | ${listing.price ?? '?'} ₽ | ${listing.year ?? '?'} г. | ${
+                listing.city ?? '—'
+              }`
+            )
+          }
+          await randomDelay(400, 900)
         }
-        console.log(`  [supabase] upserted ${sectionListings.length} ${section.category}`)
+
+        const sectionListings = [...collected.values()].filter((l) => l.category === section.category)
+        if (sectionListings.length > 0) {
+          await upsertListings(supabase, sectionListings)
+          for (const l of sectionListings) {
+            allScrapedIds.add(l.external_id)
+            collected.delete(l.external_id)
+          }
+          console.log(`  [supabase] upserted ${sectionListings.length} ${section.category}`)
+        }
+        await randomDelay(800, 1800)
+      } catch (sectionErr) {
+        if (isShutdownError(sectionErr)) throw sectionErr
+        console.error(`Section ${section.category} failed:`, sectionErr)
+        await refreshPage()
+        continue
       }
-      await randomDelay(800, 1800)
     }
 
     console.log(`\nScraped ${allScrapedIds.size} unique listings from Gazprom.`)
