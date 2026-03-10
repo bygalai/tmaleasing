@@ -871,29 +871,12 @@ function extractDetailFromHtml(html: string, pageUrl: string): {
     null
 
   // Город, Кузов, Цвет, Двигатель — только из основного блока (не из фильтров сайдбара)
-  // Город может состоять из двух слов («Набережные Челны»), поэтому берём всю строку после «Город».
-  const cityLineMatch =
-    specsText.match(/Город\s*[:\-]?\s*([^\n\r]+)/i)?.[1] ??
-    html.match(/Город\s*<\/[^>]+>[\s\S]{0,80}?([^<]{2,60})</i)?.[1] ??
+  // Город может состоять из двух слов («Набережные Челны»), берём всё, что выглядит как название.
+  const cityMatch =
+    specsText.match(/Город\s*[:\-]?\s*([А-Яа-яЁёA-Za-z\-\s]{2,60})/i)?.[1] ??
+    html.match(/Город\s*<\/[^>]+>[\s\S]{0,80}?([А-Яа-яЁёA-Za-z\-\s]{2,60})</i)?.[1] ??
     null
-  let cityRaw = cityLineMatch ? cityLineMatch.replace(/\s+/g, ' ').trim() : null
-  if (cityRaw) {
-    cityRaw = cityRaw.replace(/\s+(Количество|Наличие|Пробег).*$/i, '')
-    cityRaw = cityRaw.replace(/\d+.*$/, '')
-    cityRaw = cityRaw.trim()
-  }
-  let city =
-    cityRaw ||
-    (specsText.match(/Город\s*[\s:]*([А-Яа-яЁё\-\s]{2,40}?)(?:$|\d|Количество|Наличие|Пробег)/i)?.[1]?.replace(
-      /\s+/g,
-      ' '
-    )?.trim() ??
-      html
-        .match(/Город\s*<\/[^>]+>[\s\S]{0,60}?([А-Яа-яЁё\-\s]{2,40})</i)
-        ?.[1]
-        ?.replace(/\s+/g, ' ')
-        ?.trim() ??
-      null)
+  let city = cityMatch ? cityMatch.replace(/\s+/g, ' ').trim() : null
   if (city && /ключ|комплект|обременен|птс|псм/i.test(city)) city = null
   if (city && !isPlausibleCity(city)) city = null
 
