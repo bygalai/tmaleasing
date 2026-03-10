@@ -890,7 +890,6 @@ async function scrollToLoadMore(page: Page): Promise<void> {
 
 async function loadAllCatalogItems(page: Page, maxIterations: number): Promise<void> {
   for (let i = 0; i < maxIterations; i += 1) {
-    if (typeof window === 'undefined') break
     const clicked = await page.evaluate(() => {
       const elements = Array.from(document.querySelectorAll<HTMLElement>('button, a'))
       const target = elements.find((el) => /Показать ещё/i.test((el.textContent || '').trim()))
