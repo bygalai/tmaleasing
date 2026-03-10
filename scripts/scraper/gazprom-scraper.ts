@@ -871,11 +871,18 @@ function extractDetailFromHtml(html: string, pageUrl: string): {
     null
 
   // Город, Кузов, Цвет, Двигатель — только из основного блока (не из фильтров сайдбара)
-  const cityMatch =
-    specsText.match(/Город\s*[\s:]*([А-Яа-яЁё\-\s]{2,40}?)(?:\s|$|\d|Количество|Наличие|Пробег)/i)?.[1]?.trim() ??
-    html.match(/Город\s*<\/[^>]+>[\s\S]{0,60}?([А-Яа-яЁё\-\s]{2,40})</i)?.[1]?.trim() ??
+  // Город может состоять из двух слов («Набережные Челны»), поэтому берём всю строку после «Город».
+  const cityLineMatch =
+    specsText.match(/Город\s*[:\-]?\s*([^\n\r]+)/i)?.[1] ??
+    html.match(/Город\s*<\/[^>]+>[\s\S]{0,80}?([^<]{2,60})</i)?.[1] ??
     null
-  let city = cityMatch?.replace(/\s+/g, ' ').trim() || null
+  let cityRaw = cityLineMatch ? cityLineMatch.replace(/\s+/g, ' ').trim() : null
+  if (cityRaw) {
+    cityRaw = cityRaw.replace(/\s+(Количество|Наличие|Пробег).*$/i, '')
+    cityRaw = cityRaw.replace(/\d+.*$/, '')
+    cityRaw = cityRaw.trim()
+  }
+  let city = cityRaw || null
   if (city && /ключ|комплект|обременен|птс|псм/i.test(city)) city = null
   if (city && !isPlausibleCity(city)) city = null
 
