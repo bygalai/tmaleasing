@@ -915,7 +915,7 @@ async function enrichAndCollectListing(
 ): Promise<ScrapedListing | null> {
   try {
     await page.goto(detailUrl, { waitUntil: 'domcontentloaded' })
-    await sleep(process.env.CI ? 3000 : 5000)
+    await sleep(process.env.CI ? 2000 : 4000)
     const html = await page.content()
 
     const jsonLd = extractJsonLdBlocks(html)
@@ -1027,8 +1027,8 @@ async function scrapeListingsAndSync(supabase: SupabaseClient): Promise<void> {
 
   const page = await browser.newPage()
   await configurePageForStealth(page)
-  page.setDefaultNavigationTimeout(90_000)
-  page.setDefaultTimeout(45_000)
+  page.setDefaultNavigationTimeout(60_000)
+  page.setDefaultTimeout(30_000)
 
   const scrapedIds = new Set<string>()
   const UPSERT_BATCH_SIZE = 200
@@ -1036,9 +1036,13 @@ async function scrapeListingsAndSync(supabase: SupabaseClient): Promise<void> {
   let totalListings = 0
   const maxLoadMoreIterations = Math.min(Number(process.env.ALFALEASING_MAX_PAGES) || 5, 50)
 
+  const maxRunSeconds = Number(process.env.ALFALEASING_MAX_RUN_SECONDS) || 3300 // ~55 минут
+  const startedAt = Date.now()
+  const isTimeExceeded = (): boolean => (Date.now() - startedAt) / 1000 >= maxRunSeconds
+
   try {
     for (const section of ALFALEASING_SECTIONS) {
-      if (shutdownRequested) break
+      if (shutdownRequested || isTimeExceeded()) break
       console.log(`\n=== Section: ${section.category} (${section.catalogUrl}) ===`)
 
       try {
@@ -1048,7 +1052,7 @@ async function scrapeListingsAndSync(supabase: SupabaseClient): Promise<void> {
         throw navErr
       }
 
-      await sleep(process.env.CI ? 2000 : 4000)
+      await sleep(process.env.CI ? 1500 : 3000)
       await scrollToLoadMore(page)
       await randomDelay(500, 1200)
 
@@ -1064,7 +1068,10 @@ async function scrapeListingsAndSync(supabase: SupabaseClient): Promise<void> {
       }
 
       for (const { url, cardData } of detailItems) {
-        if (shutdownRequested) break
+        if (shutdownRequested || isTimeExceeded()) {
+          console.log('Shutdown or time limit reached while processing detail items, stopping early.')
+          break
+        }
         const externalId = buildExternalId(url)
         if (scrapedIds.has(externalId)) continue
 
