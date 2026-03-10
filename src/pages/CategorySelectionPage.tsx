@@ -296,7 +296,7 @@ export function CategorySelectionPage({
     <section className="space-y-6">
       {normalizedQuery.length > 0 ? (
         <div
-          className={`sticky top-0 z-10 -mx-4 -mt-1 flex w-full items-center justify-start px-4 ${
+          className={`sticky top-0 z-30 -mx-4 -mt-1 flex w-full items-center justify-start px-4 ${
             showSearchBackButton ? 'pb-2 pt-2' : 'pb-0 pt-0 h-0 pointer-events-none'
           }`}
         >
@@ -307,7 +307,7 @@ export function CategorySelectionPage({
             onPointerMove={handleBackPointerMove}
             onPointerLeave={handleBackPointerLeave}
             aria-label="Назад к каталогу"
-            className={`liquid-glass flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-900 transition-all duration-250 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 ${
+            className={`liquid-glass relative z-30 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-900 transition-all duration-250 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 ${
               showSearchBackButton
                 ? 'opacity-100 translate-x-0'
                 : 'pointer-events-none opacity-0 -translate-x-4'
