@@ -12,6 +12,7 @@ import dotenv from 'dotenv'
 import puppeteer from 'puppeteer-extra'
 import StealthPlugin from 'puppeteer-extra-plugin-stealth'
 import { createClient } from '@supabase/supabase-js'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Page } from 'puppeteer'
 
 dotenv.config({ path: resolve(process.cwd(), '.env') })
@@ -853,14 +854,23 @@ async function extractNextPageUrl(page: Page, currentUrl: string): Promise<strin
   const nextUrl = await page.evaluate((ctx: { current: string }) => {
     const links = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href]'))
     const base = new URL(ctx.current, window.location.origin)
-    const currentPage = Number(base.searchParams.get('page') || base.searchParams.get('PAGEN_1') || '1') || 1
+
+    const extractPageIndex = (url: URL): number => {
+      const pagen = url.searchParams.get('PAGEN_1')
+      const page = url.searchParams.get('page')
+      const raw = (pagen && pagen.trim()) || (page && page.trim()) || '1'
+      const n = Number(raw)
+      return Number.isFinite(n) && n > 0 ? n : 1
+    }
+
+    const currentPage = extractPageIndex(base)
     for (const a of links) {
       const href = a.getAttribute('href')
       if (!href) continue
       try {
         const full = new URL(href, window.location.origin)
         if (full.pathname !== base.pathname) continue
-        const pageNum = Number(full.searchParams.get('page') || full.searchParams.get('PAGEN_1') || '1') || 1
+        const pageNum = extractPageIndex(full)
         if (pageNum === currentPage + 1) return full.toString()
       } catch {
         // ignore
@@ -961,7 +971,36 @@ async function enrichAndCollectListing(
   }
 }
 
-async function scrapeListings(): Promise<ScrapedListing[]> {
+async function upsertListingsBatch(supabase: SupabaseClient, listings: ScrapedListing[]): Promise<void> {
+  if (listings.length === 0) return
+
+  const upsertPayload = listings.map((listing) => {
+    const row: Record<string, unknown> = {
+      external_id: listing.external_id,
+      title: listing.title,
+      listing_url: listing.listing_url,
+      source: listing.source,
+      category: listing.category,
+      images: listing.images,
+    }
+    if (listing.price != null) row.price = listing.price
+    if (listing.original_price != null) row.original_price = listing.original_price
+    if (listing.mileage != null) row.mileage = listing.mileage
+    if (listing.year != null) row.year = listing.year
+    if (listing.city != null) row.city = listing.city
+    if (listing.vin != null) row.vin = listing.vin
+    if (listing.engine != null) row.engine = listing.engine
+    if (listing.transmission != null) row.transmission = listing.transmission
+    if (listing.drivetrain != null) row.drivetrain = listing.drivetrain
+    if (listing.body_color != null) row.body_color = listing.body_color
+    return row
+  })
+
+  const { error } = await supabase.from('listings').upsert(upsertPayload, { onConflict: 'external_id' })
+  if (error) throw error
+}
+
+async function scrapeListingsAndSync(supabase: SupabaseClient): Promise<void> {
   const isCI = !!process.env.CI
   const browser = await puppeteer.launch({
     headless: isCI,
@@ -977,7 +1016,10 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
   page.setDefaultNavigationTimeout(90_000)
   page.setDefaultTimeout(45_000)
 
-  const collected = new Map<string, ScrapedListing>()
+  const scrapedIds = new Set<string>()
+  const UPSERT_BATCH_SIZE = 200
+  let pendingBatch: ScrapedListing[] = []
+  let totalListings = 0
   const maxPages = Math.min(Number(process.env.ALFALEASING_MAX_PAGES) || 5, 50)
 
   try {
@@ -1013,14 +1055,23 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
 
         for (const { url, cardData } of detailItems) {
           if (shutdownRequested) break
-          if (collected.has(buildExternalId(url))) continue
+          const externalId = buildExternalId(url)
+          if (scrapedIds.has(externalId)) continue
 
           const listing = await enrichAndCollectListing(page, url, section.category, cardData)
           if (listing) {
-            collected.set(listing.external_id, listing)
+            scrapedIds.add(listing.external_id)
+            totalListings += 1
+            pendingBatch.push(listing)
             console.log(
               `+ [${section.category}] ${listing.title} | ${listing.price ?? '?'} ₽ | ${listing.year ?? '?'} г. | ${listing.city ?? '?'}`
             )
+
+            if (pendingBatch.length >= UPSERT_BATCH_SIZE) {
+              console.log(`Flushing batch of ${pendingBatch.length} listings to Supabase...`)
+              await upsertListingsBatch(supabase, pendingBatch)
+              pendingBatch = []
+            }
           }
           await randomDelay(400, 900)
         }
@@ -1032,8 +1083,40 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
       }
     }
 
-    console.log(`\nScraped ${collected.size} unique listings from Alfaleasing.`)
-    return [...collected.values()]
+    if (pendingBatch.length > 0) {
+      console.log(`Flushing final batch of ${pendingBatch.length} listings to Supabase...`)
+      await upsertListingsBatch(supabase, pendingBatch)
+      pendingBatch = []
+    }
+
+    console.log(`\nScraped ${totalListings} unique listings from Alfaleasing.`)
+
+    const scrapedIdsSet = scrapedIds
+
+    const { data: existingRows } = await supabase
+      .from('listings')
+      .select('external_id')
+      .eq('source', SOURCE)
+    const toRemove = (existingRows ?? [])
+      .map((r) => (r as { external_id?: string }).external_id)
+      .filter((id): id is string => !!id && !scrapedIdsSet.has(id))
+
+    if (toRemove.length > 0) {
+      const REMOVE_BATCH = 500
+      for (let i = 0; i < toRemove.length; i += REMOVE_BATCH) {
+        const batch = toRemove.slice(i, i + REMOVE_BATCH)
+        const { error: removeErr } = await supabase
+          .from('listings')
+          .delete()
+          .eq('source', SOURCE)
+          .in('external_id', batch)
+        if (removeErr) {
+          console.warn(`Sync cleanup warning: failed to remove old listings: ${removeErr.message}`)
+          break
+        }
+      }
+      console.log(`Removed ${toRemove.length} listings no longer on Alfaleasing (sync cleanup).`)
+    }
   } finally {
     await page.close()
     await browser.close()
@@ -1053,70 +1136,7 @@ async function run(): Promise<void> {
   const supabase = createClient(supabaseUrl, supabaseKey)
 
   try {
-    const listings = await scrapeListings()
-
-    if (listings.length === 0) {
-      console.log('No listings to upsert.')
-      return
-    }
-
-    const upsertPayload = listings.map((listing) => {
-      const row: Record<string, unknown> = {
-        external_id: listing.external_id,
-        title: listing.title,
-        listing_url: listing.listing_url,
-        source: listing.source,
-        category: listing.category,
-        images: listing.images,
-      }
-      if (listing.price != null) row.price = listing.price
-      if (listing.original_price != null) row.original_price = listing.original_price
-      if (listing.mileage != null) row.mileage = listing.mileage
-      if (listing.year != null) row.year = listing.year
-      if (listing.city != null) row.city = listing.city
-      if (listing.vin != null) row.vin = listing.vin
-      if (listing.engine != null) row.engine = listing.engine
-      if (listing.transmission != null) row.transmission = listing.transmission
-      if (listing.drivetrain != null) row.drivetrain = listing.drivetrain
-      if (listing.body_color != null) row.body_color = listing.body_color
-      return row
-    })
-
-    const BATCH_SIZE = 500
-    for (let i = 0; i < upsertPayload.length; i += BATCH_SIZE) {
-      const batch = upsertPayload.slice(i, i + BATCH_SIZE)
-      const { error } = await supabase.from('listings').upsert(batch, { onConflict: 'external_id' })
-      if (error) throw error
-    }
-
-    console.log(`Upserted ${listings.length} Alfaleasing listings.`)
-
-    const scrapedIds = new Set(listings.map((l) => l.external_id))
-
-    const { data: existingRows } = await supabase
-      .from('listings')
-      .select('external_id')
-      .eq('source', SOURCE)
-    const toRemove = (existingRows ?? [])
-      .map((r) => (r as { external_id?: string }).external_id)
-      .filter((id): id is string => !!id && !scrapedIds.has(id))
-
-    if (toRemove.length > 0) {
-      const REMOVE_BATCH = 500
-      for (let i = 0; i < toRemove.length; i += REMOVE_BATCH) {
-        const batch = toRemove.slice(i, i + REMOVE_BATCH)
-        const { error: removeErr } = await supabase
-          .from('listings')
-          .delete()
-          .eq('source', SOURCE)
-          .in('external_id', batch)
-        if (removeErr) {
-          console.warn(`Sync cleanup warning: failed to remove old listings: ${removeErr.message}`)
-          break
-        }
-      }
-      console.log(`Removed ${toRemove.length} listings no longer on Alfaleasing (sync cleanup).`)
-    }
+    await scrapeListingsAndSync(supabase)
   } catch (error) {
     console.error('Alfaleasing scraper failed:', error)
     process.exitCode = 1
