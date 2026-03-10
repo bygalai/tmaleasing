@@ -495,7 +495,7 @@ function extractDetailFromJsonLd(payloads: unknown[]): {
   }
 }
 
-function extractDetailFromHtmlFallback(html: string): {
+function extractDetailFromHtmlFallback(html: string, category: string): {
   title: string | null
   price: number | null
   originalPrice: number | null
@@ -691,10 +691,17 @@ function extractDetailFromHtmlFallback(html: string): {
     plainText.match(/Коробка\s*[:-]\s*([A-Za-zА-Яа-яЁё0-9 -]{2,60})/i)?.[1]?.trim() ??
     plainText.match(/Трансмиссия\s*[:-]\s*([A-Za-zА-Яа-яЁё0-9 -]{2,60})/i)?.[1]?.trim() ??
     null
-  const drivetrain =
+  const wheelFormula =
+    plainText.match(/Кол[её]сная\s+формула\s*[:-]?\s*([0-9]+[xхX][0-9]+)/i)?.[1]?.trim() ??
+    null
+  const drivetrainText =
     plainText.match(/Привод\s*[:-]\s*([A-Za-zА-Яа-яЁё0-9xX -]{2,60})/i)?.[1]?.trim() ??
     plainText.match(/Тип\s*привода\s*[:-]\s*([A-Za-zА-Яа-яЁё0-9xX -]{2,60})/i)?.[1]?.trim() ??
     null
+  const drivetrain =
+    category === 'legkovye'
+      ? drivetrainText
+      : wheelFormula ?? drivetrainText
   const engine =
     plainText.match(/Двигатель\s*[:-]\s*([A-Za-zА-Яа-яЁё0-9.,/ л\-]{2,120})/i)?.[1]?.trim() ??
     plainText.match(/(Бензиновый|Дизельный|Электрический|Гибридный)[^КоробкаПриводЦвет]{0,80}(?:\d+\s*л\.\s*с\.?|\d+\s*л\.\s*с)/i)?.[0]?.trim() ??
@@ -920,7 +927,7 @@ async function enrichAndCollectListing(
 
     const jsonLd = extractJsonLdBlocks(html)
     const fromLd = extractDetailFromJsonLd(jsonLd)
-    const fromHtml = extractDetailFromHtmlFallback(html)
+    const fromHtml = extractDetailFromHtmlFallback(html, category)
     const card = catalogFallback
 
     const title = card?.title ?? fromLd.title ?? fromHtml.title ?? null
