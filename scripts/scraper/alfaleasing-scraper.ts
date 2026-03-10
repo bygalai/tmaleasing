@@ -854,23 +854,20 @@ async function extractNextPageUrl(page: Page, currentUrl: string): Promise<strin
   const nextUrl = await page.evaluate((ctx: { current: string }) => {
     const links = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href]'))
     const base = new URL(ctx.current, window.location.origin)
-
-    const extractPageIndex = (url: URL): number => {
-      const pagen = url.searchParams.get('PAGEN_1')
-      const page = url.searchParams.get('page')
-      const raw = (pagen && pagen.trim()) || (page && page.trim()) || '1'
-      const n = Number(raw)
-      return Number.isFinite(n) && n > 0 ? n : 1
-    }
-
-    const currentPage = extractPageIndex(base)
+    const basePagen = base.searchParams.get('PAGEN_1')
+    const basePage = base.searchParams.get('page')
+    const currentRaw = (basePagen && basePagen.trim()) || (basePage && basePage.trim()) || '1'
+    const currentPage = Number(currentRaw) || 1
     for (const a of links) {
       const href = a.getAttribute('href')
       if (!href) continue
       try {
         const full = new URL(href, window.location.origin)
         if (full.pathname !== base.pathname) continue
-        const pageNum = extractPageIndex(full)
+        const pagen = full.searchParams.get('PAGEN_1')
+        const pageParam = full.searchParams.get('page')
+        const raw = (pagen && pagen.trim()) || (pageParam && pageParam.trim()) || '1'
+        const pageNum = Number(raw) || 1
         if (pageNum === currentPage + 1) return full.toString()
       } catch {
         // ignore
