@@ -1198,8 +1198,20 @@ async function scrapeListings(supabase: SupabaseClient): Promise<Set<string>> {
     console.log('  [memory] page recreated')
   }
 
+  // Временный фильтр разделов по умолчанию: спецтехника + прицепы.
+  const sectionFilterRaw = process.env.GAZPROMP_SECTIONS ?? 'speztechnika,pricepy'
+  const sectionFilter = sectionFilterRaw
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+
+  const sectionsToProcess =
+    sectionFilter.length > 0
+      ? GAZPROM_SECTIONS.filter((s) => sectionFilter.includes(s.category))
+      : GAZPROM_SECTIONS
+
   try {
-    for (const section of GAZPROM_SECTIONS) {
+    for (const section of sectionsToProcess) {
       if (shutdownRequested) break
       console.log(`\n=== Section: ${section.category} (${section.catalogUrl}) ===`)
 
