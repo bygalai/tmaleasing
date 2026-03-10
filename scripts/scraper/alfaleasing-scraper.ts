@@ -888,6 +888,24 @@ async function scrollToLoadMore(page: Page): Promise<void> {
   })
 }
 
+async function loadAllCatalogItems(page: Page, maxIterations: number): Promise<void> {
+  for (let i = 0; i < maxIterations; i += 1) {
+    if (typeof window === 'undefined') break
+    const clicked = await page.evaluate(() => {
+      const elements = Array.from(document.querySelectorAll<HTMLElement>('button, a'))
+      const target = elements.find((el) => /Показать ещё/i.test((el.textContent || '').trim()))
+      if (!target) return false
+      target.scrollIntoView({ behavior: 'auto', block: 'center' })
+      target.click()
+      return true
+    })
+    if (!clicked) break
+    await sleep(process.env.CI ? 3000 : 5000)
+    await scrollToLoadMore(page)
+    await randomDelay(500, 1200)
+  }
+}
+
 // --- enrich each detail page and build ScrapedListing ---
 
 async function enrichAndCollectListing(
@@ -1017,66 +1035,58 @@ async function scrapeListingsAndSync(supabase: SupabaseClient): Promise<void> {
   const UPSERT_BATCH_SIZE = 200
   let pendingBatch: ScrapedListing[] = []
   let totalListings = 0
-  const maxPages = Math.min(Number(process.env.ALFALEASING_MAX_PAGES) || 5, 50)
+  const maxLoadMoreIterations = Math.min(Number(process.env.ALFALEASING_MAX_PAGES) || 5, 50)
 
   try {
     for (const section of ALFALEASING_SECTIONS) {
       if (shutdownRequested) break
       console.log(`\n=== Section: ${section.category} (${section.catalogUrl}) ===`)
 
-      let pageIndex = 0
+      try {
+        await page.goto(section.catalogUrl, { waitUntil: 'domcontentloaded' })
+      } catch (navErr) {
+        if (isShutdownError(navErr)) break
+        throw navErr
+      }
 
-      while (!shutdownRequested && pageIndex < maxPages) {
+      await sleep(process.env.CI ? 2000 : 4000)
+      await scrollToLoadMore(page)
+      await randomDelay(500, 1200)
+
+      console.log(`Loading additional catalog items for section "${section.category}" via "Показать ещё"...`)
+      await loadAllCatalogItems(page, maxLoadMoreIterations)
+
+      const detailItems = await extractDetailUrlsWithCardData(page, section.detailPrefix)
+      console.log(`Collected ${detailItems.length} detail links in section "${section.category}"`)
+
+      if (detailItems.length === 0) {
+        console.log('No detail links found for this section, skipping.')
+        continue
+      }
+
+      for (const { url, cardData } of detailItems) {
         if (shutdownRequested) break
-        pageIndex += 1
+        const externalId = buildExternalId(url)
+        if (scrapedIds.has(externalId)) continue
 
-        const currentUrl = pageIndex === 1 ? section.catalogUrl : `${section.catalogUrl}?page=${pageIndex}`
+        const listing = await enrichAndCollectListing(page, url, section.category, cardData)
+        if (listing) {
+          scrapedIds.add(listing.external_id)
+          totalListings += 1
+          pendingBatch.push(listing)
+          console.log(
+            `+ [${section.category}] ${listing.title} | ${listing.price ?? '?'} ₽ | ${listing.year ?? '?'} г. | ${
+              listing.city ?? '?'
+            }`
+          )
 
-        console.log(`\n--- Page ${pageIndex}/${maxPages}: ${currentUrl} ---`)
-
-        try {
-          await page.goto(currentUrl, { waitUntil: 'domcontentloaded' })
-        } catch (navErr) {
-          if (isShutdownError(navErr)) break
-          throw navErr
-        }
-
-        await sleep(process.env.CI ? 2000 : 4000)
-        await scrollToLoadMore(page)
-        await randomDelay(500, 1200)
-
-        const detailItems = await extractDetailUrlsWithCardData(page, section.detailPrefix)
-        console.log(`Found ${detailItems.length} detail links on page`)
-
-        if (detailItems.length === 0) {
-          console.log('No detail links found, stopping pagination for this section.')
-          break
-        }
-
-        for (const { url, cardData } of detailItems) {
-          if (shutdownRequested) break
-          const externalId = buildExternalId(url)
-          if (scrapedIds.has(externalId)) continue
-
-          const listing = await enrichAndCollectListing(page, url, section.category, cardData)
-          if (listing) {
-            scrapedIds.add(listing.external_id)
-            totalListings += 1
-            pendingBatch.push(listing)
-            console.log(
-              `+ [${section.category}] ${listing.title} | ${listing.price ?? '?'} ₽ | ${listing.year ?? '?'} г. | ${listing.city ?? '?'}`
-            )
-
-            if (pendingBatch.length >= UPSERT_BATCH_SIZE) {
-              console.log(`Flushing batch of ${pendingBatch.length} listings to Supabase...`)
-              await upsertListingsBatch(supabase, pendingBatch)
-              pendingBatch = []
-            }
+          if (pendingBatch.length >= UPSERT_BATCH_SIZE) {
+            console.log(`Flushing batch of ${pendingBatch.length} listings to Supabase...`)
+            await upsertListingsBatch(supabase, pendingBatch)
+            pendingBatch = []
           }
-          await randomDelay(400, 900)
         }
-
-        await randomDelay(800, 1800)
+        await randomDelay(400, 900)
       }
     }
 

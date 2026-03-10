@@ -12,6 +12,7 @@ import dotenv from 'dotenv'
 import puppeteer from 'puppeteer-extra'
 import StealthPlugin from 'puppeteer-extra-plugin-stealth'
 import { createClient } from '@supabase/supabase-js'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Page } from 'puppeteer'
 
 dotenv.config({ path: resolve(process.cwd(), '.env') })
@@ -843,38 +844,38 @@ async function enrichAndCollectListing(
   detailUrl: string,
   category: string
 ): Promise<ScrapedListing | null> {
-  try {
-    // ID объявления из URL (например 509423 из .../details/509423) — берём только картинки этого объявления.
-    const listingId = detailUrl.match(/\/details\/(\d+)(?:\?|$)/)?.[1] ?? null
+  // ID объявления из URL (например 509423 из .../details/509423) — берём только картинки этого объявления.
+  const listingId = detailUrl.match(/\/details\/(\d+)(?:\?|$)/)?.[1] ?? null
 
-    const imageApiUrls: string[] = []
-    const onResponse = (response: unknown): void => {
-      try {
-        const url =
-          typeof response === 'object' &&
-          response !== null &&
-          'url' in response &&
-          typeof (response as { url: () => string }).url === 'function'
-            ? (response as { url: () => string }).url()
-            : ''
-        if (!url || !url.includes('/auto/api/image/auto')) return
-        // Только картинки текущего объявления: в API параметр i = id объявления.
-        if (listingId) {
-          try {
-            const parsed = new URL(url)
-            if (parsed.searchParams.get('i') !== listingId) return
-          } catch {
-            return
-          }
+  const imageApiUrls: string[] = []
+  const onResponse = (response: unknown): void => {
+    try {
+      const url =
+        typeof response === 'object' &&
+        response !== null &&
+        'url' in response &&
+        typeof (response as { url: () => string }).url === 'function'
+          ? (response as { url: () => string }).url()
+          : ''
+      if (!url || !url.includes('/auto/api/image/auto')) return
+      // Только картинки текущего объявления: в API параметр i = id объявления.
+      if (listingId) {
+        try {
+          const parsed = new URL(url)
+          if (parsed.searchParams.get('i') !== listingId) return
+        } catch {
+          return
         }
-        imageApiUrls.push(url)
-      } catch {
-        // Игнорируем сбои при парсинге единичных ответов.
       }
+      imageApiUrls.push(url)
+    } catch {
+      // Игнорируем сбои при парсинге единичных ответов.
     }
+  }
 
-    page.on('response', onResponse as never)
+  page.on('response', onResponse as never)
 
+  try {
     await page.goto(detailUrl, { waitUntil: 'domcontentloaded' })
     // SPA + картинки: даём время на отрисовку и загрузку фото (теперь image не блокируем)
     await sleep(process.env.CI ? 3000 : 5000)
@@ -935,12 +936,11 @@ async function enrichAndCollectListing(
     const FALLBACK_IMAGE = 'https://dummyimage.com/1200x800/1f2937/e5e7eb&text=Vehicle+Photo+Pending'
     let absoluteImage = chosenImage ? toAbsoluteUrl(chosenImage) : null
     if (!absoluteImage || absoluteImage === FALLBACK_IMAGE) {
-      console.warn(`  skip (no real image${useOnlyApiImage ? ', legkovye require API image' : ''}): ${title.slice(0, 40)}...`)
+      console.warn(
+        `  skip (no real image${useOnlyApiImage ? ', legkovye require API image' : ''}): ${title.slice(0, 40)}...`
+      )
       return null
     }
-
-    // После того как всё извлекли, можно отписаться от слушателя ответов.
-    page.off('response', onResponse as never)
 
     // Нормализация: убрать «Объем » в начале описания двигателя и лишнюю «В»/«B» после цвета
     const engineNormalized = (engine ?? '').replace(/^Объем\s*/gi, '').trim() || null
@@ -969,10 +969,40 @@ async function enrichAndCollectListing(
     if (isShutdownError(err)) throw err
     console.warn(`  enrich failed for ${detailUrl}:`, err)
     return null
+  } finally {
+    page.off('response', onResponse as never)
   }
 }
 
-async function scrapeListings(): Promise<ScrapedListing[]> {
+async function upsertListingsBatch(supabase: SupabaseClient, listings: ScrapedListing[]): Promise<void> {
+  if (listings.length === 0) return
+
+  const upsertPayload = listings.map((listing) => {
+    const row: Record<string, unknown> = {
+      external_id: listing.external_id,
+      title: listing.title,
+      listing_url: listing.listing_url,
+      source: listing.source,
+      category: listing.category,
+      images: listing.images,
+    }
+    if (listing.price != null) row.price = listing.price
+    if (listing.mileage != null) row.mileage = listing.mileage
+    if (listing.year != null) row.year = listing.year
+    if (listing.city != null) row.city = listing.city
+    if (listing.vin != null) row.vin = listing.vin
+    if (listing.engine != null) row.engine = listing.engine
+    if (listing.transmission != null) row.transmission = listing.transmission
+    if (listing.drivetrain != null) row.drivetrain = listing.drivetrain
+    if (listing.body_color != null) row.body_color = listing.body_color
+    return row
+  })
+
+  const { error } = await supabase.from('listings').upsert(upsertPayload, { onConflict: 'external_id' })
+  if (error) throw error
+}
+
+async function scrapeListingsAndSync(supabase: SupabaseClient): Promise<void> {
   const isCI = !!process.env.CI
   const browser = await puppeteer.launch({
     headless: isCI,
@@ -988,11 +1018,13 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
   page.setDefaultNavigationTimeout(90_000)
   page.setDefaultTimeout(45_000)
 
-  const collected = new Map<string, ScrapedListing>()
-  const maxPages = Math.min(
-    Number(process.env.EUROPLAN_MAX_PAGES) || 3,
-    10
-  )
+  const scrapedIds = new Set<string>()
+  const UPSERT_BATCH_SIZE = 200
+  let pendingBatch: ScrapedListing[] = []
+  let totalListings = 0
+
+  const HARD_MAX_PAGES = Number(process.env.EUROPLAN_HARD_MAX_PAGES) || 50
+  const maxPages = Math.min(Number(process.env.EUROPLAN_MAX_PAGES) || 3, HARD_MAX_PAGES)
 
   try {
     for (const section of EUROPLAN_SECTIONS) {
@@ -1009,7 +1041,8 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
           await page.goto(currentUrl, { waitUntil: 'domcontentloaded' })
         } catch (navErr) {
           if (isShutdownError(navErr)) break
-          throw navErr
+          console.warn(`Navigation failed for ${currentUrl}, stopping pagination for this section:`, navErr)
+          break
         }
 
         await sleep(process.env.CI ? 2000 : 4000)
@@ -1019,16 +1052,32 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
         const detailUrls = await extractDetailUrlsFromPage(page, section.detailsListingPrefix)
         console.log(`Found ${detailUrls.length} detail links on page`)
 
+        if (detailUrls.length === 0) {
+          console.log('No detail links found, stopping pagination for this section.')
+          break
+        }
+
         for (const url of detailUrls) {
           if (shutdownRequested) break
-          if (collected.has(buildExternalId(url))) continue
+          const externalId = buildExternalId(url)
+          if (scrapedIds.has(externalId)) continue
 
           const listing = await enrichAndCollectListing(page, url, section.category)
           if (listing) {
-            collected.set(listing.external_id, listing)
+            scrapedIds.add(listing.external_id)
+            totalListings += 1
+            pendingBatch.push(listing)
             console.log(
-              `+ [${section.category}] ${listing.title} | ${listing.price ?? '?'} ₽ | ${listing.year ?? '?'} г. | ${listing.images[0] ? 'img' : 'no img'}`
+              `+ [${section.category}] ${listing.title} | ${listing.price ?? '?'} ₽ | ${listing.year ?? '?'} г. | ${
+                listing.images[0] ? 'img' : 'no img'
+              }`
             )
+
+            if (pendingBatch.length >= UPSERT_BATCH_SIZE) {
+              console.log(`Flushing batch of ${pendingBatch.length} Europlan listings to Supabase...`)
+              await upsertListingsBatch(supabase, pendingBatch)
+              pendingBatch = []
+            }
           }
           await randomDelay(400, 900)
         }
@@ -1036,65 +1085,15 @@ async function scrapeListings(): Promise<ScrapedListing[]> {
       }
     }
 
-    console.log(`\nScraped ${collected.size} unique listings from Europlan (trucks + cars).`)
-    return [...collected.values()]
-  } finally {
-    await page.close()
-    await browser.close()
-  }
-}
-
-async function run(): Promise<void> {
-  ensureEnvLoaded()
-  const { url: supabaseUrl, key: supabaseKey } = resolveSupabaseCredentials()
-
-  if (!supabaseUrl || !supabaseKey) {
-    throw new Error(
-      'Missing Supabase credentials. Set SUPABASE_URL + SUPABASE_KEY (or VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY).'
-    )
-  }
-
-  const supabase = createClient(supabaseUrl, supabaseKey)
-
-  try {
-    const listings = await scrapeListings()
-
-    if (listings.length === 0) {
-      console.log('No listings to upsert.')
-      return
+    if (pendingBatch.length > 0) {
+      console.log(`Flushing final batch of ${pendingBatch.length} Europlan listings to Supabase...`)
+      await upsertListingsBatch(supabase, pendingBatch)
+      pendingBatch = []
     }
 
-    const upsertPayload = listings.map((listing) => {
-      const row: Record<string, unknown> = {
-        external_id: listing.external_id,
-        title: listing.title,
-        listing_url: listing.listing_url,
-        source: listing.source,
-        category: listing.category,
-        images: listing.images,
-      }
-      if (listing.price != null) row.price = listing.price
-      if (listing.mileage != null) row.mileage = listing.mileage
-      if (listing.year != null) row.year = listing.year
-      if (listing.city != null) row.city = listing.city
-      if (listing.vin != null) row.vin = listing.vin
-      if (listing.engine != null) row.engine = listing.engine
-      if (listing.transmission != null) row.transmission = listing.transmission
-      if (listing.drivetrain != null) row.drivetrain = listing.drivetrain
-      if (listing.body_color != null) row.body_color = listing.body_color
-      return row
-    })
+    console.log(`\nScraped ${totalListings} unique listings from Europlan (trucks + cars).`)
 
-    const BATCH_SIZE = 500
-    for (let i = 0; i < upsertPayload.length; i += BATCH_SIZE) {
-      const batch = upsertPayload.slice(i, i + BATCH_SIZE)
-      const { error } = await supabase.from('listings').upsert(batch, { onConflict: 'external_id' })
-      if (error) throw error
-    }
-
-    console.log(`Upserted ${listings.length} Europlan listings.`)
-
-    const scrapedIds = new Set(listings.map((l) => l.external_id))
+    const scrapedIdsSet = scrapedIds
 
     const { data: skeletonDeleted, error: skeletonErr } = await supabase
       .from('listings')
@@ -1115,7 +1114,7 @@ async function run(): Promise<void> {
       .eq('source', SOURCE)
     const toRemove = (existingRows ?? [])
       .map((r) => (r as { external_id?: string }).external_id)
-      .filter((id): id is string => !!id && !scrapedIds.has(id))
+      .filter((id): id is string => !!id && !scrapedIdsSet.has(id))
 
     if (toRemove.length > 0) {
       const REMOVE_BATCH = 500
@@ -1133,6 +1132,26 @@ async function run(): Promise<void> {
       }
       console.log(`Removed ${toRemove.length} listings no longer on Europlan (sync cleanup).`)
     }
+  } finally {
+    await page.close()
+    await browser.close()
+  }
+}
+
+async function run(): Promise<void> {
+  ensureEnvLoaded()
+  const { url: supabaseUrl, key: supabaseKey } = resolveSupabaseCredentials()
+
+  if (!supabaseUrl || !supabaseKey) {
+    throw new Error(
+      'Missing Supabase credentials. Set SUPABASE_URL + SUPABASE_KEY (or VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY).'
+    )
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseKey)
+
+  try {
+    await scrapeListingsAndSync(supabase)
   } catch (error) {
     console.error('Europlan scraper failed:', error)
     process.exitCode = 1
