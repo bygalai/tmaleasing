@@ -158,6 +158,7 @@ export function CategorySelectionPage({
   const [query, setQuery] = useState(qFromUrl)
   const [history, setHistory] = useState<string[]>([])
   const [isSearchFocused, setIsSearchFocused] = useState(false)
+  const [showSearchBackButton, setShowSearchBackButton] = useState(false)
 
   useEffect(() => {
     if (qFromUrl !== query) setQuery(qFromUrl)
@@ -259,6 +260,24 @@ export function CategorySelectionPage({
 
   const discountedItems = items.filter((item) => item.badges.includes('discount'))
 
+  useEffect(() => {
+    if (normalizedQuery.length === 0) {
+      setShowSearchBackButton(false)
+      return
+    }
+
+    const handleScroll = () => {
+      const scrollTop =
+        window.scrollY ?? document.documentElement.scrollTop ?? document.body.scrollTop ?? 0
+      setShowSearchBackButton(scrollTop > 64)
+    }
+
+    handleScroll()
+    window.addEventListener('scroll', handleScroll, { passive: true })
+
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [normalizedQuery.length])
+
   const backBtnRef = useRef<HTMLButtonElement>(null)
   const handleBackPointerMove = useCallback((e: React.PointerEvent) => {
     const rect = backBtnRef.current?.getBoundingClientRect()
@@ -276,7 +295,11 @@ export function CategorySelectionPage({
   return (
     <section className="space-y-6">
       {normalizedQuery.length > 0 ? (
-        <div className="sticky top-0 z-10 -mx-4 -mt-1 flex w-full items-center justify-start px-4 pb-2 pt-2">
+        <div
+          className={`sticky top-0 z-10 -mx-4 -mt-1 flex w-full items-center justify-start px-4 ${
+            showSearchBackButton ? 'pb-2 pt-2' : 'pb-0 pt-0 h-0 pointer-events-none'
+          }`}
+        >
           <button
             ref={backBtnRef}
             type="button"
@@ -284,7 +307,11 @@ export function CategorySelectionPage({
             onPointerMove={handleBackPointerMove}
             onPointerLeave={handleBackPointerLeave}
             aria-label="Назад к каталогу"
-            className="liquid-glass flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
+            className={`liquid-glass flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-900 transition-all duration-250 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 ${
+              showSearchBackButton
+                ? 'opacity-100 translate-x-0'
+                : 'pointer-events-none opacity-0 -translate-x-4'
+            }`}
           >
             <svg
               aria-hidden="true"
