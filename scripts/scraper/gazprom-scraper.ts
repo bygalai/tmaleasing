@@ -164,6 +164,12 @@ const BODY_TYPE_SLUG_TO_RU: Record<string, string> = {
   'shornyy': 'Шторный',
 }
 
+/** Жёсткий blacklist конкретных проблемных карточек Gazprom (ломают страницу / Puppeteer). */
+const PROBLEM_DETAIL_URLS = new Set<string>([
+  'https://autogpbl.ru/avtomobili-i-tekhnika-s-probegom/prolift/rv-richtrak-1/789360/',
+  'https://autogpbl.ru/avtomobili-i-tekhnika-s-probegom/prolift/rv-richtrak-1/789360',
+])
+
 type ScrapedListing = {
   external_id: string
   title: string
@@ -1236,7 +1242,7 @@ async function scrapeListings(supabase: SupabaseClient): Promise<Set<string>> {
           await randomDelay(500, 1000)
         }
 
-        const detailUrls = [...allUrls]
+        const detailUrls = [...allUrls].filter((u) => !PROBLEM_DETAIL_URLS.has(u))
         const urlsToProcess = maxPerSection > 0 ? detailUrls.slice(0, maxPerSection) : detailUrls
         if (maxPerSection > 0 || maxPagesLimit > 0) {
           const limits: string[] = []
