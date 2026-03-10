@@ -1290,37 +1290,33 @@ async function scrapeListings(supabase: SupabaseClient): Promise<Set<string>> {
           if (collected.has(buildExternalId(url))) continue
           if (/prolift|richtrak/i.test(url)) {
             console.warn(`  skip (known problematic): ${url}`)
-            await refreshPage()
             continue
           }
 
-          if (cardsSinceRefresh >= PAGE_REFRESH_INTERVAL) {
-            await refreshPage()
-          }
+          const detailPage = await browser.newPage()
+          await configurePageForStealth(detailPage)
+          detailPage.setDefaultNavigationTimeout(90_000)
+          detailPage.setDefaultTimeout(45_000)
 
-          const { value: listing, timedOut } = await withTimeout(
-            enrichAndCollectListing(page, url, section.category),
-            DETAIL_TIMEOUT_MS,
-            `detail ${url}`
-          )
-
-          if (timedOut) {
-            try {
-              await refreshPage()
-            } catch {
-              /* reset best-effort */
-            }
-          }
-
-          cardsSinceRefresh += 1
-          if (listing) {
-            collected.set(listing.external_id, listing)
-            console.log(
-              `+ [${section.category}] ${listing.title} | ${listing.price ?? '?'} ₽ | ${listing.year ?? '?'} г. | ${
-                listing.city ?? '—'
-              }`
+          try {
+            const { value: listing } = await withTimeout(
+              enrichAndCollectListing(detailPage, url, section.category),
+              DETAIL_TIMEOUT_MS,
+              `detail ${url}`
             )
+
+            if (listing) {
+              collected.set(listing.external_id, listing)
+              console.log(
+                `+ [${section.category}] ${listing.title} | ${listing.price ?? '?'} ₽ | ${listing.year ?? '?'} г. | ${
+                  listing.city ?? '—'
+                }`
+              )
+            }
+          } finally {
+            await detailPage.close()
           }
+
           await randomDelay(400, 900)
         }
 
