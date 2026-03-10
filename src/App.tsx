@@ -152,7 +152,7 @@ function App() {
       <header
         className={
           isStickyHeader
-            ? 'sticky top-0 z-20 -mx-4 -mt-5 flex items-center justify-center px-4 pt-[max(env(safe-area-inset-top,0px),1.25rem)] pb-3 mb-5 bg-white/95 shadow-sm backdrop-blur-md'
+            ? 'sticky top-0 z-20 -mx-4 -mt-5 flex items-center justify-center px-4 pt-[calc(max(env(safe-area-inset-top,0px),1.25rem)+0.75rem)] pb-3 mb-5 bg-white/95 shadow-sm backdrop-blur-md'
             : 'mb-5 flex items-center justify-center'
         }
       >
