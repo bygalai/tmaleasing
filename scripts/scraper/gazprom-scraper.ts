@@ -882,7 +882,18 @@ function extractDetailFromHtml(html: string, pageUrl: string): {
     cityRaw = cityRaw.replace(/\d+.*$/, '')
     cityRaw = cityRaw.trim()
   }
-  let city = cityRaw || null
+  let city =
+    cityRaw ||
+    (specsText.match(/Город\s*[\s:]*([А-Яа-яЁё\-\s]{2,40}?)(?:$|\d|Количество|Наличие|Пробег)/i)?.[1]?.replace(
+      /\s+/g,
+      ' '
+    )?.trim() ??
+      html
+        .match(/Город\s*<\/[^>]+>[\s\S]{0,60}?([А-Яа-яЁё\-\s]{2,40})</i)
+        ?.[1]
+        ?.replace(/\s+/g, ' ')
+        ?.trim() ??
+      null)
   if (city && /ключ|комплект|обременен|птс|псм/i.test(city)) city = null
   if (city && !isPlausibleCity(city)) city = null
 
