@@ -6,6 +6,7 @@ import dotenv from 'dotenv'
 import puppeteer from 'puppeteer-extra'
 import StealthPlugin from 'puppeteer-extra-plugin-stealth'
 import { createClient } from '@supabase/supabase-js'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Page } from 'puppeteer'
 
 dotenv.config({ path: resolve(process.cwd(), '.env') })
@@ -102,6 +103,8 @@ type ScrapedListing = {
   external_id: string
   title: string
   price: number | null
+  /** Старая цена до скидки — для Mini App (зачёркнутая). */
+  original_price: number | null
   mileage: number | null
   year: number | null
   images: string[]
@@ -514,6 +517,7 @@ function mapRawCardToListing(raw: RawCard, category: string): ScrapedListing | n
     external_id: buildExternalId(listingUrl),
     title,
     price,
+    original_price: null,
     mileage,
     year,
     images: imageUrl ? [imageUrl] : [],
@@ -1203,6 +1207,82 @@ async function closeUnexpectedPages(browser: Awaited<ReturnType<typeof puppeteer
   }
 }
 
+/**
+ * Обновляет поля price / original_price для списка VTB‑лотoв с учётом истории цен в Supabase:
+ * - если новая цена ниже прошлой — считаем это скидкой и сохраняем прошлую цену в original_price;
+ * - если новая цена выше прошлой — просто поднимаем price и очищаем original_price;
+ * - если цена не изменилась — переносим существующий original_price как есть.
+ */
+async function applyHistoricalPriceLogic(
+  supabase: SupabaseClient,
+  listings: ScrapedListing[],
+): Promise<void> {
+  if (listings.length === 0) return
+
+  const externalIds = listings.map((l) => l.external_id)
+  const { data: existingRows, error } = await supabase
+    .from('listings')
+    .select('external_id, price, original_price')
+    .in('external_id', externalIds)
+
+  if (error) {
+    console.warn('Historical price lookup failed (non-fatal):', error.message)
+    return
+  }
+
+  const byId = new Map<
+    string,
+    { external_id: string; price: number | string | null; original_price: number | string | null }
+  >()
+  for (const row of existingRows ?? []) {
+    const r = row as { external_id?: string; price?: number | string | null; original_price?: number | string | null }
+    if (!r.external_id) continue
+    byId.set(r.external_id, {
+      external_id: r.external_id,
+      price: r.price ?? null,
+      original_price: r.original_price ?? null,
+    })
+  }
+
+  for (const listing of listings) {
+    const currentPrice = listing.price
+    if (currentPrice == null || !Number.isFinite(currentPrice) || currentPrice <= 0) {
+      // Нет валидной текущей цены — историю не трогаем.
+      continue
+    }
+
+    const prev = byId.get(listing.external_id)
+    if (!prev) {
+      // В БД ещё не было этой записи — никакой "старой" цены нет.
+      listing.original_price = null
+      continue
+    }
+
+    const prevPriceNum = prev.price != null ? Number(prev.price) : NaN
+    const prevOriginalNum = prev.original_price != null ? Number(prev.original_price) : NaN
+
+    if (!Number.isFinite(prevPriceNum) || prevPriceNum <= 0) {
+      listing.original_price = Number.isFinite(prevOriginalNum) && prevOriginalNum > 0 ? prevOriginalNum : null
+      continue
+    }
+
+    // Базовая "старая" цена: если в БД уже была original_price и она выше прошлой,
+    // используем её, иначе — саму прошлую цену.
+    const baselineOriginal = Number.isFinite(prevOriginalNum) && prevOriginalNum > prevPriceNum ? prevOriginalNum : prevPriceNum
+
+    if (currentPrice < prevPriceNum) {
+      // Цена снизилась: показываем скидку относительно базовой "старой" цены.
+      listing.original_price = baselineOriginal
+    } else if (currentPrice > prevPriceNum) {
+      // Цена выросла: поднимаем цену и убираем "скидку".
+      listing.original_price = null
+    } else {
+      // Цена не изменилась: оставляем возможную старую цену как есть.
+      listing.original_price = Number.isFinite(prevOriginalNum) && prevOriginalNum > 0 ? prevOriginalNum : listing.original_price
+    }
+  }
+}
+
 /** Обрабатывает одну секцию: каталог + обогащение. Браузер перезапускается между секциями для снижения OOM. */
 async function scrapeOneSection(
   sectionIndex: number,
@@ -1443,6 +1523,10 @@ async function run(): Promise<void> {
 
       if (listings.length === 0) continue
 
+      // Перед апсертом корректируем price/original_price на основе предыдущих значений в БД
+      // (чтобы Mini App видела автоматические скидки при снижении цены).
+      await applyHistoricalPriceLogic(supabase, listings)
+
       const enriched = listings.filter((l) => l.images.length > 0)
       console.log(`Section ${sectionIndex + 1}: upserting ${enriched.length} / ${listings.length} enriched`)
 
@@ -1457,6 +1541,7 @@ async function run(): Promise<void> {
             images: listing.images,
           }
           if (listing.price != null) row.price = listing.price
+          if (listing.original_price != null) row.original_price = listing.original_price
           if (listing.mileage != null) row.mileage = listing.mileage
           if (listing.year != null) row.year = listing.year
           if (listing.city != null) row.city = listing.city
