@@ -36,6 +36,12 @@ function isShutdownError(err: unknown): boolean {
   )
 }
 
+function isTimeoutError(err: unknown): boolean {
+  const name = err instanceof Error ? err.name : ''
+  const msg = err instanceof Error ? err.message : String(err ?? '')
+  return name === 'TimeoutError' || /timeout\s+exceeded/i.test(msg)
+}
+
 const SOURCE = 'vtb'
 const ALLOWED_DOMAIN = 'vtb-leasing.ru'
 const VTB_BASE_URL = 'https://www.vtb-leasing.ru/'
@@ -1207,6 +1213,40 @@ async function closeUnexpectedPages(browser: Awaited<ReturnType<typeof puppeteer
   }
 }
 
+const NAV_RETRY_ATTEMPTS = 3
+const NAV_RETRY_DELAY_MS = 8000
+
+/** Navigate with retries for transient timeouts (typical after long scraping). */
+async function gotoWithRetry(
+  page: Page,
+  url: string,
+  options: { timeout?: number } = {},
+): Promise<void> {
+  const timeout = options.timeout ?? 120_000
+  let lastErr: unknown
+  for (let attempt = 1; attempt <= NAV_RETRY_ATTEMPTS; attempt += 1) {
+    try {
+      await page.goto(url, {
+        waitUntil: 'domcontentloaded',
+        timeout,
+      })
+      return
+    } catch (err) {
+      lastErr = err
+      if (isShutdownError(err)) throw err
+      if (attempt < NAV_RETRY_ATTEMPTS && isTimeoutError(err)) {
+        console.log(
+          `Navigation timeout (attempt ${attempt}/${NAV_RETRY_ATTEMPTS}), retrying in ${NAV_RETRY_DELAY_MS / 1000}s...`,
+        )
+        await sleep(NAV_RETRY_DELAY_MS)
+        continue
+      }
+      throw err
+    }
+  }
+  throw lastErr
+}
+
 /**
  * Обновляет поля price / original_price для списка VTB‑лотoв с учётом истории цен в Supabase:
  * - если новая цена ниже прошлой — считаем это скидкой и сохраняем прошлую цену в original_price;
@@ -1317,7 +1357,8 @@ async function scrapeOneSection(
       await maybePage.close().catch(() => undefined)
     }
   })
-  page.setDefaultNavigationTimeout(90_000)
+  const navTimeout = Number(process.env.VTB_NAV_TIMEOUT_MS ?? '120000')
+  page.setDefaultNavigationTimeout(Number.isFinite(navTimeout) && navTimeout > 0 ? navTimeout : 120_000)
   page.setDefaultTimeout(45_000)
 
   const collected = new Map<string, ScrapedListing>()
@@ -1384,7 +1425,7 @@ async function scrapeOneSection(
         const navigationUrl = pageIndex === 1 ? currentSection.startUrl : currentUrl
       console.log(`\n--- Page ${pageIndex}/${maxPages}: ${navigationUrl} ---`)
       try {
-        await page.goto(navigationUrl, { waitUntil: 'domcontentloaded' })
+        await gotoWithRetry(page, navigationUrl)
       } catch (navErr) {
         if (isShutdownError(navErr)) {
           console.log('Navigation canceled (shutdown), proceeding to enrichment')

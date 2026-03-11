@@ -10,7 +10,9 @@
 
 import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { dirname, resolve as pathResolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { spawn } from 'node:child_process'
 
 import dotenv from 'dotenv'
 import puppeteer from 'puppeteer-extra'
@@ -19,7 +21,7 @@ import { createClient } from '@supabase/supabase-js'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Page } from 'puppeteer'
 
-dotenv.config({ path: resolve(process.cwd(), '.env') })
+dotenv.config({ path: pathResolve(process.cwd(), '.env') })
 puppeteer.use(StealthPlugin())
 
 let shutdownRequested = false
@@ -169,7 +171,7 @@ const BODY_TYPE_SLUG_TO_RU: Record<string, string> = {
   'shornyy': 'Шторный',
 }
 
-/** Жёсткий blacklist конкретных проблемных карточек Gazprom (ломают страницу / Puppeteer). */
+/** Жёсткий blacklist конкретных проблемных карточек Gazprom (ломают / зависают при загрузке). */
 const PROBLEM_DETAIL_URLS = new Set<string>([
   'https://autogpbl.ru/avtomobili-i-tekhnika-s-probegom/prolift/rv-richtrak-1/789360/',
   'https://autogpbl.ru/avtomobili-i-tekhnika-s-probegom/prolift/rv-richtrak-1/789360',
@@ -279,7 +281,7 @@ function parseAndInjectEnv(filePath: string): void {
 
 function ensureEnvLoaded(): void {
   for (const name of ['.env', '.env.local', '.env.production']) {
-    parseAndInjectEnv(resolve(process.cwd(), name))
+    parseAndInjectEnv(pathResolve(process.cwd(), name))
   }
 }
 
@@ -312,52 +314,6 @@ function sleep(ms: number): Promise<void> {
 
 async function randomDelay(minMs = 400, maxMs = 1200): Promise<void> {
   await sleep(randomInt(minMs, maxMs))
-}
-
-function normalizeNumber(input: string | null | undefined): number | null {
-  if (!input) return null
-  const digits = String(input).replace(/[\s\u00A0]/g, '').replace(/[^\d]/g, '')
-  if (!digits) return null
-  const parsed = Number(digits)
-  return Number.isFinite(parsed) ? parsed : null
-}
-
-function parseYear(input: string | null | undefined): number | null {
-  if (!input) return null
-  const yearMatch = String(input).match(/\b(19\d{2}|20\d{2})\b/)
-  if (!yearMatch) return null
-  const year = Number(yearMatch[1])
-  if (!Number.isFinite(year) || year < 1990 || year > 2030) return null
-  return year
-}
-
-function isBadImageCandidate(value: string | null | undefined): boolean {
-  if (!value) return true
-  const trimmed = value.trim()
-  if (!trimmed) return true
-  const lowered = trimmed.toLowerCase()
-  if (lowered.startsWith('data:')) return true
-  if (lowered.endsWith('.svg')) return true
-  if (BAD_IMAGE_SUBSTRINGS.some((part) => lowered.includes(part))) return true
-  return false
-}
-
-function pickBestImageCandidate(candidates: Array<string | null | undefined>): string | null {
-  const urls = candidates
-    .map((v) => (typeof v === 'string' ? v.trim() : ''))
-    .filter((v) => v.length > 0)
-    .filter((v) => !isBadImageCandidate(v))
-  if (urls.length === 0) return null
-  const score = (url: string): number => {
-    const lowered = url.toLowerCase()
-    let points = 0
-    if (/\.(jpe?g|png|webp)(\?|#|$)/i.test(lowered)) points += 5
-    if (lowered.includes('/upload/') || lowered.includes('/images/') || lowered.includes('/media/')) points += 3
-    if (lowered.includes('/img/')) points -= 1
-    return points
-  }
-  urls.sort((a, b) => score(b) - score(a))
-  return urls[0]
 }
 
 function toAbsoluteUrl(value: string | null): string | null {
@@ -473,16 +429,6 @@ function looksLikeVehicleTitle(
   return true
 }
 
-function isPlausibleCity(value: string | null | undefined): boolean {
-  if (!value) return false
-  const cleaned = value.replace(/\s+/g, ' ').trim()
-  if (cleaned.length < 2 || cleaned.length > 50) return false
-  if (/\d{5,}/.test(cleaned)) return false
-  const lowered = cleaned.toLowerCase()
-  if (CITY_BLOCKLIST.has(lowered)) return false
-  return true
-}
-
 function isDetailUrl(url: string): boolean {
   try {
     const parsed = new URL(url, GAZPROM_BASE_URL)
@@ -505,7 +451,7 @@ async function configurePageForStealth(page: Page): Promise<void> {
   await page.setRequestInterception(true)
   page.on('request', (request) => {
     const type = request.resourceType()
-    if (type === 'font' || type === 'stylesheet') {
+    if (type === 'font' || type === 'stylesheet' || type === 'image') {
       request.abort()
       return
     }
@@ -513,7 +459,28 @@ async function configurePageForStealth(page: Page): Promise<void> {
   })
 }
 
-/** Собирает ссылки на карточки объявлений со страницы каталога. */
+/** Паттерн пути карточки в HTML: /avtomobili-i-tekhnika-s-probegom/brand/model/id */
+const DETAIL_PATH_IN_HTML_RE = /\/avtomobili-i-tekhnika-s-probegom\/[^"'>\s]+\/[^"'>\s]+\/\d+/g
+
+/** Извлекает ссылки на карточки из HTML каталога. */
+function extractDetailUrlsFromHtml(html: string, baseUrl: string): string[] {
+  const out = new Set<string>()
+  let m: RegExpExecArray | null
+  DETAIL_PATH_IN_HTML_RE.lastIndex = 0
+  while ((m = DETAIL_PATH_IN_HTML_RE.exec(html)) !== null) {
+    const path = m[0].replace(/\/$/, '') || m[0]
+    if (!DETAIL_PATH_REGEX.test(path)) continue
+    try {
+      const full = new URL(path, baseUrl)
+      if (full.hostname.includes(ALLOWED_DOMAIN)) out.add(full.toString().replace(/\/$/, ''))
+    } catch {
+      /* ignore */
+    }
+  }
+  return [...out].filter((u) => isDetailUrl(u))
+}
+
+/** Собирает ссылки через page.evaluate (fallback). */
 async function extractDetailUrlsFromPage(page: Page): Promise<string[]> {
   const urls = await page.evaluate((baseUrl: string) => {
     const out = new Set<string>()
@@ -529,7 +496,7 @@ async function extractDetailUrlsFromPage(page: Page): Promise<string[]> {
         if (!re.test(path)) continue
         out.add(full.toString())
       } catch {
-        // ignore
+        /* ignore */
       }
     }
     return [...out]
@@ -602,385 +569,6 @@ async function expandCatalogUntilStable(
   return [...all]
 }
 
-/** Из URL карточки достаём бренд и модель: .../volkswagen/tiguan/73154/ → ['volkswagen','tiguan'] */
-function getBrandModelFromDetailUrl(detailUrl: string): { brand: string; model: string } | null {
-  try {
-    const path = new URL(detailUrl, GAZPROM_BASE_URL).pathname
-    const parts = path.split('/').filter(Boolean)
-    // .../avtomobili-i-tekhnika-s-probegom/{brand}/{model}/{id}
-    if (parts.length >= 3 && /^\d+$/.test(parts[parts.length - 1])) {
-      const model = parts[parts.length - 2] ?? ''
-      const brand = parts[parts.length - 3] ?? ''
-      if (brand && model) return { brand, model }
-    }
-  } catch {
-    // ignore
-  }
-  return null
-}
-
-/** URL-first: brand+model из URL — надёжный fallback. Страничные h1/og:title только при строгой валидации. */
-function extractTitle(html: string, detailUrl: string): string | null {
-  const brandModel = getBrandModelFromDetailUrl(detailUrl)
-  const urlFallback = brandModel
-    ? `${brandModel.brand.charAt(0).toUpperCase() + brandModel.brand.slice(1).toLowerCase()} ${brandModel.model.charAt(0).toUpperCase() + brandModel.model.slice(1).toUpperCase()}`
-    : null
-  const brandCap = brandModel
-    ? brandModel.brand.charAt(0).toUpperCase() + brandModel.brand.slice(1).toLowerCase()
-    : null
-  const modelCap = brandModel
-    ? brandModel.model.charAt(0).toUpperCase() + brandModel.model.slice(1).toUpperCase()
-    : null
-
-  const h1Match = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)
-  const h1Raw = h1Match?.[1]?.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim() ?? null
-  const fromH1 = h1Raw
-    ?.replace(/\s*с пробегом в лизинг[\s\S]*$/i, '')
-    .replace(/\s*в лизинг[\s\S]*$/i, '')
-    .trim() ?? null
-
-  if (fromH1 && brandCap && looksLikeVehicleTitle(fromH1, brandCap)) return fromH1
-
-  if (brandCap && modelCap) {
-    const re = new RegExp(
-      `(${brandCap.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s+[A-Za-zА-Яа-я0-9\\s\\-\\.]{2,90})`,
-      'i'
-    )
-    const bodySnippet = html.slice(0, 80000)
-    let best: string | null = null
-    let match: RegExpExecArray | null
-    while ((match = re.exec(bodySnippet)) !== null) {
-      const candidate = match[1].replace(/\s+/g, ' ').trim()
-      if (looksLikeVehicleTitle(candidate, brandCap)) {
-        if (!best || candidate.length > (best?.length ?? 0)) best = candidate
-      }
-    }
-    if (best) return best
-
-    const ogTitle =
-      html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["'][^>]*>/i)?.[1] ??
-      html.match(/<meta[^>]+content=["']([^"']+)[^>]+property=["']og:title["'][^>]*>/i)?.[1]
-    if (ogTitle) {
-      const cleaned = ogTitle
-        .replace(/\s*[|\|]\s*.*$/i, '')
-        .replace(/\s*с пробегом в лизинг.*$/i, '')
-        .replace(/\s+/g, ' ')
-        .trim()
-      if (looksLikeVehicleTitle(cleaned, brandCap)) {
-        return cleaned
-      }
-    }
-
-    return `${brandCap} ${modelCap}`
-  }
-
-  return urlFallback
-}
-
-// --- detail page: extract data from HTML ---
-
-function extractDetailFromHtml(html: string, pageUrl: string): {
-  title: string | null
-  price: number | null
-  originalPrice: number | null
-  mileage: number | null
-  year: number | null
-  imageUrl: string | null
-  city: string | null
-  bodyColor: string | null
-  bodyType: string | null
-  engine: string | null
-  drivetrain: string | null
-  transmission: string | null
-} {
-  const plainText = html
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-
-  const title = extractTitle(html, pageUrl)
-
-  // Цена только из блока «карточки»: сразу после h1 до «Выберите условия» / «технические характеристики» / «Похожие».
-  // Так не подхватываем цены из калькулятора, «Похожих предложений» и прочих блоков.
-  const EXCLUDE_SNIPPET =
-    /мес|месяц|аванс|платеж\s+от|ежемесячный\s+платеж|экономия\s+до|налоговая\s+экономия|экономия\s+по\s+налогу|ндс|на\s+прибыль|сумма\s+договора|полная\s+стоимость\s*—|общая\s+экономия/
-  // Число и ₽ могут быть в соседних тегах: «2 340 000</span> ₽»
-  const priceRegex = /(\d[\d\s\u00A0.]{2,})\s*(?:<\/[^>]+>[\s\S]{0,30})?(?:₽|&#8381;|руб\.?)/gi
-  const MIN_PRICE = 500_000
-  const MAX_PRICE = 100_000_000
-  const MAX_ORIGINAL_TO_PRICE_RATIO = 1.5
-
-  function collectPricesFromSegment(segment: string, skipExclude = false): number[] {
-    const out: number[] = []
-    let m: RegExpExecArray | null
-    priceRegex.lastIndex = 0
-    while ((m = priceRegex.exec(segment)) !== null) {
-      const num = normalizeNumber(m[1])
-      if (num == null || num < MIN_PRICE || num > MAX_PRICE) continue
-      if (!skipExclude) {
-        const snippet = segment.slice(Math.max(0, m.index - 120), m.index + (m[0].length + 80)).toLowerCase()
-        if (EXCLUDE_SNIPPET.test(snippet)) continue
-      }
-      out.push(num)
-    }
-    return out
-  }
-
-  function collectPricesWithPosition(segment: string, skipExclude = false): { num: number; pos: number }[] {
-    const out: { num: number; pos: number }[] = []
-    let m: RegExpExecArray | null
-    priceRegex.lastIndex = 0
-    while ((m = priceRegex.exec(segment)) !== null) {
-      const num = normalizeNumber(m[1])
-      if (num == null || num < MIN_PRICE || num > MAX_PRICE) continue
-      if (!skipExclude) {
-        const snippet = segment.slice(Math.max(0, m.index - 120), m.index + (m[0].length + 80)).toLowerCase()
-        if (EXCLUDE_SNIPPET.test(snippet)) continue
-      }
-      out.push({ num, pos: m.index })
-    }
-    return out
-  }
-
-  let price: number | null = null
-  let originalPrice: number | null = null
-  const h1Close = html.search(/<\/h1>/i)
-  const MAIN_BLOCK_MIN_LEN = 2500
-
-  if (h1Close !== -1) {
-    const candidates = [
-      h1Close + 3500,
-      html.length,
-      html.indexOf('Выберите условия', h1Close),
-      html.indexOf('технические характеристики', h1Close),
-      html.indexOf('Похожие предложения', h1Close),
-    ].filter((p) => p >= 0)
-    let mainBlockEnd = Math.min(...candidates)
-    if (mainBlockEnd - h1Close < MAIN_BLOCK_MIN_LEN) mainBlockEnd = h1Close + MAIN_BLOCK_MIN_LEN
-    const mainBlock = html.slice(h1Close, Math.min(mainBlockEnd, html.length))
-    const costLabel = mainBlock.search(/Стоимость|стоимость/i)
-    if (costLabel !== -1) {
-      const afterCost = mainBlock.slice(costLabel, costLabel + 450)
-      let byPos = collectPricesWithPosition(afterCost)
-      if (byPos.length === 0) byPos = collectPricesWithPosition(afterCost, true)
-      byPos.sort((a, b) => a.pos - b.pos)
-      if (byPos.length > 0) {
-        const first = byPos[0].num
-        const second = byPos[1]?.num
-        price = first
-        if (second != null && second > first && second <= first * MAX_ORIGINAL_TO_PRICE_RATIO) originalPrice = second
-        else if (second != null && second < first && first <= second * MAX_ORIGINAL_TO_PRICE_RATIO) {
-          price = second
-          originalPrice = first
-        }
-      }
-    }
-    if (price == null) {
-      const headOfBlock = mainBlock.slice(0, 900)
-      let withPos = collectPricesWithPosition(headOfBlock)
-      if (withPos.length === 0) withPos = collectPricesWithPosition(headOfBlock, true)
-      if (withPos.length > 0) {
-        withPos.sort((a, b) => a.pos - b.pos)
-        price = withPos[0].num
-        if (withPos.length >= 2) {
-          const second = withPos[1].num
-          if (second > price && second <= price * MAX_ORIGINAL_TO_PRICE_RATIO) originalPrice = second
-          else if (second < price && price <= second * MAX_ORIGINAL_TO_PRICE_RATIO) {
-            originalPrice = price
-            price = second
-          }
-        }
-      }
-    }
-    if (price == null) {
-      let withPos = collectPricesWithPosition(mainBlock)
-      if (withPos.length === 0) withPos = collectPricesWithPosition(mainBlock, true)
-      if (withPos.length > 0) {
-        withPos.sort((a, b) => a.pos - b.pos)
-        price = withPos[0].num
-        if (withPos.length >= 2) {
-          const second = withPos[1].num
-          if (second > price && second <= price * MAX_ORIGINAL_TO_PRICE_RATIO) originalPrice = second
-        }
-      }
-    }
-  }
-
-  if (price == null) {
-    let plausiblePrices = collectPricesFromSegment(html.slice(0, 30000))
-    if (plausiblePrices.length === 0) plausiblePrices = collectPricesFromSegment(html.slice(0, 30000), true)
-    if (plausiblePrices.length > 0) {
-      price = Math.min(...plausiblePrices)
-      if (plausiblePrices.length >= 2) {
-        const max = Math.max(...plausiblePrices)
-        const min = Math.min(...plausiblePrices)
-        if (max > min && max <= min * MAX_ORIGINAL_TO_PRICE_RATIO) originalPrice = max
-      }
-    }
-  }
-  if (price == null) {
-    const withPos = collectPricesWithPosition(html)
-    if (withPos.length > 0) {
-      withPos.sort((a, b) => a.pos - b.pos)
-      price = withPos[0].num
-      if (withPos.length >= 2) {
-        const second = withPos[1].num
-        if (second > price && second <= price * MAX_ORIGINAL_TO_PRICE_RATIO) originalPrice = second
-      }
-    }
-  }
-
-  const h1CloseForSpecs = html.search(/<\/h1>/i)
-  const mainBlockEndForSpecs =
-    h1CloseForSpecs !== -1
-      ? Math.min(
-          html.length,
-          ...[
-            h1CloseForSpecs + 8000,
-            html.indexOf('Выберите условия', h1CloseForSpecs),
-            html.indexOf('Похожие предложения', h1CloseForSpecs),
-          ]
-            .filter((p) => p >= 0)
-            .concat(html.length)
-        )
-      : 0
-  const specsBlock =
-    h1CloseForSpecs !== -1 && mainBlockEndForSpecs > h1CloseForSpecs
-      ? html
-          .slice(h1CloseForSpecs, mainBlockEndForSpecs)
-          .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-          .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-          .replace(/<[^>]+>/g, ' ')
-          .replace(/&nbsp;/gi, ' ')
-          .replace(/\s+/g, ' ')
-          .trim()
-      : ''
-  const specsText = specsBlock.length > 500 ? specsBlock : plainText
-
-  // Пробег (км) или наработка (м.ч.) для прицепов
-  const mileageNotSpecified = /пробег\s+не\s+указан/i.test(plainText)
-  const mileageText = mileageNotSpecified
-    ? null
-    : plainText.match(/(\d[\d\s\u00A0]{2,})\s*(?:км|km)/i)?.[1] ??
-      html.match(/Пробег\s*<\/[^>]+>[\s\S]{0,80}?(\d[\d\s\u00A0]+)/i)?.[1] ??
-      plainText.match(/(\d[\d\s\u00A0]+)\s*(?:м\.?\s*ч\.?|моточасов?)/i)?.[1] ??
-      html.match(/Наработка\s*<\/[^>]+>[\s\S]{0,80}?(\d[\d\s\u00A0]+)/i)?.[1] ??
-      null
-
-  const yearText =
-    plainText.match(/\b(20\d{2}|19\d{2})\s*г\.?/i)?.[1] ??
-    html.match(/Год выпуска\s*<\/[^>]+>[\s\S]{0,40}?(\d{4})/i)?.[1] ??
-    null
-
-  // Город, Кузов, Цвет, Двигатель — только из основного блока (не из фильтров сайдбара)
-  // Город может состоять из двух слов («Набережные Челны»), берём всё, что выглядит как название.
-  const cityMatch =
-    specsText.match(/Город\s*[:\-]?\s*([А-Яа-яЁёA-Za-z\-\s]{2,60})/i)?.[1] ??
-    html.match(/Город\s*<\/[^>]+>[\s\S]{0,80}?([А-Яа-яЁёA-Za-z\-\s]{2,60})</i)?.[1] ??
-    null
-  let city = cityMatch ? cityMatch.replace(/\s+/g, ' ').trim() : null
-  // Обрезаем подхваченные хвосты следующих полей («Тип ПТС», «Тип ПТС/ПСМ» и т.п.)
-  if (city) city = city.replace(/\s+Тип\s+ПТС(?:\/\s*ПСМ)?\s*$/i, '').trim() || null
-  // Фоллбек: иногда город не подписан явно, но встречается как «г. Нерюнгри» или «г. Набережные Челны» в тексте.
-  if (!city) {
-    const cityFromPlain =
-      plainText.match(/г\.\s*([А-ЯЁ][а-яё]+(?:\s+[А-ЯЁ][а-яё]+){0,2})/)?.[1]?.replace(/\s+/g, ' ').trim() ?? null
-    if (cityFromPlain) city = cityFromPlain
-  }
-  if (city && /ключ|комплект|обременен|птс|псм|объем\s*двигателя/i.test(city)) city = null
-  if (city && !isPlausibleCity(city)) city = null
-
-  // Цвет: только поле «Цвет», из блока карточки (не фильтры)
-  const colorMatch =
-    specsText.match(/Цвет\s*[\s:]*([А-Яа-яЁёA-Za-z\s\-]{2,30}?)(?:\s|$|\d|Кузов|Коробка|Объем)/i)?.[1]?.trim() ??
-    html.match(/Цвет\s*<\/[^>]+>[\s\S]{0,60}?([А-Яа-яЁёA-Za-z\s\-]{2,30})/i)?.[1]?.trim() ??
-    null
-  let bodyColor = colorMatch || null
-  if (bodyColor && /ключ|комплект|количество/i.test(bodyColor)) bodyColor = null
-  if (bodyColor && /^(мусоровоз|седан|внедорожник|грузовой|бортовой|фургон|пикап|универсал|хэтчбек|автобус|автокран|бульдозер|экскаватор)/i.test(bodyColor)) bodyColor = null
-
-  // Тип кузова: из блока карточки (не из фильтра сайдбара)
-  const bodyTypeMatch =
-    specsText.match(/Кузов\s*[\s:]*([А-Яа-яЁёA-Za-z0-9\s\-\(\)\/]{2,50}?)(?:\s|$|\d|Количество|Цвет|Объем)/i)?.[1]?.trim() ??
-    html.match(/Кузов\s*<\/[^>]+>[\s\S]{0,80}?([А-Яа-яЁёA-Za-z0-9\s\-\(\)\/]{2,50})/i)?.[1]?.trim() ??
-    null
-  let bodyType = bodyTypeMatch || null
-  if (bodyType && /ключ|комплект|количество/i.test(bodyType)) bodyType = null
-
-  // Объем двигателя: из блока карточки. Отсекаем мусор (100 л — мощность, не объём)
-  const engineMatch = specsText.match(/Объем\s+двигателя\s*[\s:]*([\d.,]+\s*(?:л\.?)?)/i)?.[1]?.trim()
-  const engineVolNum = engineMatch ? parseFloat(engineMatch.replace(/[^\d.,]/g, '').replace(',', '.')) : NaN
-  const engineVolume =
-    engineMatch && Number.isFinite(engineVolNum) && engineVolNum >= 0.5 && engineVolNum <= 12
-      ? (engineMatch.includes('л') ? engineMatch : `${engineMatch} л`).trim()
-      : null
-
-  // Тип топлива: из блока карточки
-  const fuelMatch =
-    specsText.match(/Тип\s+топлива\s*[\s:]*([А-Яа-яЁёA-Za-z\s\-]{3,30}?)(?:\s|$|\d|Кузов|Объем)/i)?.[1]?.trim() ??
-    specsText.match(/Топливо\s*[\s:]*([А-Яа-яЁёA-Za-z\s\-]{3,30}?)(?:\s|$|\d|Кузов|Объем)/i)?.[1]?.trim() ??
-    specsText.match(/Двигатель\s*[\s:]*([А-Яа-яЁёA-Za-z0-9\s\-,.]{3,50}?)(?:\s|$|Кузов|Объем)/i)?.[1]?.trim() ??
-    null
-  const fuelNormalized = fuelMatch
-    ? (() => {
-        const f = fuelMatch.toLowerCase()
-        if (/бензин|tsi|tfsi|fsi|mpi/i.test(f)) return 'Бензин'
-        if (/дизел|tdi|cdi|dci|tdci|d4d|multijet/i.test(f)) return 'Дизель'
-        if (/электро|электромобил|ev|phev|recharge/i.test(f)) return 'Электро'
-        if (/гибрид|hybrid|plug.in|phev/i.test(f)) return 'Гибрид'
-        if (/газ|метан|пропан|lpg|cng/i.test(f)) return 'Газ'
-        return fuelMatch.replace(/\s+/g, ' ').trim()
-      })()
-    : null
-
-  const engine =
-    [engineVolume, fuelNormalized].filter(Boolean).length > 0
-      ? [engineVolume, fuelNormalized].filter(Boolean).join(', ')
-      : null
-
-  // Колёсная формула (4x4, 6x4, 4x2) — ловим полную формулу, не обрезаем на 4x.
-  // Привод (передний/задний/полный) — для легковых.
-  const wheelFormulaMatch = plainText.match(/Кол[её]сная\s+формула\s*[\s:]*(\d+[xхX]\d+)/i)?.[1]?.trim()
-  const driveMatch =
-    !wheelFormulaMatch &&
-    (specsText.match(/Привод\s*[\s:]*([А-Яа-яЁёA-Za-z0-9\s\-]{2,30}?)(?:\s|$|Кузов|Коробка|Объем)/i)?.[1]?.trim() ?? null)
-  const drivetrain = (wheelFormulaMatch || driveMatch)?.replace(/\s+/g, ' ').trim() || null
-
-  const transmissionMatch =
-    specsText.match(/Коробка\s+передач\s*[\s:]*([А-Яа-яЁёA-Za-z0-9\s\-]{2,40}?)(?:\s|$|\d|Кузов|Привод|Объем)/i)?.[1]?.trim() ??
-    specsText.match(/КПП\s*[\s:]*([А-Яа-яЁёA-Za-z0-9\s\-]{2,40}?)(?:\s|$|\d|Кузов|Привод|Объем)/i)?.[1]?.trim() ??
-    null
-  const transmission = transmissionMatch?.replace(/\s+/g, ' ').trim() || null
-
-  const ogImage =
-    html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["'][^>]*>/i)?.[1] ??
-    html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["'][^>]*>/i)?.[1] ??
-    null
-  const imgSrc =
-    html.match(/<img[^>]+data-src=["']([^"']+)["'][^>]*>/i)?.[1] ??
-    html.match(/<img[^>]+src=["']([^"']+)["'][^>]*>/i)?.[1] ??
-    null
-  const imageUrl = pickBestImageCandidate([ogImage, imgSrc].map((v) => v?.replace(/&amp;/g, '&')))
-
-  return {
-    title,
-    price,
-    originalPrice: originalPrice ?? null,
-    mileage: normalizeNumber(mileageText),
-    year: parseYear(yearText ?? undefined),
-    imageUrl,
-    city: city ?? null,
-    bodyColor: bodyColor || null,
-    bodyType: bodyType || null,
-    engine: engine || null,
-    drivetrain: drivetrain || null,
-    transmission: transmission || null,
-  }
-}
-
 /** Картинка из живой DOM. Только из зоны: после h1 и до «Похожие предложения» — баннеры/акции (LEASING, автомобиль) выше h1. */
 const EXTRACT_IMAGE_SCRIPT = `
 (function() {
@@ -1033,17 +621,123 @@ const EXTRACT_IMAGE_SCRIPT = `
 
 const FALLBACK_IMAGE = 'https://dummyimage.com/1200x800/1f2937/e5e7eb&text=Vehicle+Photo+Pending'
 
-/** Как Alfaleasing: Puppeteer page.goto вместо fetch — убирает зависания на медленных/зависших соединениях. */
+/** Извлечение в child process — при зависании (ReDoS и т.п.) убиваем процесс, скипаем карточку. */
+const PARSE_CHILD_SCRIPT = pathResolve(dirname(fileURLToPath(import.meta.url)), 'gazprom-parse-child.ts')
+const PARSE_TIMEOUT_MS = 25_000
+
+async function extractInChildProcess(
+  html: string,
+  pageUrl: string
+): Promise<{
+  title: string | null
+  price: number | null
+  originalPrice: number | null
+  mileage: number | null
+  year: number | null
+  imageUrl: string | null
+  city: string | null
+  bodyColor: string | null
+  bodyType: string | null
+  engine: string | null
+  drivetrain: string | null
+  transmission: string | null
+} | null> {
+  return new Promise((resolve) => {
+    const tsxCli = pathResolve(process.cwd(), 'node_modules/tsx/dist/cli.mjs')
+    const child = spawn(process.execPath, [tsxCli, PARSE_CHILD_SCRIPT], {
+      stdio: ['pipe', 'pipe', 'ignore'],
+    })
+    const timeout = setTimeout(() => {
+      child.kill('SIGKILL')
+      resolve(null)
+    }, PARSE_TIMEOUT_MS)
+    let resolved = false
+    const finish = (result: Awaited<ReturnType<typeof extractInChildProcess>>) => {
+      if (resolved) return
+      resolved = true
+      clearTimeout(timeout)
+      resolve(result)
+    }
+    child.on('error', () => finish(null))
+    child.on('exit', (code) => {
+      if (!resolved) finish(null)
+    })
+    let buf = ''
+    child.stdout?.on('data', (chunk: Buffer) => {
+      buf += chunk.toString()
+      if (buf.includes('\n')) {
+        const line = buf.split('\n')[0]
+        try {
+          const parsed = JSON.parse(line) as { ok?: boolean; data?: unknown; error?: string }
+          if (parsed.ok && parsed.data) finish(parsed.data as Awaited<ReturnType<typeof extractInChildProcess>>)
+          else finish(null)
+        } catch {
+          finish(null)
+        }
+      }
+    })
+    child.stdin?.write(JSON.stringify({ html, pageUrl }) + '\n', (err) => {
+      if (err) finish(null)
+    })
+    child.stdin?.end()
+  })
+}
+
+const CATALOG_FETCH_TIMEOUT_MS = 45_000
+const DETAIL_FETCH_TIMEOUT_MS = 35_000
+const DETAIL_NAV_TIMEOUT_MS = 50_000
+
+const FETCH_HEADERS = {
+  'User-Agent':
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  Accept: 'text/html,application/xhtml+xml',
+  'Accept-Language': 'ru-RU,ru;q=0.9,en;q=0.8',
+}
+
+async function fetchWithTimeout(url: string, timeoutMs: number): Promise<string | null> {
+  try {
+    const controller = new AbortController()
+    const t = setTimeout(() => controller.abort(), timeoutMs)
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: FETCH_HEADERS,
+      redirect: 'follow',
+    })
+    clearTimeout(t)
+    if (!res.ok) return null
+    return await res.text()
+  } catch {
+    return null
+  }
+}
+
+async function fetchDetailHtml(detailUrl: string): Promise<string | null> {
+  const html = await fetchWithTimeout(detailUrl, DETAIL_FETCH_TIMEOUT_MS)
+  return html && html.length > 3000 ? html : null
+}
+
 async function enrichAndCollectListing(
   page: Page,
   detailUrl: string,
   category: string
 ): Promise<ScrapedListing | null> {
   try {
-    await page.goto(detailUrl, { waitUntil: 'domcontentloaded', timeout: 25_000 })
-    await sleep(process.env.CI ? 1500 : 2500)
-    const html = await page.content()
-    const data = extractDetailFromHtml(html, detailUrl)
+    let html: string | null = await fetchDetailHtml(detailUrl)
+    if (!html) {
+      await page.goto(detailUrl, {
+        waitUntil: 'domcontentloaded',
+        timeout: DETAIL_NAV_TIMEOUT_MS,
+      })
+      await sleep(process.env.CI ? 1000 : 1500)
+      html = await page.content()
+    }
+    const MAX_HTML_LEN = 150_000
+    if (html.length > MAX_HTML_LEN) html = html.slice(0, MAX_HTML_LEN)
+    const data = await extractInChildProcess(html, detailUrl)
+    if (!data) {
+      console.warn(`  skip (parse timeout/bug): ${detailUrl}`)
+      return null
+    }
 
     const title = data.title && looksLikeVehicleTitle(data.title) ? data.title : null
     if (!title) {
@@ -1094,6 +788,20 @@ async function enrichAndCollectListing(
   }
 }
 
+const DETAIL_PAGE_TIMEOUT_MS = 55_000
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T | null> {
+  return Promise.race([
+    promise,
+    new Promise<null>((resolve) => {
+      setTimeout(() => {
+        console.warn(`  skip (timeout ${ms / 1000}s): ${label}`)
+        resolve(null)
+      }, ms)
+    }),
+  ])
+}
+
 // --- main scrape loop ---
 
 async function scrapeListings(supabase: SupabaseClient): Promise<Set<string>> {
@@ -1127,6 +835,14 @@ async function scrapeListings(supabase: SupabaseClient): Promise<Set<string>> {
       ? GAZPROM_SECTIONS.filter((s) => sectionFilter.includes(s.category))
       : GAZPROM_SECTIONS
 
+  const refreshPage = async (): Promise<void> => {
+    await page.close().catch(() => {})
+    page = await browser.newPage()
+    await configurePageForStealth(page)
+    page.setDefaultNavigationTimeout(90_000)
+    page.setDefaultTimeout(45_000)
+  }
+
   try {
     for (const section of sectionsToProcess) {
       if (shutdownRequested) break
@@ -1150,16 +866,21 @@ async function scrapeListings(supabase: SupabaseClient): Promise<Set<string>> {
             pageNum === 1
               ? section.catalogUrl
               : withPagination(section.catalogUrl, pageNum, 'page')
-          try {
-            await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 })
-          } catch (navErr) {
-            if (isShutdownError(navErr)) break
-            if (pageNum > 1) break
-            throw navErr
+          let pageUrls: string[]
+          const catalogHtml = await fetchWithTimeout(url, CATALOG_FETCH_TIMEOUT_MS)
+          if (catalogHtml && catalogHtml.length > 5000) {
+            pageUrls = extractDetailUrlsFromHtml(catalogHtml, GAZPROM_BASE_URL)
+          } else {
+            try {
+              await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 })
+            } catch (navErr) {
+              if (isShutdownError(navErr)) break
+              if (pageNum > 1) break
+              throw navErr
+            }
+            await sleep(process.env.CI ? 2000 : 3000)
+            pageUrls = await extractDetailUrlsFromPage(page)
           }
-          await sleep(process.env.CI ? 3000 : 4500)
-
-          const pageUrls = await extractDetailUrlsFromPage(page)
           const before = allUrls.size
           for (const u of pageUrls) allUrls.add(u)
           const added = allUrls.size - before
@@ -1168,7 +889,7 @@ async function scrapeListings(supabase: SupabaseClient): Promise<Set<string>> {
           emptyPagesInARow = added === 0 ? emptyPagesInARow + 1 : 0
           if (emptyPagesInARow >= 2) break
           if (maxPagesLimit > 0 && pageNum >= maxPagesLimit) break
-          await randomDelay(500, 1000)
+          await randomDelay(800, 1500)
         }
 
         const detailUrls = [...allUrls].filter((u) => !PROBLEM_DETAIL_URLS.has(u))
@@ -1194,7 +915,11 @@ async function scrapeListings(supabase: SupabaseClient): Promise<Set<string>> {
             continue
           }
 
-          const listing = await enrichAndCollectListing(page, url, section.category)
+          const listing = await withTimeout(
+            enrichAndCollectListing(page, url, section.category),
+            DETAIL_PAGE_TIMEOUT_MS,
+            url
+          )
           if (listing) {
             collected.set(listing.external_id, listing)
             console.log(
