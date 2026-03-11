@@ -893,26 +893,6 @@ function extractDetailFromHtml(html: string, pageUrl: string): {
   if (city && /ключ|комплект|обременен|птс|псм|объем\s*двигателя/i.test(city)) city = null
   if (city && !isPlausibleCity(city)) city = null
 
-  // #region agent log
-  // Debug city extraction for GAZPROM (hypothesis H-city)
-  fetch('http://127.0.0.1:7591/ingest/20c2554d-91a0-4e6a-bc4e-4217e2981cc5', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Debug-Session-Id': '397aab',
-    },
-    body: JSON.stringify({
-      sessionId: '397aab',
-      runId: 'pre-fix-1',
-      hypothesisId: 'H-city',
-      location: 'gazprom-scraper.ts:city',
-      message: 'city extracted from detail HTML',
-      data: { pageUrl, city, cityMatch, hasGorodField: !!cityMatch },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion agent log
-
   // Цвет: только поле «Цвет», из блока карточки (не фильтры)
   const colorMatch =
     specsText.match(/Цвет\s*[\s:]*([А-Яа-яЁёA-Za-z\s\-]{2,30}?)(?:\s|$|\d|Кузов|Коробка|Объем)/i)?.[1]?.trim() ??
@@ -1053,68 +1033,19 @@ const EXTRACT_IMAGE_SCRIPT = `
 
 const FALLBACK_IMAGE = 'https://dummyimage.com/1200x800/1f2937/e5e7eb&text=Vehicle+Photo+Pending'
 
-const FETCH_ABORT_MS = 9_000
-
+/** Как Alfaleasing: Puppeteer page.goto вместо fetch — убирает зависания на медленных/зависших соединениях. */
 async function enrichAndCollectListing(
+  page: Page,
   detailUrl: string,
   category: string
 ): Promise<ScrapedListing | null> {
   try {
-    const controller = new AbortController()
-    const to = setTimeout(() => controller.abort(), FETCH_ABORT_MS)
-    const res = await fetch(detailUrl, {
-      signal: controller.signal,
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
-      },
-    })
-    // #region agent log
-    fetch('http://127.0.0.1:7591/ingest/20c2554d-91a0-4e6a-bc4e-4217e2981cc5', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '397aab' },
-      body: JSON.stringify({
-        sessionId: '397aab',
-        hypothesisId: 'H-enrich',
-        location: 'gazprom-scraper.ts:enrichAndCollectListing',
-        message: 'fetch result',
-        data: { url: detailUrl, resOk: res.ok, status: res.status },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {})
-    // #endregion agent log
-    if (!res.ok) {
-      clearTimeout(to)
-      console.warn(`  skip (http ${res.status}) for ${detailUrl}`)
-      return null
-    }
-    const html = await res.text()
-    clearTimeout(to)
+    await page.goto(detailUrl, { waitUntil: 'domcontentloaded', timeout: 25_000 })
+    await sleep(process.env.CI ? 1500 : 2500)
+    const html = await page.content()
     const data = extractDetailFromHtml(html, detailUrl)
 
     const title = data.title && looksLikeVehicleTitle(data.title) ? data.title : null
-    // #region agent log
-    fetch('http://127.0.0.1:7591/ingest/20c2554d-91a0-4e6a-bc4e-4217e2981cc5', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '397aab' },
-      body: JSON.stringify({
-        sessionId: '397aab',
-        hypothesisId: 'H-enrich',
-        location: 'gazprom-scraper.ts:enrichAndCollectListing',
-        message: 'extract result',
-        data: {
-          url: detailUrl,
-          hasTitle: !!data.title,
-          titleOk: !!title,
-          rawTitle: data.title?.slice(0, 50),
-          hasPrice: !!(data.price && data.price >= 100_000),
-          price: data.price,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {})
-    // #endregion agent log
     if (!title) {
       console.warn(`  skip (no title): ${detailUrl}`)
       return null
@@ -1158,63 +1089,9 @@ async function enrichAndCollectListing(
     return listing
   } catch (err) {
     if (isShutdownError(err)) throw err
-    const msg = err instanceof Error ? err.message : String(err)
-    if (msg.includes('abort') || (err instanceof Error && err.name === 'AbortError')) {
-      console.warn(`  skip (fetch timeout) for ${detailUrl}`)
-    } else {
-      console.warn(`  enrich failed for ${detailUrl}:`, err)
-    }
+    console.warn(`  enrich failed for ${detailUrl}:`, err instanceof Error ? err.message : err)
     return null
   }
-}
-
-function withTimeout<T>(
-  promise: Promise<T>,
-  ms: number,
-  label: string
-): Promise<{ value: T | null; timedOut: boolean }> {
-  let timeoutId: ReturnType<typeof setTimeout> | null = null
-  const timeoutPromise = new Promise<{ value: null; timedOut: true }>((resolve) => {
-    timeoutId = setTimeout(() => {
-      console.warn(`  timeout after ${ms}ms: ${label}`)
-
-      // #region agent log
-      // Debug timeouts in withTimeout (hypothesis H-timeout)
-      fetch('http://127.0.0.1:7591/ingest/20c2554d-91a0-4e6a-bc4e-4217e2981cc5', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Debug-Session-Id': '397aab',
-        },
-        body: JSON.stringify({
-          sessionId: '397aab',
-          runId: 'pre-fix-1',
-          hypothesisId: 'H-timeout',
-          location: 'gazprom-scraper.ts:withTimeout',
-          message: 'operation timed out',
-          data: { label, ms },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {})
-      // #endregion agent log
-
-      resolve({ value: null, timedOut: true })
-    }, ms)
-  })
-
-  return Promise.race([
-    promise
-      .then((value) => {
-        if (timeoutId != null) clearTimeout(timeoutId)
-        return { value, timedOut: false as const }
-      })
-      .catch((err) => {
-        if (timeoutId != null) clearTimeout(timeoutId)
-        console.warn(`  error in ${label}:`, err)
-        return { value: null, timedOut: false as const }
-      }),
-    timeoutPromise,
-  ])
 }
 
 // --- main scrape loop ---
@@ -1237,8 +1114,6 @@ async function scrapeListings(supabase: SupabaseClient): Promise<Set<string>> {
 
   const collected = new Map<string, ScrapedListing>()
   const allScrapedIds = new Set<string>()
-  const DETAIL_TIMEOUT_MS = 10_000
-  const DETAIL_CONCURRENCY = 4
 
   // Временный фильтр разделов по умолчанию: спецтехника + прицепы.
   const sectionFilterRaw = process.env.GAZPROMP_SECTIONS ?? 'speztechnika,pricepy'
@@ -1309,96 +1184,33 @@ async function scrapeListings(supabase: SupabaseClient): Promise<Set<string>> {
           console.log(`Found ${detailUrls.length} detail links on catalog page`)
         }
 
-        let processed = 0
-        let index = 0
-
-        const worker = async (workerId: number): Promise<void> => {
-          while (true) {
-            if (shutdownRequested) return
-            const current = index
-            if (current >= urlsToProcess.length) return
-            index += 1
-
-            const url = urlsToProcess[current]
-            if (collected.has(buildExternalId(url))) continue
-
-            if (/prolift|richtrak/i.test(url)) {
-              console.warn(`  skip (known problematic): ${url}`)
-              continue
-            }
-
-            // #region agent log
-            // Debug worker start (hypothesis H-worker)
-            fetch('http://127.0.0.1:7591/ingest/20c2554d-91a0-4e6a-bc4e-4217e2981cc5', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'X-Debug-Session-Id': '397aab',
-              },
-              body: JSON.stringify({
-                sessionId: '397aab',
-                runId: 'pre-fix-1',
-                hypothesisId: 'H-worker',
-                location: 'gazprom-scraper.ts:worker',
-                message: 'worker starting detail',
-                data: { workerId, index: current, url },
-                timestamp: Date.now(),
-              }),
-            }).catch(() => {})
-            // #endregion agent log
-
-            const { value: listing } = await withTimeout(
-              enrichAndCollectListing(url, section.category),
-              DETAIL_TIMEOUT_MS,
-              `detail ${url}`
-            )
-
-            if (listing) {
-              collected.set(listing.external_id, listing)
-              console.log(
-                `+ [${section.category}] ${listing.title} | ${listing.price ?? '?'} ₽ | ${listing.year ?? '?'} г. | ${
-                  listing.city ?? '—'
-                }`
-              )
-            }
-
-            // #region agent log
-            // Debug worker end (hypothesis H-worker)
-            fetch('http://127.0.0.1:7591/ingest/20c2554d-91a0-4e6a-bc4e-4217e2981cc5', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'X-Debug-Session-Id': '397aab',
-              },
-              body: JSON.stringify({
-                sessionId: '397aab',
-                runId: 'pre-fix-1',
-                hypothesisId: 'H-worker',
-                location: 'gazprom-scraper.ts:worker',
-                message: 'worker finished detail',
-                data: { workerId, index: current, url, hasListing: !!listing },
-                timestamp: Date.now(),
-              }),
-            }).catch(() => {})
-            // #endregion agent log
-
-            processed += 1
-            if (processed % 1 === 0 || processed === urlsToProcess.length) {
-              console.log(
-                `  progress [${section.category}]: ${processed}/${urlsToProcess.length} detail pages processed${listing ? ` (+1)` : ''}`
-              )
-            }
-
-            await randomDelay(400, 900)
+        // Последовательно, как Alfaleasing: page.goto вместо fetch — стабильнее, без зависаний
+        for (let i = 0; i < urlsToProcess.length; i += 1) {
+          if (shutdownRequested) break
+          const url = urlsToProcess[i]
+          if (collected.has(buildExternalId(url))) continue
+          if (/prolift|richtrak/i.test(url)) {
+            console.warn(`  skip (known problematic): ${url}`)
+            continue
           }
-        }
 
-        const workers: Promise<void>[] = []
-        const workerCount = Math.min(DETAIL_CONCURRENCY, urlsToProcess.length)
-        for (let w = 0; w < workerCount; w += 1) {
-          workers.push(worker(w + 1))
+          const listing = await enrichAndCollectListing(page, url, section.category)
+          if (listing) {
+            collected.set(listing.external_id, listing)
+            console.log(
+              `+ [${section.category}] ${listing.title} | ${listing.price ?? '?'} ₽ | ${listing.year ?? '?'} г. | ${
+                listing.city ?? '—'
+              }`
+            )
+          }
+          const processed = i + 1
+          if (processed % 5 === 0 || processed === urlsToProcess.length) {
+            console.log(
+              `  progress [${section.category}]: ${processed}/${urlsToProcess.length} detail pages processed`
+            )
+          }
+          await randomDelay(400, 900)
         }
-        await Promise.all(workers)
 
         const sectionListings = [...collected.values()].filter((l) => l.category === section.category)
         if (sectionListings.length > 0) {
