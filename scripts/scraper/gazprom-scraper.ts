@@ -1013,74 +1013,31 @@ const EXTRACT_IMAGE_SCRIPT = `
 })();
 `
 
-async function extractImageFromLiveDom(page: Page): Promise<string | null> {
-  const url = await page.evaluate(EXTRACT_IMAGE_SCRIPT)
-  return typeof url === 'string' && url ? pickBestImageCandidate([url]) : null
-}
-
-/** Цена из DOM: первый блок после h1 с числом и ₽ (только основной контент до «Выберите условия»). */
-const EXTRACT_PRICE_SCRIPT = `
-(function() {
-  var h1 = document.querySelector('h1');
-  if (!h1) return null;
-  var root = h1.closest('main') || h1.closest('article') || document.body;
-  var full = (root.innerText || root.textContent || '').slice(0, 8000);
-  var stop = full.indexOf('Выберите условия');
-  if (stop > 0) full = full.slice(0, stop);
-  var re = /(\\d[\\d\\s\\u00A0.]{2,})\\s*₽/g;
-  var match;
-  var prices = [];
-  while ((match = re.exec(full)) !== null) {
-    var numStr = match[1].replace(/[^\\d]/g, '');
-    if (numStr.length < 4) continue;
-    var num = parseInt(numStr, 10);
-    if (num < 500000 || num > 100000000) continue;
-    prices.push({ num: num, pos: match.index });
-  }
-  if (prices.length === 0) return null;
-  prices.sort(function(a,b){ return a.pos - b.pos; });
-  var first = prices[0].num;
-  var second = prices[1] ? prices[1].num : null;
-  var orig = (second !== null && second > first && second <= first * 1.5) ? second : null;
-  return { price: first, originalPrice: orig };
-})();
-`
-
-async function extractPriceFromLiveDom(page: Page): Promise<{ price: number; originalPrice: number | null } | null> {
-  const result = await page.evaluate(EXTRACT_PRICE_SCRIPT)
-  if (result && typeof result.price === 'number' && result.price >= 100_000) {
-    return {
-      price: result.price,
-      originalPrice:
-        result.originalPrice != null && result.originalPrice > result.price && result.originalPrice <= result.price * 1.5
-          ? result.originalPrice
-          : null,
-    }
-  }
-  return null
-}
+// DOM‑скрипты оставлены выше на случай будущего использования в браузере,
+// но для надёжности парсера ГАЗПРОМа сейчас не используются.
 
 // --- enrich one detail page and build ScrapedListing ---
 
 const FALLBACK_IMAGE = 'https://dummyimage.com/1200x800/1f2937/e5e7eb&text=Vehicle+Photo+Pending'
 
 async function enrichAndCollectListing(
-  page: Page,
   detailUrl: string,
   category: string
 ): Promise<ScrapedListing | null> {
   try {
-    await page.goto(detailUrl, { waitUntil: 'domcontentloaded' })
-    await sleep(process.env.CI ? 2500 : 4500)
-
-    const html = await page.content()
-    const data = extractDetailFromHtml(html, detailUrl)
-
-    const domPrice = await extractPriceFromLiveDom(page)
-    if (domPrice) {
-      data.price = domPrice.price
-      data.originalPrice = domPrice.originalPrice
+    const res = await fetch(detailUrl, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+      },
+    })
+    if (!res.ok) {
+      console.warn(`  skip (http ${res.status}) for ${detailUrl}`)
+      return null
     }
+    const html = await res.text()
+    const data = extractDetailFromHtml(html, detailUrl)
 
     const title = data.title && looksLikeVehicleTitle(data.title) ? data.title : null
     if (!title) {
@@ -1100,13 +1057,7 @@ async function enrichAndCollectListing(
       return null
     }
 
-    let absoluteImage: string | null = null
-    const fromDom = await extractImageFromLiveDom(page)
-    if (fromDom) {
-      absoluteImage = toAbsoluteUrl(fromDom)
-    } else if (data.imageUrl) {
-      absoluteImage = toAbsoluteUrl(data.imageUrl)
-    }
+    let absoluteImage: string | null = data.imageUrl ? toAbsoluteUrl(data.imageUrl) : null
     if (!absoluteImage) absoluteImage = FALLBACK_IMAGE
 
     const listing: ScrapedListing = {
@@ -1276,28 +1227,19 @@ async function scrapeListings(supabase: SupabaseClient): Promise<Set<string>> {
             continue
           }
 
-          const detailPage = await browser.newPage()
-          await configurePageForStealth(detailPage)
-          detailPage.setDefaultNavigationTimeout(90_000)
-          detailPage.setDefaultTimeout(45_000)
+          const { value: listing } = await withTimeout(
+            enrichAndCollectListing(url, section.category),
+            DETAIL_TIMEOUT_MS,
+            `detail ${url}`
+          )
 
-          try {
-            const { value: listing } = await withTimeout(
-              enrichAndCollectListing(detailPage, url, section.category),
-              DETAIL_TIMEOUT_MS,
-              `detail ${url}`
+          if (listing) {
+            collected.set(listing.external_id, listing)
+            console.log(
+              `+ [${section.category}] ${listing.title} | ${listing.price ?? '?'} ₽ | ${listing.year ?? '?'} г. | ${
+                listing.city ?? '—'
+              }`
             )
-
-            if (listing) {
-              collected.set(listing.external_id, listing)
-              console.log(
-                `+ [${section.category}] ${listing.title} | ${listing.price ?? '?'} ₽ | ${listing.year ?? '?'} г. | ${
-                  listing.city ?? '—'
-                }`
-              )
-            }
-          } finally {
-            await detailPage.close()
           }
 
           await randomDelay(400, 900)

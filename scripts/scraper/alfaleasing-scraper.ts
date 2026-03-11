@@ -1043,9 +1043,11 @@ async function scrapeListingsAndSync(supabase: SupabaseClient): Promise<void> {
   let totalListings = 0
   const maxLoadMoreIterations = Math.min(Number(process.env.ALFALEASING_MAX_PAGES) || 5, 50)
 
-  const maxRunSeconds = Number(process.env.ALFALEASING_MAX_RUN_SECONDS) || 3300 // ~55 минут
+  const maxRunSecondsEnv = Number(process.env.ALFALEASING_MAX_RUN_SECONDS)
+  const hasTimeLimit = Number.isFinite(maxRunSecondsEnv) && maxRunSecondsEnv > 0
   const startedAt = Date.now()
-  const isTimeExceeded = (): boolean => (Date.now() - startedAt) / 1000 >= maxRunSeconds
+  const isTimeExceeded = (): boolean =>
+    hasTimeLimit ? (Date.now() - startedAt) / 1000 >= maxRunSecondsEnv : false
 
   try {
     for (const section of ALFALEASING_SECTIONS) {
