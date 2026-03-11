@@ -1070,7 +1070,6 @@ async function enrichAndCollectListing(
         'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
       },
     })
-    clearTimeout(to)
     // #region agent log
     fetch('http://127.0.0.1:7591/ingest/20c2554d-91a0-4e6a-bc4e-4217e2981cc5', {
       method: 'POST',
@@ -1086,10 +1085,12 @@ async function enrichAndCollectListing(
     }).catch(() => {})
     // #endregion agent log
     if (!res.ok) {
+      clearTimeout(to)
       console.warn(`  skip (http ${res.status}) for ${detailUrl}`)
       return null
     }
     const html = await res.text()
+    clearTimeout(to)
     const data = extractDetailFromHtml(html, detailUrl)
 
     const title = data.title && looksLikeVehicleTitle(data.title) ? data.title : null
