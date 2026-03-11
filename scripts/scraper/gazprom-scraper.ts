@@ -1053,18 +1053,24 @@ const EXTRACT_IMAGE_SCRIPT = `
 
 const FALLBACK_IMAGE = 'https://dummyimage.com/1200x800/1f2937/e5e7eb&text=Vehicle+Photo+Pending'
 
+const FETCH_ABORT_MS = 9_000
+
 async function enrichAndCollectListing(
   detailUrl: string,
   category: string
 ): Promise<ScrapedListing | null> {
   try {
+    const controller = new AbortController()
+    const to = setTimeout(() => controller.abort(), FETCH_ABORT_MS)
     const res = await fetch(detailUrl, {
+      signal: controller.signal,
       headers: {
         'User-Agent':
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
       },
     })
+    clearTimeout(to)
     // #region agent log
     fetch('http://127.0.0.1:7591/ingest/20c2554d-91a0-4e6a-bc4e-4217e2981cc5', {
       method: 'POST',
@@ -1151,7 +1157,12 @@ async function enrichAndCollectListing(
     return listing
   } catch (err) {
     if (isShutdownError(err)) throw err
-    console.warn(`  enrich failed for ${detailUrl}:`, err)
+    const msg = err instanceof Error ? err.message : String(err)
+    if (msg.includes('abort') || (err instanceof Error && err.name === 'AbortError')) {
+      console.warn(`  skip (fetch timeout) for ${detailUrl}`)
+    } else {
+      console.warn(`  enrich failed for ${detailUrl}:`, err)
+    }
     return null
   }
 }
@@ -1371,7 +1382,7 @@ async function scrapeListings(supabase: SupabaseClient): Promise<Set<string>> {
             // #endregion agent log
 
             processed += 1
-            if (processed % 5 === 0 || processed === urlsToProcess.length || listing) {
+            if (processed % 1 === 0 || processed === urlsToProcess.length) {
               console.log(
                 `  progress [${section.category}]: ${processed}/${urlsToProcess.length} detail pages processed${listing ? ` (+1)` : ''}`
               )
