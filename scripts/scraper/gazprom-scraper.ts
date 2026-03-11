@@ -877,6 +877,12 @@ function extractDetailFromHtml(html: string, pageUrl: string): {
     html.match(/Город\s*<\/[^>]+>[\s\S]{0,80}?([А-Яа-яЁёA-Za-z\-\s]{2,60})</i)?.[1] ??
     null
   let city = cityMatch ? cityMatch.replace(/\s+/g, ' ').trim() : null
+  // Фоллбек: иногда город не подписан явно, но встречается как «г. Нерюнгри» или «г. Набережные Челны» в тексте.
+  if (!city) {
+    const cityFromPlain =
+      plainText.match(/г\.\s*([А-ЯЁ][а-яё]+(?:\s+[А-ЯЁ][а-яё]+){0,2})/)?.[1]?.replace(/\s+/g, ' ').trim() ?? null
+    if (cityFromPlain) city = cityFromPlain
+  }
   if (city && /ключ|комплект|обременен|птс|псм/i.test(city)) city = null
   if (city && !isPlausibleCity(city)) city = null
 
@@ -1136,19 +1142,8 @@ async function scrapeListings(supabase: SupabaseClient): Promise<Set<string>> {
 
   const collected = new Map<string, ScrapedListing>()
   const allScrapedIds = new Set<string>()
-  const PAGE_REFRESH_INTERVAL = 200
-  const DETAIL_TIMEOUT_MS = 30_000
-  let cardsSinceRefresh = 0
-
-  const refreshPage = async (): Promise<void> => {
-    await page.close()
-    page = await browser.newPage()
-    await configurePageForStealth(page)
-    page.setDefaultNavigationTimeout(90_000)
-    page.setDefaultTimeout(45_000)
-    cardsSinceRefresh = 0
-    console.log('  [memory] page recreated')
-  }
+  const DETAIL_TIMEOUT_MS = 10_000
+  const DETAIL_CONCURRENCY = 4
 
   // Временный фильтр разделов по умолчанию: спецтехника + прицепы.
   const sectionFilterRaw = process.env.GAZPROMP_SECTIONS ?? 'speztechnika,pricepy'
@@ -1219,31 +1214,56 @@ async function scrapeListings(supabase: SupabaseClient): Promise<Set<string>> {
           console.log(`Found ${detailUrls.length} detail links on catalog page`)
         }
 
-        for (const url of urlsToProcess) {
-          if (shutdownRequested) break
-          if (collected.has(buildExternalId(url))) continue
-          if (/prolift|richtrak/i.test(url)) {
-            console.warn(`  skip (known problematic): ${url}`)
-            continue
-          }
+        let processed = 0
+        let index = 0
 
-          const { value: listing } = await withTimeout(
-            enrichAndCollectListing(url, section.category),
-            DETAIL_TIMEOUT_MS,
-            `detail ${url}`
-          )
+        const worker = async (workerId: number): Promise<void> => {
+          while (true) {
+            if (shutdownRequested) return
+            const current = index
+            if (current >= urlsToProcess.length) return
+            index += 1
 
-          if (listing) {
-            collected.set(listing.external_id, listing)
-            console.log(
-              `+ [${section.category}] ${listing.title} | ${listing.price ?? '?'} ₽ | ${listing.year ?? '?'} г. | ${
-                listing.city ?? '—'
-              }`
+            const url = urlsToProcess[current]
+            if (collected.has(buildExternalId(url))) continue
+
+            if (/prolift|richtrak/i.test(url)) {
+              console.warn(`  skip (known problematic): ${url}`)
+              continue
+            }
+
+            const { value: listing } = await withTimeout(
+              enrichAndCollectListing(url, section.category),
+              DETAIL_TIMEOUT_MS,
+              `detail ${url}`
             )
-          }
 
-          await randomDelay(400, 900)
+            if (listing) {
+              collected.set(listing.external_id, listing)
+              console.log(
+                `+ [${section.category}] ${listing.title} | ${listing.price ?? '?'} ₽ | ${listing.year ?? '?'} г. | ${
+                  listing.city ?? '—'
+                }`
+              )
+            }
+
+            processed += 1
+            if (processed % 20 === 0 || processed === urlsToProcess.length) {
+              console.log(
+                `  progress [${section.category}]: ${processed}/${urlsToProcess.length} detail pages processed`
+              )
+            }
+
+            await randomDelay(400, 900)
+          }
         }
+
+        const workers: Promise<void>[] = []
+        const workerCount = Math.min(DETAIL_CONCURRENCY, urlsToProcess.length)
+        for (let w = 0; w < workerCount; w += 1) {
+          workers.push(worker(w + 1))
+        }
+        await Promise.all(workers)
 
         const sectionListings = [...collected.values()].filter((l) => l.category === section.category)
         if (sectionListings.length > 0) {
