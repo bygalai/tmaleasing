@@ -886,6 +886,26 @@ function extractDetailFromHtml(html: string, pageUrl: string): {
   if (city && /ключ|комплект|обременен|птс|псм/i.test(city)) city = null
   if (city && !isPlausibleCity(city)) city = null
 
+  // #region agent log
+  // Debug city extraction for GAZPROM (hypothesis H-city)
+  fetch('http://127.0.0.1:7591/ingest/20c2554d-91a0-4e6a-bc4e-4217e2981cc5', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Debug-Session-Id': '397aab',
+    },
+    body: JSON.stringify({
+      sessionId: '397aab',
+      runId: 'pre-fix-1',
+      hypothesisId: 'H-city',
+      location: 'gazprom-scraper.ts:city',
+      message: 'city extracted from detail HTML',
+      data: { detailUrl, city, cityMatch, hasGorodField: !!cityMatch },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion agent log
+
   // Цвет: только поле «Цвет», из блока карточки (не фильтры)
   const colorMatch =
     specsText.match(/Цвет\s*[\s:]*([А-Яа-яЁёA-Za-z\s\-]{2,30}?)(?:\s|$|\d|Кузов|Коробка|Объем)/i)?.[1]?.trim() ??
@@ -1103,6 +1123,27 @@ function withTimeout<T>(
   const timeoutPromise = new Promise<{ value: null; timedOut: true }>((resolve) => {
     timeoutId = setTimeout(() => {
       console.warn(`  timeout after ${ms}ms: ${label}`)
+
+      // #region agent log
+      // Debug timeouts in withTimeout (hypothesis H-timeout)
+      fetch('http://127.0.0.1:7591/ingest/20c2554d-91a0-4e6a-bc4e-4217e2981cc5', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Debug-Session-Id': '397aab',
+        },
+        body: JSON.stringify({
+          sessionId: '397aab',
+          runId: 'pre-fix-1',
+          hypothesisId: 'H-timeout',
+          location: 'gazprom-scraper.ts:withTimeout',
+          message: 'operation timed out',
+          data: { label, ms },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {})
+      // #endregion agent log
+
       resolve({ value: null, timedOut: true })
     }, ms)
   })
@@ -1232,6 +1273,26 @@ async function scrapeListings(supabase: SupabaseClient): Promise<Set<string>> {
               continue
             }
 
+            // #region agent log
+            // Debug worker start (hypothesis H-worker)
+            fetch('http://127.0.0.1:7591/ingest/20c2554d-91a0-4e6a-bc4e-4217e2981cc5', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Debug-Session-Id': '397aab',
+              },
+              body: JSON.stringify({
+                sessionId: '397aab',
+                runId: 'pre-fix-1',
+                hypothesisId: 'H-worker',
+                location: 'gazprom-scraper.ts:worker',
+                message: 'worker starting detail',
+                data: { workerId, index: current, url },
+                timestamp: Date.now(),
+              }),
+            }).catch(() => {})
+            // #endregion agent log
+
             const { value: listing } = await withTimeout(
               enrichAndCollectListing(url, section.category),
               DETAIL_TIMEOUT_MS,
@@ -1246,6 +1307,26 @@ async function scrapeListings(supabase: SupabaseClient): Promise<Set<string>> {
                 }`
               )
             }
+
+            // #region agent log
+            // Debug worker end (hypothesis H-worker)
+            fetch('http://127.0.0.1:7591/ingest/20c2554d-91a0-4e6a-bc4e-4217e2981cc5', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Debug-Session-Id': '397aab',
+              },
+              body: JSON.stringify({
+                sessionId: '397aab',
+                runId: 'pre-fix-1',
+                hypothesisId: 'H-worker',
+                location: 'gazprom-scraper.ts:worker',
+                message: 'worker finished detail',
+                data: { workerId, index: current, url, hasListing: !!listing },
+                timestamp: Date.now(),
+              }),
+            }).catch(() => {})
+            // #endregion agent log
 
             processed += 1
             if (processed % 20 === 0 || processed === urlsToProcess.length) {
