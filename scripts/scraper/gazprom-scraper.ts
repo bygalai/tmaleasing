@@ -135,7 +135,12 @@ const TITLE_BLOCKLIST = new Set([
   'автомобили и техника с пробегом',
 ])
 
-const CITY_BLOCKLIST = new Set(['оборудование', 'недвижимость', 'подвижной состав'])
+const CITY_BLOCKLIST = new Set([
+  'оборудование',
+  'недвижимость',
+  'подвижной состав',
+  'объем', // «Объем двигателя» — частый ложный матч при неверном порядке полей
+])
 
 /** Слаг типа кузова из заголовка → русское название (для body_type) */
 const BODY_TYPE_SLUG_TO_RU: Record<string, string> = {
@@ -877,13 +882,15 @@ function extractDetailFromHtml(html: string, pageUrl: string): {
     html.match(/Город\s*<\/[^>]+>[\s\S]{0,80}?([А-Яа-яЁёA-Za-z\-\s]{2,60})</i)?.[1] ??
     null
   let city = cityMatch ? cityMatch.replace(/\s+/g, ' ').trim() : null
+  // Обрезаем подхваченные хвосты следующих полей («Тип ПТС», «Тип ПТС/ПСМ» и т.п.)
+  if (city) city = city.replace(/\s+Тип\s+ПТС(?:\/\s*ПСМ)?\s*$/i, '').trim() || null
   // Фоллбек: иногда город не подписан явно, но встречается как «г. Нерюнгри» или «г. Набережные Челны» в тексте.
   if (!city) {
     const cityFromPlain =
       plainText.match(/г\.\s*([А-ЯЁ][а-яё]+(?:\s+[А-ЯЁ][а-яё]+){0,2})/)?.[1]?.replace(/\s+/g, ' ').trim() ?? null
     if (cityFromPlain) city = cityFromPlain
   }
-  if (city && /ключ|комплект|обременен|птс|псм/i.test(city)) city = null
+  if (city && /ключ|комплект|обременен|птс|псм|объем\s*двигателя/i.test(city)) city = null
   if (city && !isPlausibleCity(city)) city = null
 
   // #region agent log
@@ -900,7 +907,7 @@ function extractDetailFromHtml(html: string, pageUrl: string): {
       hypothesisId: 'H-city',
       location: 'gazprom-scraper.ts:city',
       message: 'city extracted from detail HTML',
-      data: { detailUrl, city, cityMatch, hasGorodField: !!cityMatch },
+      data: { pageUrl, city, cityMatch, hasGorodField: !!cityMatch },
       timestamp: Date.now(),
     }),
   }).catch(() => {});
@@ -1058,6 +1065,20 @@ async function enrichAndCollectListing(
         'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
       },
     })
+    // #region agent log
+    fetch('http://127.0.0.1:7591/ingest/20c2554d-91a0-4e6a-bc4e-4217e2981cc5', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '397aab' },
+      body: JSON.stringify({
+        sessionId: '397aab',
+        hypothesisId: 'H-enrich',
+        location: 'gazprom-scraper.ts:enrichAndCollectListing',
+        message: 'fetch result',
+        data: { url: detailUrl, resOk: res.ok, status: res.status },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {})
+    // #endregion agent log
     if (!res.ok) {
       console.warn(`  skip (http ${res.status}) for ${detailUrl}`)
       return null
@@ -1066,6 +1087,27 @@ async function enrichAndCollectListing(
     const data = extractDetailFromHtml(html, detailUrl)
 
     const title = data.title && looksLikeVehicleTitle(data.title) ? data.title : null
+    // #region agent log
+    fetch('http://127.0.0.1:7591/ingest/20c2554d-91a0-4e6a-bc4e-4217e2981cc5', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '397aab' },
+      body: JSON.stringify({
+        sessionId: '397aab',
+        hypothesisId: 'H-enrich',
+        location: 'gazprom-scraper.ts:enrichAndCollectListing',
+        message: 'extract result',
+        data: {
+          url: detailUrl,
+          hasTitle: !!data.title,
+          titleOk: !!title,
+          rawTitle: data.title?.slice(0, 50),
+          hasPrice: !!(data.price && data.price >= 100_000),
+          price: data.price,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {})
+    // #endregion agent log
     if (!title) {
       console.warn(`  skip (no title): ${detailUrl}`)
       return null
@@ -1329,9 +1371,9 @@ async function scrapeListings(supabase: SupabaseClient): Promise<Set<string>> {
             // #endregion agent log
 
             processed += 1
-            if (processed % 20 === 0 || processed === urlsToProcess.length) {
+            if (processed % 5 === 0 || processed === urlsToProcess.length || listing) {
               console.log(
-                `  progress [${section.category}]: ${processed}/${urlsToProcess.length} detail pages processed`
+                `  progress [${section.category}]: ${processed}/${urlsToProcess.length} detail pages processed${listing ? ` (+1)` : ''}`
               )
             }
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { ListingCard } from '../components/listing/ListingCard'
+import { VirtualizedListingGrid } from '../components/listing/VirtualizedListingGrid'
 import { SearchBar } from '../components/listing/SearchBar'
 import type { Listing } from '../types/marketplace'
 import {
@@ -346,16 +346,11 @@ export function CategorySelectionPage({
             Результаты поиска
           </h2>
           {filtered.length > 0 ? (
-            <div className="grid gap-4 pb-4">
-              {filtered.map((item) => (
-                <ListingCard
-                  key={item.id}
-                  item={item}
-                  isFavorite={isFavorite(item.id)}
-                  onToggleFavorite={toggleFavorite}
-                />
-              ))}
-            </div>
+            <VirtualizedListingGrid
+              items={filtered}
+              isFavorite={isFavorite}
+              toggleFavorite={toggleFavorite}
+            />
           ) : (
             <p className="text-sm text-slate-600">
               По запросу «{normalizedQuery}» ничего не найдено. Попробуйте другой запрос.
@@ -394,16 +389,12 @@ export function CategorySelectionPage({
               <h2 className="font-sf font-bold tracking-tight text-slate-900 [font-size:clamp(28px,7vw,34px)]">
                 Выгодно
               </h2>
-              <div className="grid gap-4 pb-4">
-                {discountedItems.map((item) => (
-                  <ListingCard
-                    key={item.id}
-                    item={item}
-                    isFavorite={isFavorite(item.id)}
-                    onToggleFavorite={toggleFavorite}
-                  />
-                ))}
-              </div>
+              <VirtualizedListingGrid
+                items={discountedItems}
+                isFavorite={isFavorite}
+                toggleFavorite={toggleFavorite}
+                height="min(60vh, 600px)"
+              />
             </section>
           )}
         </>

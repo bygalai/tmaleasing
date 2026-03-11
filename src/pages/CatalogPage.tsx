@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { ListingCard } from '../components/listing/ListingCard'
+import { VirtualizedListingGrid } from '../components/listing/VirtualizedListingGrid'
 import { SearchBar } from '../components/listing/SearchBar'
 import type { Listing } from '../types/marketplace'
 import type { CategoryId } from './CategorySelectionPage'
@@ -158,22 +158,16 @@ export function CatalogPage({
 
       {isLoading ? (
         <p className="text-center text-sm text-slate-600">Загружаем лучшие предложения...</p>
-      ) : (
-        <div className="grid gap-4 pb-4">
-          {filtered.map((item) => (
-            <ListingCard
-              key={item.id}
-              item={item}
-              isFavorite={isFavorite(item.id)}
-              onToggleFavorite={toggleFavorite}
-            />
-          ))}
-          {filtered.length === 0 ? (
-            <div className="mx-auto w-full max-w-[560px] px-2 text-center text-sm font-sf text-slate-900">
-              Ничего не найдено. Попробуйте ещё раз
-            </div>
-          ) : null}
+      ) : filtered.length === 0 ? (
+        <div className="mx-auto w-full max-w-[560px] px-2 text-center text-sm font-sf text-slate-900">
+          Ничего не найдено. Попробуйте ещё раз
         </div>
+      ) : (
+        <VirtualizedListingGrid
+          items={filtered}
+          isFavorite={isFavorite}
+          toggleFavorite={toggleFavorite}
+        />
       )}
     </section>
   )

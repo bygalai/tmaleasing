@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { formatMileage, formatMileageHours, splitPriceRub } from '../../lib/format'
 import type { Listing } from '../../types/marketplace'
@@ -39,7 +39,7 @@ function badgeLabel(item: Listing, badge: Listing['badges'][number]) {
   return `Скидка ${item.discountPercent ?? 0}%`
 }
 
-export function ListingCard({ item, isFavorite, onToggleFavorite }: ListingCardProps) {
+export const ListingCard = memo(function ListingCard({ item, isFavorite, onToggleFavorite }: ListingCardProps) {
   const [hideDueToBrokenImages, setHideDueToBrokenImages] = useState(false)
 
   if (hideDueToBrokenImages) return null
@@ -128,4 +128,4 @@ export function ListingCard({ item, isFavorite, onToggleFavorite }: ListingCardP
     </article>
     </Link>
   )
-}
+})
