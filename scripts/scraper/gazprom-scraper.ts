@@ -823,8 +823,9 @@ async function scrapeListings(supabase: SupabaseClient): Promise<Set<string>> {
   const collected = new Map<string, ScrapedListing>()
   const allScrapedIds = new Set<string>()
 
-  // Временный фильтр разделов по умолчанию: спецтехника + прицепы.
-  const sectionFilterRaw = process.env.GAZPROMP_SECTIONS ?? 'speztechnika,pricepy'
+  // Фильтр разделов: по умолчанию обрабатываем все (легковые, грузовые, спецтехника, прицепы).
+  // Можно сузить через GAZPROMP_SECTIONS=legkovye,gruzovye,...
+  const sectionFilterRaw = process.env.GAZPROMP_SECTIONS ?? ''
   const sectionFilter = sectionFilterRaw
     .split(',')
     .map((s) => s.trim())
