@@ -1285,6 +1285,53 @@ async function applyHistoricalPriceLogic(
     })
   }
 
+  // Дополнительное сопоставление по VIN для кейсов, когда URL меняется, а VIN остаётся тем же.
+  // Это позволяет «приклеиться» к существующей записи даже при новом URL.
+  const listingsWithoutHistory = listings.filter((l) => !byId.has(l.external_id) && l.vin)
+  const vinToListing = new Map<string, ScrapedListing>()
+  const vinSet = new Set<string>()
+  for (const l of listingsWithoutHistory) {
+    const vin = l.vin?.trim().toUpperCase()
+    if (!vin) continue
+    vinSet.add(vin)
+    vinToListing.set(vin, l)
+  }
+
+  let vinMatched = 0
+  if (vinSet.size > 0) {
+    const vinArray = [...vinSet]
+    const { data: vinRows, error: vinErr } = await supabase
+      .from('listings')
+      .select('external_id, price, original_price, vin')
+      .eq('source', SOURCE)
+      .in('vin', vinArray)
+
+    if (!vinErr) {
+      for (const row of vinRows ?? []) {
+        const r = row as {
+          external_id?: string
+          price?: number | string | null
+          original_price?: number | string | null
+          vin?: string | null
+        }
+        if (!r.external_id || !r.vin) continue
+        const vin = r.vin.trim().toUpperCase()
+        const listing = vinToListing.get(vin)
+        if (!listing) continue
+        // Присваиваем listing внешний id из БД, чтобы дальше жили по одному external_id.
+        listing.external_id = r.external_id
+        byId.set(r.external_id, {
+          external_id: r.external_id,
+          price: r.price ?? null,
+          original_price: r.original_price ?? null,
+        })
+        vinMatched += 1
+      }
+    } else {
+      console.warn('Historical price VIN lookup failed (non-fatal):', vinErr.message)
+    }
+  }
+
   let discounts = 0
   let priceIncreases = 0
   let unchanged = 0
@@ -1331,7 +1378,7 @@ async function applyHistoricalPriceLogic(
   }
 
   console.log(
-    `Historical price logic (VTB): matched=${byId.size}, discounts=${discounts}, price_up=${priceIncreases}, unchanged=${unchanged}`,
+    `Historical price logic (VTB): matched=${byId.size} (by_external_id=${(existingRows ?? []).length}, by_vin=${vinMatched}), discounts=${discounts}, price_up=${priceIncreases}, unchanged=${unchanged}`,
   )
 }
 
