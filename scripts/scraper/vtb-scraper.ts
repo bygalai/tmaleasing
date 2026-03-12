@@ -1263,6 +1263,7 @@ async function applyHistoricalPriceLogic(
   const { data: existingRows, error } = await supabase
     .from('listings')
     .select('external_id, price, original_price')
+    .eq('source', SOURCE)
     .in('external_id', externalIds)
 
   if (error) {
@@ -1283,6 +1284,10 @@ async function applyHistoricalPriceLogic(
       original_price: r.original_price ?? null,
     })
   }
+
+  let discounts = 0
+  let priceIncreases = 0
+  let unchanged = 0
 
   for (const listing of listings) {
     const currentPrice = listing.price
@@ -1313,14 +1318,21 @@ async function applyHistoricalPriceLogic(
     if (currentPrice < prevPriceNum) {
       // Цена снизилась: показываем скидку относительно базовой "старой" цены.
       listing.original_price = baselineOriginal
+      discounts += 1
     } else if (currentPrice > prevPriceNum) {
       // Цена выросла: поднимаем цену и убираем "скидку".
       listing.original_price = null
+      priceIncreases += 1
     } else {
       // Цена не изменилась: оставляем возможную старую цену как есть.
       listing.original_price = Number.isFinite(prevOriginalNum) && prevOriginalNum > 0 ? prevOriginalNum : listing.original_price
+      unchanged += 1
     }
   }
+
+  console.log(
+    `Historical price logic (VTB): matched=${byId.size}, discounts=${discounts}, price_up=${priceIncreases}, unchanged=${unchanged}`,
+  )
 }
 
 /** Обрабатывает одну секцию: каталог + обогащение. Браузер перезапускается между секциями для снижения OOM. */
