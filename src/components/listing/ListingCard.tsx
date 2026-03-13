@@ -1,4 +1,4 @@
-import { memo, useState } from 'react'
+import { memo } from 'react'
 import { Link } from 'react-router-dom'
 import { formatMileage, formatMileageHours, splitPriceRub } from '../../lib/format'
 import type { Listing } from '../../types/marketplace'
@@ -40,10 +40,6 @@ function badgeLabel(item: Listing, badge: Listing['badges'][number]) {
 }
 
 export const ListingCard = memo(function ListingCard({ item, isFavorite, onToggleFavorite }: ListingCardProps) {
-  const [hideDueToBrokenImages, setHideDueToBrokenImages] = useState(false)
-
-  if (hideDueToBrokenImages) return null
-
   return (
     <Link
       to={`/listing/${item.id}`}
@@ -57,7 +53,7 @@ export const ListingCard = memo(function ListingCard({ item, isFavorite, onToggl
           alt={item.title}
           className="h-full w-full object-cover"
           loading="lazy"
-          onAllFailed={() => setHideDueToBrokenImages(true)}
+          showPlaceholderWhenFailed
         />
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
         <div className="absolute left-3 right-3 top-3 z-20 flex items-center justify-between gap-2">
