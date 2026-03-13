@@ -154,12 +154,67 @@ export type ExtractedDetail = {
   mileage: number | null
   year: number | null
   imageUrl: string | null
+  imageUrls: string[]
   city: string | null
   bodyColor: string | null
   bodyType: string | null
   engine: string | null
   drivetrain: string | null
   transmission: string | null
+}
+
+/**
+ * Извлекает все itemprop="name"/itemprop="value" пары из блока характеристик.
+ * Структура: <p itemprop="name">Город</p> ... <p itemprop="value">Москва</p>
+ */
+function extractItempropSpecs(html: string): Map<string, string> {
+  const specs = new Map<string, string>()
+  const pairRe =
+    /<p[^>]*\bitemprop=["']name["'][^>]*>([\s\S]*?)<\/p>[\s\S]{0,300}?<(?:p|a)[^>]*\bitemprop=["']value["'][^>]*>([\s\S]*?)<\/(?:p|a)>/gi
+  let match: RegExpExecArray | null
+  while ((match = pairRe.exec(html)) !== null) {
+    const name = match[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
+    const value = match[2].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
+    if (name && value) specs.set(name.toLowerCase(), value)
+  }
+  return specs
+}
+
+/**
+ * Извлекает фото лота из Swiper-галереи (itemprop="contentUrl").
+ * Fallback: картинки из /upload/creonit_automarket/.
+ */
+function extractGalleryImageUrls(html: string): string[] {
+  const seen = new Set<string>()
+  const urls: string[] = []
+  const push = (src: string) => {
+    const s = src.trim()
+    if (!s || isBadImageCandidate(s) || seen.has(s)) return
+    seen.add(s)
+    urls.push(s)
+  }
+
+  const contentUrlRe =
+    /<img\b(?=[^>]*\bitemprop=["']contentUrl["'])[^>]*?\bsrc=["']([^"']+)["'][^>]*>/gi
+  let m: RegExpExecArray | null
+  while ((m = contentUrlRe.exec(html)) !== null) push(m[1])
+
+  if (urls.length === 0) {
+    const creonitRe =
+      /<img\b[^>]*?\bsrc=["']((?:https?:\/\/[^"']*)?\/upload\/creonit_automarket\/[^"']+)["'][^>]*>/gi
+    while ((m = creonitRe.exec(html)) !== null) push(m[1])
+  }
+
+  return urls
+}
+
+/** Цена из Schema.org: <meta itemprop="price" content="3499000"> */
+function extractSchemaPrice(html: string): number | null {
+  const match = html.match(/<meta[^>]+\bitemprop=["']price["'][^>]+\bcontent=["'](\d+)["'][^>]*>/i)
+    ?? html.match(/<meta[^>]+\bcontent=["'](\d+)["'][^>]+\bitemprop=["']price["'][^>]*>/i)
+  if (!match) return null
+  const num = Number(match[1])
+  return Number.isFinite(num) && num >= 100_000 ? num : null
 }
 
 export function extractDetailFromHtml(html: string, pageUrl: string): ExtractedDetail {
@@ -212,12 +267,18 @@ export function extractDetailFromHtml(html: string, pageUrl: string): ExtractedD
     return out
   }
 
-  let price: number | null = null
+  // --- Schema.org structured data (primary source) ---
+  const itempropSpecs = extractItempropSpecs(html)
+  const galleryImages = extractGalleryImageUrls(html)
+  const schemaPrice = extractSchemaPrice(html)
+
+  // --- Price ---
+  let price: number | null = schemaPrice
   let originalPrice: number | null = null
   const h1Close = html.search(/<\/h1>/i)
   const MAIN_BLOCK_MIN_LEN = 2500
 
-  if (h1Close !== -1) {
+  if (price == null && h1Close !== -1) {
     const candidates = [
       h1Close + 3500,
       html.length,
@@ -300,6 +361,7 @@ export function extractDetailFromHtml(html: string, pageUrl: string): ExtractedD
     }
   }
 
+  // --- Specs block (fallback text for regex-based extraction) ---
   const h1CloseForSpecs = html.search(/<\/h1>/i)
   const mainBlockEndForSpecs =
     h1CloseForSpecs !== -1
@@ -327,99 +389,167 @@ export function extractDetailFromHtml(html: string, pageUrl: string): ExtractedD
       : ''
   const specsText = specsBlock.length > 500 ? specsBlock : plainText
 
+  // --- Mileage ---
+  const mileageFromItemprop = itempropSpecs.get('пробег') ?? itempropSpecs.get('наработка') ?? null
   const mileageNotSpecified = /пробег\s+не\s+указан/i.test(plainText)
   const mileageText = mileageNotSpecified
     ? null
-    : plainText.match(/(\d[\d\s\u00A0]{2,})\s*(?:км|km)/i)?.[1] ??
+    : mileageFromItemprop ??
+      plainText.match(/(\d[\d\s\u00A0]{2,})\s*(?:км|km)/i)?.[1] ??
       html.match(/Пробег\s*<\/[^>]+>[\s\S]{0,80}?(\d[\d\s\u00A0]+)/i)?.[1] ??
       plainText.match(/(\d[\d\s\u00A0]+)\s*(?:м\.?\s*ч\.?|моточасов?)/i)?.[1] ??
       html.match(/Наработка\s*<\/[^>]+>[\s\S]{0,80}?(\d[\d\s\u00A0]+)/i)?.[1] ??
       null
 
+  // --- Year ---
+  const yearFromItemprop = itempropSpecs.get('год выпуска')
   const yearText =
+    yearFromItemprop ??
     plainText.match(/\b(20\d{2}|19\d{2})\s*г\.?/i)?.[1] ??
     html.match(/Год выпуска\s*<\/[^>]+>[\s\S]{0,40}?(\d{4})/i)?.[1] ??
     null
 
-  const cityMatch =
-    specsText.match(/Город\s*[:\-]?\s*([А-Яа-яЁёA-Za-z\-\s]{2,60})/i)?.[1] ??
-    html.match(/Город\s*<\/[^>]+>[\s\S]{0,80}?([А-Яа-яЁёA-Za-z\-\s]{2,60})/i)?.[1] ??
-    null
-  let city = cityMatch ? cityMatch.replace(/\s+/g, ' ').trim() : null
-  if (city) city = city.replace(/\s+Тип\s+ПТС(?:\/\s*ПСМ)?\s*$/i, '').trim() || null
-  if (!city) {
-    const cityFromPlain =
-      plainText.match(/г\.\s*([А-ЯЁ][а-яё]+(?:\s+[А-ЯЁ][а-яё]+){0,2})/)?.[1]?.replace(/\s+/g, ' ').trim() ?? null
-    if (cityFromPlain) city = cityFromPlain
+  // --- City (itemprop primary — fixes the greedy regex + обременен bug) ---
+  let city: string | null = null
+  const cityFromItemprop = itempropSpecs.get('город')
+  if (cityFromItemprop && isPlausibleCity(cityFromItemprop)) {
+    city = cityFromItemprop
   }
-  if (city && /ключ|комплект|обременен|птс|псм|объем\s*двигателя/i.test(city)) city = null
-  if (city && !isPlausibleCity(city)) city = null
+  if (!city) {
+    const cityMatch =
+      specsText.match(/Город\s*[:\-]?\s*([А-Яа-яЁёA-Za-z\-\s]{2,60})/i)?.[1] ??
+      html.match(/Город\s*<\/[^>]+>[\s\S]{0,80}?([А-Яа-яЁёA-Za-z\-\s]{2,60})/i)?.[1] ??
+      null
+    city = cityMatch ? cityMatch.replace(/\s+/g, ' ').trim() : null
+    if (city) city = city.replace(/\s+Тип\s+ПТС(?:\/\s*ПСМ)?\s*$/i, '').trim() || null
+    if (!city) {
+      const cityFromPlain =
+        plainText.match(/г\.\s*([А-ЯЁ][а-яё]+(?:\s+[А-ЯЁ][а-яё]+){0,2})/)?.[1]?.replace(/\s+/g, ' ').trim() ?? null
+      if (cityFromPlain) city = cityFromPlain
+    }
+    if (city && /ключ|комплект|обременен|птс|псм|объем\s*двигателя/i.test(city)) city = null
+    if (city && !isPlausibleCity(city)) city = null
+  }
 
-  const colorMatch =
-    specsText.match(/Цвет\s*[\s:]*([А-Яа-яЁёA-Za-z\s\-]{2,30}?)(?:\s|$|\d|Кузов|Коробка|Объем)/i)?.[1]?.trim() ??
-    html.match(/Цвет\s*<\/[^>]+>[\s\S]{0,60}?([А-Яа-яЁёA-Za-z\s\-]{2,30})/i)?.[1]?.trim() ??
-    null
-  let bodyColor = colorMatch || null
-  if (bodyColor && /ключ|комплект|количество/i.test(bodyColor)) bodyColor = null
-  if (bodyColor && /^(мусоровоз|седан|внедорожник|грузовой|бортовой|фургон|пикап|универсал|хэтчбек|автобус|автокран|бульдозер|экскаватор)/i.test(bodyColor)) bodyColor = null
+  // --- Color (itemprop primary) ---
+  const colorFromItemprop = itempropSpecs.get('цвет')
+  let bodyColor: string | null = null
+  if (colorFromItemprop && !/ключ|комплект|количество/i.test(colorFromItemprop)) {
+    bodyColor = colorFromItemprop
+  }
+  if (!bodyColor) {
+    const colorMatch =
+      specsText.match(/Цвет\s*[\s:]*([А-Яа-яЁёA-Za-z\s\-]{2,30}?)(?:\s|$|\d|Кузов|Коробка|Объем)/i)?.[1]?.trim() ??
+      html.match(/Цвет\s*<\/[^>]+>[\s\S]{0,60}?([А-Яа-яЁёA-Za-z\s\-]{2,30})/i)?.[1]?.trim() ??
+      null
+    bodyColor = colorMatch || null
+    if (bodyColor && /ключ|комплект|количество/i.test(bodyColor)) bodyColor = null
+    if (bodyColor && /^(мусоровоз|седан|внедорожник|грузовой|бортовой|фургон|пикап|универсал|хэтчбек|автобус|автокран|бульдозер|экскаватор)/i.test(bodyColor)) bodyColor = null
+  }
 
-  const bodyTypeMatch =
-    specsText.match(/Кузов\s*[\s:]*([А-Яа-яЁёA-Za-z0-9\s\-\(\)\/]{2,50}?)(?:\s|$|\d|Количество|Цвет|Объем)/i)?.[1]?.trim() ??
-    html.match(/Кузов\s*<\/[^>]+>[\s\S]{0,80}?([А-Яа-яЁёA-Za-z0-9\s\-\(\)\/]{2,50})/i)?.[1]?.trim() ??
-    null
-  let bodyType = bodyTypeMatch || null
-  if (bodyType && /ключ|комплект|количество/i.test(bodyType)) bodyType = null
+  // --- Body type (itemprop primary) ---
+  const bodyTypeFromItemprop = itempropSpecs.get('кузов')
+  let bodyType: string | null = null
+  if (bodyTypeFromItemprop && !/ключ|комплект|количество/i.test(bodyTypeFromItemprop)) {
+    bodyType = bodyTypeFromItemprop
+  }
+  if (!bodyType) {
+    const bodyTypeMatch =
+      specsText.match(/Кузов\s*[\s:]*([А-Яа-яЁёA-Za-z0-9\s\-\(\)\/]{2,50}?)(?:\s|$|\d|Количество|Цвет|Объем)/i)?.[1]?.trim() ??
+      html.match(/Кузов\s*<\/[^>]+>[\s\S]{0,80}?([А-Яа-яЁёA-Za-z0-9\s\-\(\)\/]{2,50})/i)?.[1]?.trim() ??
+      null
+    bodyType = bodyTypeMatch || null
+    if (bodyType && /ключ|комплект|количество/i.test(bodyType)) bodyType = null
+  }
 
-  const engineMatch = specsText.match(/Объем\s+двигателя\s*[\s:]*([\d.,]+\s*(?:л\.?)?)/i)?.[1]?.trim()
-  const engineVolNum = engineMatch ? parseFloat(engineMatch.replace(/[^\d.,]/g, '').replace(',', '.')) : NaN
-  const engineVolume =
-    engineMatch && Number.isFinite(engineVolNum) && engineVolNum >= 0.5 && engineVolNum <= 12
-      ? (engineMatch.includes('л') ? engineMatch : `${engineMatch} л`).trim()
-      : null
+  // --- Engine (itemprop primary for volume + fuel type) ---
+  const engineVolFromItemprop = itempropSpecs.get('объем двигателя')
+  const fuelFromItemprop = itempropSpecs.get('двигатель') ?? itempropSpecs.get('тип топлива')
 
-  const fuelMatch =
-    specsText.match(/Тип\s+топлива\s*[\s:]*([А-Яа-яЁёA-Za-z\s\-]{3,30}?)(?:\s|$|\d|Кузов|Объем)/i)?.[1]?.trim() ??
-    specsText.match(/Топливо\s*[\s:]*([А-Яа-яЁёA-Za-z\s\-]{3,30}?)(?:\s|$|\d|Кузов|Объем)/i)?.[1]?.trim() ??
-    specsText.match(/Двигатель\s*[\s:]*([А-Яа-яЁёA-Za-z0-9\s\-,.]{3,50}?)(?:\s|$|Кузов|Объем)/i)?.[1]?.trim() ??
-    null
-  const fuelNormalized = fuelMatch
-    ? (() => {
-        const f = fuelMatch.toLowerCase()
-        if (/бензин|tsi|tfsi|fsi|mpi/i.test(f)) return 'Бензин'
-        if (/дизел|tdi|cdi|dci|tdci|d4d|multijet/i.test(f)) return 'Дизель'
-        if (/электро|электромобил|ev|phev|recharge/i.test(f)) return 'Электро'
-        if (/гибрид|hybrid|plug.in|phev/i.test(f)) return 'Гибрид'
-        if (/газ|метан|пропан|lpg|cng/i.test(f)) return 'Газ'
-        return fuelMatch.replace(/\s+/g, ' ').trim()
-      })()
-    : null
+  let engineVolume: string | null = null
+  if (engineVolFromItemprop) {
+    const volNum = parseFloat(engineVolFromItemprop.replace(/[^\d.,]/g, '').replace(',', '.'))
+    if (Number.isFinite(volNum) && volNum >= 0.5 && volNum <= 25) {
+      engineVolume = engineVolFromItemprop.includes('л') ? engineVolFromItemprop : `${engineVolFromItemprop} л`
+    }
+  }
+  if (!engineVolume) {
+    const engineMatch = specsText.match(/Объем\s+двигателя\s*[\s:]*([\d.,]+\s*(?:л\.?)?)/i)?.[1]?.trim()
+    const engineVolNum = engineMatch ? parseFloat(engineMatch.replace(/[^\d.,]/g, '').replace(',', '.')) : NaN
+    engineVolume =
+      engineMatch && Number.isFinite(engineVolNum) && engineVolNum >= 0.5 && engineVolNum <= 12
+        ? (engineMatch.includes('л') ? engineMatch : `${engineMatch} л`).trim()
+        : null
+  }
+
+  function normalizeFuelType(raw: string | null): string | null {
+    if (!raw) return null
+    const f = raw.toLowerCase()
+    if (/бензин|tsi|tfsi|fsi|mpi/i.test(f)) return 'Бензин'
+    if (/дизел|tdi|cdi|dci|tdci|d4d|multijet/i.test(f)) return 'Дизель'
+    if (/электро|электромобил|ev|phev|recharge/i.test(f)) return 'Электро'
+    if (/гибрид|hybrid|plug.in|phev/i.test(f)) return 'Гибрид'
+    if (/газ|метан|пропан|lpg|cng/i.test(f)) return 'Газ'
+    return raw.replace(/\s+/g, ' ').trim()
+  }
+
+  let fuelNormalized = normalizeFuelType(fuelFromItemprop)
+  if (!fuelNormalized) {
+    const fuelMatch =
+      specsText.match(/Тип\s+топлива\s*[\s:]*([А-Яа-яЁёA-Za-z\s\-]{3,30}?)(?:\s|$|\d|Кузов|Объем)/i)?.[1]?.trim() ??
+      specsText.match(/Топливо\s*[\s:]*([А-Яа-яЁёA-Za-z\s\-]{3,30}?)(?:\s|$|\d|Кузов|Объем)/i)?.[1]?.trim() ??
+      specsText.match(/Двигатель\s*[\s:]*([А-Яа-яЁёA-Za-z0-9\s\-,.]{3,50}?)(?:\s|$|Кузов|Объем)/i)?.[1]?.trim() ??
+      null
+    fuelNormalized = normalizeFuelType(fuelMatch)
+  }
 
   const engine =
     [engineVolume, fuelNormalized].filter(Boolean).length > 0
       ? [engineVolume, fuelNormalized].filter(Boolean).join(', ')
       : null
 
-  const wheelFormulaMatch = plainText.match(/Кол[её]сная\s+формула\s*[\s:]*(\d+[xхX]\d+)/i)?.[1]?.trim()
-  const driveMatch =
-    !wheelFormulaMatch &&
-    (specsText.match(/Привод\s*[\s:]*([А-Яа-яЁёA-Za-z0-9\s\-]{2,30}?)(?:\s|$|Кузов|Коробка|Объем)/i)?.[1]?.trim() ?? null)
-  const drivetrain = (wheelFormulaMatch || driveMatch)?.replace(/\s+/g, ' ').trim() || null
+  // --- Drivetrain (itemprop primary) ---
+  const driveFromItemprop =
+    itempropSpecs.get('привод') ?? itempropSpecs.get('колёсная формула') ?? itempropSpecs.get('колесная формула') ?? null
+  let drivetrain: string | null = driveFromItemprop?.replace(/\s+/g, ' ').trim() || null
+  if (!drivetrain) {
+    const wheelFormulaMatch = plainText.match(/Кол[её]сная\s+формула\s*[\s:]*(\d+[xхX]\d+)/i)?.[1]?.trim()
+    const driveMatch =
+      !wheelFormulaMatch &&
+      (specsText.match(/Привод\s*[\s:]*([А-Яа-яЁёA-Za-z0-9\s\-]{2,30}?)(?:\s|$|Кузов|Коробка|Объем)/i)?.[1]?.trim() ?? null)
+    drivetrain = (wheelFormulaMatch || driveMatch)?.replace(/\s+/g, ' ').trim() || null
+  }
 
-  const transmissionMatch =
-    specsText.match(/Коробка\s+передач\s*[\s:]*([А-Яа-яЁёA-Za-z0-9\s\-]{2,40}?)(?:\s|$|\d|Кузов|Привод|Объем)/i)?.[1]?.trim() ??
-    specsText.match(/КПП\s*[\s:]*([А-Яа-яЁёA-Za-z0-9\s\-]{2,40}?)(?:\s|$|\d|Кузов|Привод|Объем)/i)?.[1]?.trim() ??
-    null
-  const transmission = transmissionMatch?.replace(/\s+/g, ' ').trim() || null
+  // --- Transmission (itemprop primary) ---
+  const transFromItemprop =
+    itempropSpecs.get('коробка передач') ?? itempropSpecs.get('кпп') ?? itempropSpecs.get('трансмиссия') ?? null
+  let transmission: string | null = transFromItemprop?.replace(/\s+/g, ' ').trim() || null
+  if (!transmission) {
+    const transmissionMatch =
+      specsText.match(/Коробка\s+передач\s*[\s:]*([А-Яа-яЁёA-Za-z0-9\s\-]{2,40}?)(?:\s|$|\d|Кузов|Привод|Объем)/i)?.[1]?.trim() ??
+      specsText.match(/КПП\s*[\s:]*([А-Яа-яЁёA-Za-z0-9\s\-]{2,40}?)(?:\s|$|\d|Кузов|Привод|Объем)/i)?.[1]?.trim() ??
+      null
+    transmission = transmissionMatch?.replace(/\s+/g, ' ').trim() || null
+  }
 
-  const ogImage =
-    html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["'][^>]*>/i)?.[1] ??
-    html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["'][^>]*>/i)?.[1] ??
-    null
-  const imgSrc =
-    html.match(/<img[^>]+data-src=["']([^"']+)["'][^>]*>/i)?.[1] ??
-    html.match(/<img[^>]+src=["']([^"']+)["'][^>]*>/i)?.[1] ??
-    null
-  const imageUrl = pickBestImageCandidate([ogImage, imgSrc].map((v) => v?.replace(/&amp;/g, '&')))
+  // --- Images (gallery primary, og:image fallback) ---
+  const galleryImageUrls = galleryImages.map((src) => {
+    if (/^https?:\/\//i.test(src)) return src
+    try { return new URL(src, GAZPROM_BASE_URL).toString() } catch { return src }
+  })
+
+  let imageUrl: string | null = galleryImageUrls[0] ?? null
+  if (!imageUrl) {
+    const ogImage =
+      html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["'][^>]*>/i)?.[1] ??
+      html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["'][^>]*>/i)?.[1] ??
+      null
+    const imgSrc =
+      html.match(/<img[^>]+data-src=["']([^"']+)["'][^>]*>/i)?.[1] ??
+      html.match(/<img[^>]+src=["']([^"']+)["'][^>]*>/i)?.[1] ??
+      null
+    imageUrl = pickBestImageCandidate([ogImage, imgSrc].map((v) => v?.replace(/&amp;/g, '&')))
+  }
 
   return {
     title,
@@ -428,6 +558,7 @@ export function extractDetailFromHtml(html: string, pageUrl: string): ExtractedD
     mileage: normalizeNumber(mileageText),
     year: parseYear(yearText ?? undefined),
     imageUrl,
+    imageUrls: galleryImageUrls,
     city: city ?? null,
     bodyColor: bodyColor || null,
     bodyType: bodyType || null,

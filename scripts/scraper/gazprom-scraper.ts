@@ -757,8 +757,14 @@ async function enrichAndCollectListing(
       return null
     }
 
-    let absoluteImage: string | null = data.imageUrl ? toAbsoluteUrl(data.imageUrl) : null
-    if (!absoluteImage) absoluteImage = FALLBACK_IMAGE
+    const galleryAbsolute = (data.imageUrls ?? [])
+      .map((src) => toAbsoluteUrl(src))
+      .filter((u): u is string => u != null)
+    if (galleryAbsolute.length === 0) {
+      const single = data.imageUrl ? toAbsoluteUrl(data.imageUrl) : null
+      if (single) galleryAbsolute.push(single)
+    }
+    if (galleryAbsolute.length === 0) galleryAbsolute.push(FALLBACK_IMAGE)
 
     const listing: ScrapedListing = {
       external_id: buildExternalId(detailUrl),
@@ -767,7 +773,7 @@ async function enrichAndCollectListing(
       original_price: data.originalPrice ?? null,
       mileage: data.mileage,
       year: data.year,
-      images: [absoluteImage],
+      images: galleryAbsolute,
       listing_url: detailUrl,
       source: SOURCE,
       category,
