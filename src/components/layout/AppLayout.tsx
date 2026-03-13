@@ -3,7 +3,6 @@ import { getSafeAreaInsets } from '../../lib/telegram'
 
 export function AppLayout({ children }: PropsWithChildren) {
   const insets = getSafeAreaInsets()
-  const bottomNavHeightPx = 84
 
   return (
     <div
@@ -19,7 +18,7 @@ export function AppLayout({ children }: PropsWithChildren) {
         style={{
           paddingTop: `calc(max(env(safe-area-inset-top, 0px), ${insets.top}px) + 16px)`,
           paddingRight: `calc(max(env(safe-area-inset-right, 0px), ${insets.right}px) + 16px)`,
-          paddingBottom: `calc(max(env(safe-area-inset-bottom, 0px), ${insets.bottom}px) + 16px + ${bottomNavHeightPx}px)`,
+          paddingBottom: `calc(max(env(safe-area-inset-bottom, 0px), ${insets.bottom}px) + 16px)`,
           paddingLeft: `calc(max(env(safe-area-inset-left, 0px), ${insets.left}px) + 16px)`,
         }}
       >

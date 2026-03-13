@@ -1260,30 +1260,36 @@ async function applyHistoricalPriceLogic(
   if (listings.length === 0) return
 
   const externalIds = listings.map((l) => l.external_id)
-  const { data: existingRows, error } = await supabase
-    .from('listings')
-    .select('external_id, price, original_price')
-    .eq('source', SOURCE)
-    .in('external_id', externalIds)
-
-  if (error) {
-    console.warn('Historical price lookup failed (non-fatal):', error.message)
-    return
-  }
-
   const byId = new Map<
     string,
     { external_id: string; price: number | string | null; original_price: number | string | null }
   >()
-  for (const row of existingRows ?? []) {
-    const r = row as { external_id?: string; price?: number | string | null; original_price?: number | string | null }
-    if (!r.external_id) continue
-    byId.set(r.external_id, {
-      external_id: r.external_id,
-      price: r.price ?? null,
-      original_price: r.original_price ?? null,
-    })
+
+  const HISTORICAL_BATCH = 180
+  for (let i = 0; i < externalIds.length; i += HISTORICAL_BATCH) {
+    const batch = externalIds.slice(i, i + HISTORICAL_BATCH)
+    const { data: existingRows, error } = await supabase
+      .from('listings')
+      .select('external_id, price, original_price')
+      .eq('source', SOURCE)
+      .in('external_id', batch)
+
+    if (error) {
+      console.warn('Historical price lookup failed (non-fatal):', error.message)
+      return
+    }
+
+    for (const row of existingRows ?? []) {
+      const r = row as { external_id?: string; price?: number | string | null; original_price?: number | string | null }
+      if (!r.external_id) continue
+      byId.set(r.external_id, {
+        external_id: r.external_id,
+        price: r.price ?? null,
+        original_price: r.original_price ?? null,
+      })
+    }
   }
+  const matchedByIdCount = byId.size
 
   // Дополнительное сопоставление по VIN для кейсов, когда URL меняется, а VIN остаётся тем же.
   // Это позволяет «приклеиться» к существующей записи даже при новом URL.
@@ -1300,13 +1306,19 @@ async function applyHistoricalPriceLogic(
   let vinMatched = 0
   if (vinSet.size > 0) {
     const vinArray = [...vinSet]
-    const { data: vinRows, error: vinErr } = await supabase
-      .from('listings')
-      .select('external_id, price, original_price, vin')
-      .eq('source', SOURCE)
-      .in('vin', vinArray)
+    for (let j = 0; j < vinArray.length; j += HISTORICAL_BATCH) {
+      const vinBatch = vinArray.slice(j, j + HISTORICAL_BATCH)
+      const { data: vinRows, error: vinErr } = await supabase
+        .from('listings')
+        .select('external_id, price, original_price, vin')
+        .eq('source', SOURCE)
+        .in('vin', vinBatch)
 
-    if (!vinErr) {
+      if (vinErr) {
+        console.warn('Historical price VIN lookup failed (non-fatal):', vinErr.message)
+        continue
+      }
+
       for (const row of vinRows ?? []) {
         const r = row as {
           external_id?: string
@@ -1318,7 +1330,6 @@ async function applyHistoricalPriceLogic(
         const vin = r.vin.trim().toUpperCase()
         const listing = vinToListing.get(vin)
         if (!listing) continue
-        // Присваиваем listing внешний id из БД, чтобы дальше жили по одному external_id.
         listing.external_id = r.external_id
         byId.set(r.external_id, {
           external_id: r.external_id,
@@ -1327,8 +1338,6 @@ async function applyHistoricalPriceLogic(
         })
         vinMatched += 1
       }
-    } else {
-      console.warn('Historical price VIN lookup failed (non-fatal):', vinErr.message)
     }
   }
 
@@ -1378,7 +1387,7 @@ async function applyHistoricalPriceLogic(
   }
 
   console.log(
-    `Historical price logic (VTB): matched=${byId.size} (by_external_id=${(existingRows ?? []).length}, by_vin=${vinMatched}), discounts=${discounts}, price_up=${priceIncreases}, unchanged=${unchanged}`,
+    `Historical price logic (VTB): matched=${byId.size} (by_external_id=${matchedByIdCount}, by_vin=${vinMatched}), discounts=${discounts}, price_up=${priceIncreases}, unchanged=${unchanged}`,
   )
 }
 
