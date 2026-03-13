@@ -280,7 +280,8 @@ export function extractDetailFromHtml(html: string, pageUrl: string): ExtractedD
   const h1Close = html.search(/<\/h1>/i)
   const MAIN_BLOCK_MIN_LEN = 2500
 
-  if (price == null && h1Close !== -1) {
+  // Always scan "Стоимость" block — even when we have schemaPrice — to find originalPrice (discount).
+  if (h1Close !== -1) {
     const candidates = [
       h1Close + 3500,
       html.length,
@@ -300,11 +301,21 @@ export function extractDetailFromHtml(html: string, pageUrl: string): ExtractedD
       if (byPos.length > 0) {
         const first = byPos[0].num
         const second = byPos[1]?.num
-        price = first
-        if (second != null && second > first && second <= first * MAX_ORIGINAL_TO_PRICE_RATIO) originalPrice = second
-        else if (second != null && second < first && first <= second * MAX_ORIGINAL_TO_PRICE_RATIO) {
-          price = second
-          originalPrice = first
+        if (price != null) {
+          // Schema price available — just look for originalPrice (higher price in the pair)
+          for (const p of byPos) {
+            if (p.num > price && p.num <= price * MAX_ORIGINAL_TO_PRICE_RATIO) {
+              originalPrice = p.num
+              break
+            }
+          }
+        } else {
+          price = first
+          if (second != null && second > first && second <= first * MAX_ORIGINAL_TO_PRICE_RATIO) originalPrice = second
+          else if (second != null && second < first && first <= second * MAX_ORIGINAL_TO_PRICE_RATIO) {
+            price = second
+            originalPrice = first
+          }
         }
       }
     }
