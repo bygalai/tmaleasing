@@ -278,66 +278,92 @@ export function extractDetailFromHtml(html: string, pageUrl: string): ExtractedD
   let price: number | null = schemaPrice
   let originalPrice: number | null = null
   const h1Close = html.search(/<\/h1>/i)
-  const MAIN_BLOCK_MIN_LEN = 2500
 
-  // Always scan "Стоимость" block — even when we have schemaPrice — to find originalPrice (discount).
-  if (h1Close !== -1) {
-    const candidates = [
-      h1Close + 3500,
-      html.length,
-      html.indexOf('Выберите условия', h1Close),
-      html.indexOf('технические характеристики', h1Close),
-      html.indexOf('Похожие предложения', h1Close),
-    ].filter((p) => p >= 0)
-    let mainBlockEnd = Math.min(...candidates)
-    if (mainBlockEnd - h1Close < MAIN_BLOCK_MIN_LEN) mainBlockEnd = h1Close + MAIN_BLOCK_MIN_LEN
-    const mainBlock = html.slice(h1Close, Math.min(mainBlockEnd, html.length))
-    const costLabel = mainBlock.search(/Стоимость|стоимость/i)
-    if (costLabel !== -1) {
-      const afterCost = mainBlock.slice(costLabel, costLabel + 450)
-      let byPos = collectPricesWithPosition(afterCost)
-      if (byPos.length === 0) byPos = collectPricesWithPosition(afterCost, true)
+  const _debug = !!process.env.GAZPROM_DEBUG_PRICES
+
+  if (_debug) console.log(`  [price-debug] schemaPrice=${schemaPrice}, h1Close=${h1Close}`)
+
+  // Search the full HTML (after h1) for "Стоимость" — not limited to a small mainBlock,
+  // because on autogpbl.ru the h1 can be 100k+ chars deep and "Стоимость" even further.
+  const costSearchStart = h1Close !== -1 ? h1Close : 0
+  const costIdx = html.indexOf('Стоимость', costSearchStart)
+  if (costIdx === -1 && h1Close !== -1) {
+    // Fallback: search from the beginning
+    const altIdx = html.indexOf('Стоимость')
+    if (altIdx !== -1) {
+      const afterCostRaw = html.slice(altIdx, altIdx + 600).replace(/&nbsp;/gi, ' ')
+      const byPos = collectPricesWithPosition(afterCostRaw)
       byPos.sort((a, b) => a.pos - b.pos)
-      if (byPos.length > 0) {
-        const first = byPos[0].num
-        const second = byPos[1]?.num
-        if (price != null) {
-          // Schema price available — just look for originalPrice (higher price in the pair)
+      if (byPos.length > 0 && price == null) price = byPos[0].num
+    }
+  }
+  if (costIdx !== -1) {
+    const afterCostRaw = html.slice(costIdx, costIdx + 600).replace(/&nbsp;/gi, ' ')
+    if (_debug) {
+      const textSnippet = afterCostRaw.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+      console.log(`  [price-debug] afterCost text: ${textSnippet.slice(0, 200)}`)
+    }
+    let byPos = collectPricesWithPosition(afterCostRaw)
+    if (byPos.length === 0) byPos = collectPricesWithPosition(afterCostRaw, true)
+    byPos.sort((a, b) => a.pos - b.pos)
+    if (_debug) console.log(`  [price-debug] prices found: ${byPos.map((p) => p.num).join(', ') || 'NONE'}`)
+    if (byPos.length > 0) {
+      const first = byPos[0].num
+      const second = byPos[1]?.num
+      if (price != null) {
+        // Schema price on autogpbl.ru is the ORIGINAL (non-discounted) price.
+        // The discounted price appears first in "Стоимость" and is LOWER.
+        let foundDiscount = false
+        for (const p of byPos) {
+          if (p.num < price && p.num >= price / MAX_ORIGINAL_TO_PRICE_RATIO) {
+            originalPrice = price
+            price = p.num
+            foundDiscount = true
+            break
+          }
+        }
+        if (!foundDiscount) {
           for (const p of byPos) {
             if (p.num > price && p.num <= price * MAX_ORIGINAL_TO_PRICE_RATIO) {
               originalPrice = p.num
               break
             }
           }
-        } else {
-          price = first
-          if (second != null && second > first && second <= first * MAX_ORIGINAL_TO_PRICE_RATIO) originalPrice = second
-          else if (second != null && second < first && first <= second * MAX_ORIGINAL_TO_PRICE_RATIO) {
-            price = second
-            originalPrice = first
-          }
+        }
+      } else {
+        price = first
+        if (second != null && second > first && second <= first * MAX_ORIGINAL_TO_PRICE_RATIO) originalPrice = second
+        else if (second != null && second < first && first <= second * MAX_ORIGINAL_TO_PRICE_RATIO) {
+          price = second
+          originalPrice = first
+        }
+      }
+    }
+  } else if (_debug) {
+    console.log(`  [price-debug] "Стоимость" NOT found anywhere in HTML`)
+  }
+
+  // Fallback: scan a broader block after h1 if still no price
+  if (price == null && h1Close !== -1) {
+    const blockEnd = Math.min(html.length, h1Close + 20000)
+    const mainBlock = html.slice(h1Close, blockEnd).replace(/&nbsp;/gi, ' ')
+    const headOfBlock = mainBlock.slice(0, 1200)
+    let withPos = collectPricesWithPosition(headOfBlock)
+    if (withPos.length === 0) withPos = collectPricesWithPosition(headOfBlock, true)
+    if (withPos.length > 0) {
+      withPos.sort((a, b) => a.pos - b.pos)
+      price = withPos[0].num
+      if (withPos.length >= 2) {
+        const second = withPos[1].num
+        if (second > price && second <= price * MAX_ORIGINAL_TO_PRICE_RATIO) originalPrice = second
+        else if (second < price && price <= second * MAX_ORIGINAL_TO_PRICE_RATIO) {
+          originalPrice = price
+          price = second
         }
       }
     }
     if (price == null) {
-      const headOfBlock = mainBlock.slice(0, 900)
-      let withPos = collectPricesWithPosition(headOfBlock)
-      if (withPos.length === 0) withPos = collectPricesWithPosition(headOfBlock, true)
-      if (withPos.length > 0) {
-        withPos.sort((a, b) => a.pos - b.pos)
-        price = withPos[0].num
-        if (withPos.length >= 2) {
-          const second = withPos[1].num
-          if (second > price && second <= price * MAX_ORIGINAL_TO_PRICE_RATIO) originalPrice = second
-          else if (second < price && price <= second * MAX_ORIGINAL_TO_PRICE_RATIO) {
-            originalPrice = price
-            price = second
-          }
-        }
-      }
-    }
-    if (price == null) {
-      let withPos = collectPricesWithPosition(mainBlock)
+      withPos = collectPricesWithPosition(mainBlock)
       if (withPos.length === 0) withPos = collectPricesWithPosition(mainBlock, true)
       if (withPos.length > 0) {
         withPos.sort((a, b) => a.pos - b.pos)
@@ -351,8 +377,9 @@ export function extractDetailFromHtml(html: string, pageUrl: string): ExtractedD
   }
 
   if (price == null) {
-    let plausiblePrices = collectPricesFromSegment(html.slice(0, 30000))
-    if (plausiblePrices.length === 0) plausiblePrices = collectPricesFromSegment(html.slice(0, 30000), true)
+    const segment = html.replace(/&nbsp;/gi, ' ')
+    let plausiblePrices = collectPricesFromSegment(segment.slice(0, 30000))
+    if (plausiblePrices.length === 0) plausiblePrices = collectPricesFromSegment(segment.slice(0, 30000), true)
     if (plausiblePrices.length > 0) {
       price = Math.min(...plausiblePrices)
       if (plausiblePrices.length >= 2) {
@@ -363,7 +390,7 @@ export function extractDetailFromHtml(html: string, pageUrl: string): ExtractedD
     }
   }
   if (price == null) {
-    const withPos = collectPricesWithPosition(html)
+    const withPos = collectPricesWithPosition(html.replace(/&nbsp;/gi, ' '))
     if (withPos.length > 0) {
       withPos.sort((a, b) => a.pos - b.pos)
       price = withPos[0].num
@@ -381,7 +408,7 @@ export function extractDetailFromHtml(html: string, pageUrl: string): ExtractedD
       ? Math.min(
           html.length,
           ...[
-            h1CloseForSpecs + 8000,
+            h1CloseForSpecs + 20000,
             html.indexOf('Выберите условия', h1CloseForSpecs),
             html.indexOf('Похожие предложения', h1CloseForSpecs),
           ]

@@ -207,26 +207,25 @@ type ScrapedListing = {
 }
 
 function listingToRow(listing: ScrapedListing): Record<string, unknown> {
-  const row: Record<string, unknown> = {
+  return {
     external_id: listing.external_id,
     title: listing.title,
     listing_url: listing.listing_url,
     source: listing.source,
     category: listing.category,
     images: listing.images,
+    price: listing.price ?? null,
+    original_price: listing.original_price ?? null,
+    mileage: listing.mileage ?? null,
+    year: listing.year ?? null,
+    city: listing.city ?? null,
+    vin: listing.vin ?? null,
+    engine: listing.engine ?? null,
+    transmission: listing.transmission ?? null,
+    drivetrain: listing.drivetrain ?? null,
+    body_color: listing.body_color ?? null,
+    body_type: listing.body_type ?? null,
   }
-  if (listing.price != null) row.price = listing.price
-  if (listing.original_price != null) row.original_price = listing.original_price
-  if (listing.mileage != null) row.mileage = listing.mileage
-  if (listing.year != null) row.year = listing.year
-  if (listing.city != null) row.city = listing.city
-  if (listing.vin != null) row.vin = listing.vin
-  if (listing.engine != null) row.engine = listing.engine
-  if (listing.transmission != null) row.transmission = listing.transmission
-  if (listing.drivetrain != null) row.drivetrain = listing.drivetrain
-  if (listing.body_color != null) row.body_color = listing.body_color
-  if (listing.body_type != null) row.body_type = listing.body_type
-  return row
 }
 
 const UPSERT_BATCH_SIZE = 500
@@ -884,8 +883,11 @@ async function scrapeListings(supabase: SupabaseClient): Promise<Set<string>> {
             await refreshPage()
           } else if (result) {
             collected.set(result.external_id, result)
+            const discountInfo = result.original_price
+              ? ` | скидка с ${result.original_price} ₽`
+              : ''
             console.log(
-              `+ [${section.category}] ${result.title} | ${result.price ?? '?'} ₽ | ${result.year ?? '?'} г. | ${
+              `+ [${section.category}] ${result.title} | ${result.price ?? '?'} ₽${discountInfo} | ${result.year ?? '?'} г. | ${
                 result.city ?? '—'
               }`
             )
