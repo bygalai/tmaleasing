@@ -75,8 +75,8 @@ export function SearchBar({
             onChange={(event) => onChange(event.target.value)}
             onFocus={handleFocus}
             onBlur={handleBlur}
-            placeholder="Марка, модель, город..."
-            className={`search-bar-input relative z-10 w-full bg-transparent px-4 py-3 text-sm text-slate-900 outline-none placeholder:italic placeholder:text-slate-500 font-sf ${
+            placeholder="Найдите свою гонку"
+            className={`search-bar-input relative z-10 w-full bg-transparent px-4 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-500 font-sf ${
               value.trim().length > 0 ? 'pr-20' : 'pr-11'
             }`}
           />
