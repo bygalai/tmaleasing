@@ -66,10 +66,8 @@ const GAZPROM_SECTIONS: Array<{ catalogUrl: string; category: string }> = [
     catalogUrl: 'https://autogpbl.ru/avtomobili-i-tekhnika-s-probegom/?condition=100000002&filter-type=6',
     category: 'gruzovye',
   },
-  {
-    catalogUrl: 'https://autogpbl.ru/avtomobili-i-tekhnika-s-probegom/?condition=100000002&filter-type=2',
-    category: 'speztechnika',
-  },
+  // speztechnika (filter-type=2) отключена — страницы тяжёлой техники (Volvo A60H и т.п.)
+  // стабильно вешают Puppeteer/fetch, блокируя весь парсер.
   {
     catalogUrl: 'https://autogpbl.ru/avtomobili-i-tekhnika-s-probegom/?condition=100000002&filter-type=8',
     category: 'pricepy',
