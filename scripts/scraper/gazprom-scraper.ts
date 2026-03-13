@@ -10,9 +10,7 @@
 
 import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
-import { dirname, resolve as pathResolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
-import { spawn } from 'node:child_process'
+import { resolve as pathResolve } from 'node:path'
 
 import dotenv from 'dotenv'
 import puppeteer from 'puppeteer-extra'
@@ -20,6 +18,8 @@ import StealthPlugin from 'puppeteer-extra-plugin-stealth'
 import { createClient } from '@supabase/supabase-js'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Page } from 'puppeteer'
+
+import { extractDetailFromHtml } from './gazprom-extract'
 
 dotenv.config({ path: pathResolve(process.cwd(), '.env') })
 puppeteer.use(StealthPlugin())
@@ -141,7 +141,18 @@ const CITY_BLOCKLIST = new Set([
   'оборудование',
   'недвижимость',
   'подвижной состав',
-  'объем', // «Объем двигателя» — частый ложный матч при неверном порядке полей
+  'объем',
+  'пробег',
+  'колёсная',
+  'колесная',
+  'двигатель',
+  'кузов',
+  'привод',
+  'коробка',
+  'наличие',
+  'раздел',
+  'модель',
+  'количество',
 ])
 
 /** Слаг типа кузова из заголовка → русское название (для body_type) */
@@ -621,71 +632,9 @@ const EXTRACT_IMAGE_SCRIPT = `
 
 const FALLBACK_IMAGE = 'https://dummyimage.com/1200x800/1f2937/e5e7eb&text=Vehicle+Photo+Pending'
 
-/** Извлечение в child process — при зависании (ReDoS и т.п.) убиваем процесс, скипаем карточку. */
-const PARSE_CHILD_SCRIPT = pathResolve(dirname(fileURLToPath(import.meta.url)), 'gazprom-parse-child.ts')
-const PARSE_TIMEOUT_MS = 25_000
-
-async function extractInChildProcess(
-  html: string,
-  pageUrl: string
-): Promise<{
-  title: string | null
-  price: number | null
-  originalPrice: number | null
-  mileage: number | null
-  year: number | null
-  imageUrl: string | null
-  city: string | null
-  bodyColor: string | null
-  bodyType: string | null
-  engine: string | null
-  drivetrain: string | null
-  transmission: string | null
-} | null> {
-  return new Promise((resolve) => {
-    const tsxCli = pathResolve(process.cwd(), 'node_modules/tsx/dist/cli.mjs')
-    const child = spawn(process.execPath, [tsxCli, PARSE_CHILD_SCRIPT], {
-      stdio: ['pipe', 'pipe', 'ignore'],
-    })
-    const timeout = setTimeout(() => {
-      child.kill('SIGKILL')
-      resolve(null)
-    }, PARSE_TIMEOUT_MS)
-    let resolved = false
-    const finish = (result: Awaited<ReturnType<typeof extractInChildProcess>>) => {
-      if (resolved) return
-      resolved = true
-      clearTimeout(timeout)
-      resolve(result)
-    }
-    child.on('error', () => finish(null))
-    child.on('exit', (code) => {
-      if (!resolved) finish(null)
-    })
-    let buf = ''
-    child.stdout?.on('data', (chunk: Buffer) => {
-      buf += chunk.toString()
-      if (buf.includes('\n')) {
-        const line = buf.split('\n')[0]
-        try {
-          const parsed = JSON.parse(line) as { ok?: boolean; data?: unknown; error?: string }
-          if (parsed.ok && parsed.data) finish(parsed.data as Awaited<ReturnType<typeof extractInChildProcess>>)
-          else finish(null)
-        } catch {
-          finish(null)
-        }
-      }
-    })
-    child.stdin?.write(JSON.stringify({ html, pageUrl }) + '\n', (err) => {
-      if (err) finish(null)
-    })
-    child.stdin?.end()
-  })
-}
-
 const CATALOG_FETCH_TIMEOUT_MS = 45_000
-const DETAIL_FETCH_TIMEOUT_MS = 35_000
-const DETAIL_NAV_TIMEOUT_MS = 50_000
+const DETAIL_FETCH_TIMEOUT_MS = 20_000
+const DETAIL_NAV_TIMEOUT_MS = 30_000
 
 const FETCH_HEADERS = {
   'User-Agent':
@@ -733,11 +682,14 @@ async function enrichAndCollectListing(
     }
     const MAX_HTML_LEN = 150_000
     if (html.length > MAX_HTML_LEN) html = html.slice(0, MAX_HTML_LEN)
-    const data = await extractInChildProcess(html, detailUrl)
-    if (!data) {
-      console.warn(`  skip (parse timeout/bug): ${detailUrl}`)
-      return null
+    let data: ReturnType<typeof extractDetailFromHtml> | null
+    try {
+      data = extractDetailFromHtml(html, detailUrl)
+    } catch (parseErr) {
+      console.warn(`  skip (parse error): ${detailUrl}`, parseErr instanceof Error ? parseErr.message : parseErr)
+      data = null
     }
+    if (!data) return null
 
     const title = data.title && looksLikeVehicleTitle(data.title) ? data.title : null
     if (!title) {
@@ -794,15 +746,18 @@ async function enrichAndCollectListing(
   }
 }
 
-const DETAIL_PAGE_TIMEOUT_MS = 55_000
+const DETAIL_PAGE_TIMEOUT_MS = 35_000
 
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T | null> {
+const TIMEOUT_SENTINEL = Symbol('timeout')
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T | typeof TIMEOUT_SENTINEL> {
+  let timer: ReturnType<typeof setTimeout> | undefined
   return Promise.race([
-    promise,
-    new Promise<null>((resolve) => {
-      setTimeout(() => {
+    promise.then((v) => { clearTimeout(timer); return v }),
+    new Promise<typeof TIMEOUT_SENTINEL>((resolve) => {
+      timer = setTimeout(() => {
         console.warn(`  skip (timeout ${ms / 1000}s): ${label}`)
-        resolve(null)
+        resolve(TIMEOUT_SENTINEL)
       }, ms)
     }),
   ])
@@ -922,16 +877,18 @@ async function scrapeListings(supabase: SupabaseClient): Promise<Set<string>> {
             continue
           }
 
-          const listing = await withTimeout(
+          const result = await withTimeout(
             enrichAndCollectListing(page, url, section.category),
             DETAIL_PAGE_TIMEOUT_MS,
             url
           )
-          if (listing) {
-            collected.set(listing.external_id, listing)
+          if (result === TIMEOUT_SENTINEL) {
+            await refreshPage()
+          } else if (result) {
+            collected.set(result.external_id, result)
             console.log(
-              `+ [${section.category}] ${listing.title} | ${listing.price ?? '?'} ₽ | ${listing.year ?? '?'} г. | ${
-                listing.city ?? '—'
+              `+ [${section.category}] ${result.title} | ${result.price ?? '?'} ₽ | ${result.year ?? '?'} г. | ${
+                result.city ?? '—'
               }`
             )
           }

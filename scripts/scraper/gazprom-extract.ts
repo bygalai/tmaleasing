@@ -31,6 +31,8 @@ const TITLE_BLOCKLIST = new Set([
 
 const CITY_BLOCKLIST = new Set([
   'оборудование', 'недвижимость', 'подвижной состав', 'объем',
+  'пробег', 'колёсная', 'колесная', 'двигатель', 'кузов', 'привод',
+  'коробка', 'наличие', 'раздел', 'модель', 'количество',
 ])
 
 function normalizeNumber(input: string | null | undefined): number | null {

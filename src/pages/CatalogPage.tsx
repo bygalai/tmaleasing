@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { VirtualizedListingGrid } from '../components/listing/VirtualizedListingGrid'
-import { SearchBar } from '../components/listing/SearchBar'
+import { SearchBar, type SuggestionItem } from '../components/listing/SearchBar'
 import type { Listing } from '../types/marketplace'
 import type { CategoryId } from './CategorySelectionPage'
 import { getTelegramUserFromInitData } from '../lib/telegram'
@@ -60,84 +60,106 @@ export function CatalogPage({
     }
   }, [])
 
+  const categoryItems = useMemo(() => {
+    if (!categoryId) return items
+    return items.filter((item) => (item.category ?? 'legkovye') === categoryId)
+  }, [items, categoryId])
+
   const filtered = useMemo(() => {
-    let result = items
-    if (categoryId) {
-      result = result.filter((item) => (item.category ?? 'legkovye') === categoryId)
-    }
     const trimmed = query.trim()
-    if (!trimmed) return result
-    return result.filter((item) => matchesSearch(item, trimmed))
-  }, [items, query, categoryId])
+    if (!trimmed) return categoryItems
+    return categoryItems.filter((item) => matchesSearch(item, trimmed))
+  }, [categoryItems, query])
 
-  const MIN_HISTORY_QUERY_LENGTH = 3
+  const normalizedQuery = query.trim()
 
-  useEffect(() => {
-    const trimmed = query.trim()
-    if (!trimmed) return
-    if (trimmed.length < MIN_HISTORY_QUERY_LENGTH) return
-    if (filtered.length === 0) return
-
-    const timeoutId = window.setTimeout(() => {
+  const saveToHistory = useCallback(
+    (term: string) => {
+      const trimmed = term.trim()
+      if (trimmed.length < 3) return
+      if (!categoryItems.some((item) => matchesSearch(item, trimmed))) return
       try {
         const user = getTelegramUserFromInitData()
         const userKey = user?.id ?? user?.username ?? 'guest'
         const categoryKey = categoryId ?? 'all'
         const storageKey = `tma:searchHistory:${userKey}:${categoryKey}`
-
         setHistory((prev) => {
           const next = [trimmed, ...prev.filter((q) => q !== trimmed)].slice(0, 10)
           window.localStorage.setItem(storageKey, JSON.stringify(next))
           return next
         })
-      } catch {
-        // ignore
-      }
-    }, 700)
+      } catch { /* ignore */ }
+    },
+    [categoryItems, categoryId],
+  )
 
-    return () => window.clearTimeout(timeoutId)
-  }, [query, filtered.length, categoryId])
+  const deleteFromHistory = useCallback(
+    (term: string) => {
+      try {
+        const user = getTelegramUserFromInitData()
+        const userKey = user?.id ?? user?.username ?? 'guest'
+        const categoryKey = categoryId ?? 'all'
+        const storageKey = `tma:searchHistory:${userKey}:${categoryKey}`
+        setHistory((prev) => {
+          const next = prev.filter((q) => q !== term)
+          window.localStorage.setItem(storageKey, JSON.stringify(next))
+          return next
+        })
+      } catch { /* ignore */ }
+    },
+    [categoryId],
+  )
 
   const baseDefaults =
     (categoryId && DEFAULT_SUGGESTIONS_BY_CATEGORY[categoryId]) ?? DEFAULT_SUGGESTIONS_BY_CATEGORY.default
-  const normalizedQuery = query.trim()
-  const allCandidates = Array.from(
-    new Set<string>([
-      ...baseDefaults,
-      ...history,
-      ...Object.keys(BRAND_SYNONYMS),
-    ]),
+  const allCandidates = useMemo(
+    () => Array.from(new Set<string>([...baseDefaults, ...history, ...Object.keys(BRAND_SYNONYMS)])),
+    [baseDefaults, history],
   )
 
-  const typedSuggestions =
-    normalizedQuery.length > 0
-      ? allCandidates
-          .filter((item) => {
-            const normItem = normalizeForSearch(item)
-            const normQuery = normalizeForSearch(normalizedQuery)
-            if (!normItem || !normQuery) return false
-            return normItem.includes(normQuery) || normQuery.includes(normItem)
-          })
-          .slice(0, 6)
-      : []
+  const typedSuggestions: SuggestionItem[] = useMemo(() => {
+    if (normalizedQuery.length === 0) return []
+    const nq = normalizeForSearch(normalizedQuery)
+    if (!nq) return []
+    return allCandidates
+      .filter((c) => {
+        const n = normalizeForSearch(c)
+        return n && (n.startsWith(nq) || n.includes(nq) || nq.includes(n))
+      })
+      .sort((a, b) => {
+        const na = normalizeForSearch(a)
+        const nb = normalizeForSearch(b)
+        return (nb.startsWith(nq) ? 2 : nb.includes(nq) ? 1 : 0) -
+               (na.startsWith(nq) ? 2 : na.includes(nq) ? 1 : 0)
+      })
+      .slice(0, 6)
+      .map((label) => ({ label, kind: 'suggestion' as const }))
+  }, [normalizedQuery, allCandidates])
 
-  const effectiveSuggestions =
-    isSearchFocused && normalizedQuery.length > 0
+  const focusSuggestions: SuggestionItem[] = useMemo(() => {
+    if (history.length > 0) {
+      return history.slice(0, 5).map((h) => ({
+        label: h,
+        kind: 'history' as const,
+        count: categoryItems.filter((item) => matchesSearch(item, h)).length,
+      }))
+    }
+    return baseDefaults.map((d) => ({
+      label: d,
+      kind: 'suggestion' as const,
+      count: categoryItems.filter((item) => matchesSearch(item, d)).length,
+    }))
+  }, [history, baseDefaults, categoryItems])
+
+  const effectiveSuggestions: SuggestionItem[] = isSearchFocused
+    ? normalizedQuery.length > 0
       ? typedSuggestions
-      : isSearchFocused && history.length > 0
-        ? history.slice(0, 3)
-        : isSearchFocused
-          ? baseDefaults
-          : []
+      : focusSuggestions
+    : []
 
   const handleSearchFocusChange = (focused: boolean) => {
     setIsSearchFocused(focused)
     onSearchFocusedChange?.(focused)
-  }
-
-  const handleSuggestionClick = (value: string) => {
-    // Явно подменяем запрос на выбранное слово
-    setQuery(value)
   }
 
   return (
@@ -146,8 +168,13 @@ export function CatalogPage({
         value={query}
         onChange={setQuery}
         suggestions={effectiveSuggestions}
-        onSuggestionClick={handleSuggestionClick}
+        onSuggestionClick={(value) => {
+          setQuery(value)
+          saveToHistory(value)
+        }}
+        onDeleteSuggestion={deleteFromHistory}
         onFocusChange={handleSearchFocusChange}
+        onSubmit={() => saveToHistory(query)}
       />
 
       {error ? (
