@@ -90,7 +90,7 @@ export const ListingCard = memo(function ListingCard({ item, isFavorite, onToggl
 
       <div className="relative space-y-3 border-t border-black/10 bg-white/60 p-4 backdrop-blur-xl before:pointer-events-none before:absolute before:inset-0 before:content-[''] before:bg-gradient-to-br before:from-white/95 before:via-white/55 before:to-transparent before:opacity-70 after:pointer-events-none after:absolute after:inset-x-0 after:top-0 after:h-1/2 after:content-[''] after:bg-gradient-to-b after:from-white/80 after:to-transparent after:opacity-55">
         <div>
-          <p className="relative z-10 font-sf text-lg font-semibold text-slate-900">{item.title}</p>
+          <p className="relative z-10 font-sf text-lg font-semibold uppercase text-slate-900">{item.title}</p>
           <p className="relative z-10 font-sf text-sm text-slate-600">{item.subtitle}</p>
         </div>
 

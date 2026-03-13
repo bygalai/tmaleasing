@@ -48,7 +48,7 @@ export function ListingPage({ items, isFavorite, toggleFavorite }: ListingPagePr
 
       <div className="space-y-2">
         <div className="flex items-start justify-between gap-2">
-          <h1 className="text-2xl font-semibold text-slate-900">{item.title}</h1>
+          <h1 className="text-2xl font-semibold uppercase text-slate-900">{item.title}</h1>
           <button
             type="button"
             onClick={() => toggleFavorite(item.id)}
