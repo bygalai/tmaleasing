@@ -393,7 +393,6 @@ export function CategorySelectionPage({
                 items={discountedItems}
                 isFavorite={isFavorite}
                 toggleFavorite={toggleFavorite}
-                height="min(60vh, 600px)"
               />
             </section>
           )}

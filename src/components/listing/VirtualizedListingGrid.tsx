@@ -1,35 +1,30 @@
 import { useRef } from 'react'
-import { useVirtualizer } from '@tanstack/react-virtual'
+import { useWindowVirtualizer } from '@tanstack/react-virtual'
 import { ListingCard } from './ListingCard'
 import type { Listing } from '../../types/marketplace'
 
 const CARD_HEIGHT_ESTIMATE = 400
 const OVERSCAN = 5
-/** Виртуализируем только если карточек больше этого порога. */
 const VIRTUALIZE_THRESHOLD = 30
 
 type VirtualizedListingGridProps = {
   items: Listing[]
   isFavorite: (id: string) => boolean
   toggleFavorite: (id: string) => void
-  /** Высота скролл-контейнера (по умолчанию — почти весь экран для каталога). */
-  height?: string
 }
 
 export function VirtualizedListingGrid({
   items,
   isFavorite,
   toggleFavorite,
-  height = 'calc(100dvh - 200px)',
 }: VirtualizedListingGridProps) {
-  const parentRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
 
-  const virtualizer = useVirtualizer({
+  const virtualizer = useWindowVirtualizer({
     count: items.length,
-    getScrollElement: () => parentRef.current,
     estimateSize: () => CARD_HEIGHT_ESTIMATE,
     overscan: OVERSCAN,
-    useFlushSync: false,
+    scrollMargin: listRef.current?.offsetTop ?? 0,
   })
 
   const virtualItems = virtualizer.getVirtualItems()
@@ -54,11 +49,7 @@ export function VirtualizedListingGrid({
   }
 
   return (
-    <div
-      ref={parentRef}
-      className="overflow-y-auto overscroll-contain"
-      style={{ height, contain: 'strict' }}
-    >
+    <div ref={listRef}>
       <div
         style={{
           height: `${virtualizer.getTotalSize()}px`,
@@ -75,7 +66,7 @@ export function VirtualizedListingGrid({
               data-index={virtualRow.index}
               className="absolute left-0 top-0 w-full"
               style={{
-                transform: `translateY(${virtualRow.start}px)`,
+                transform: `translateY(${virtualRow.start - virtualizer.options.scrollMargin}px)`,
               }}
             >
               <div className="pb-4">
