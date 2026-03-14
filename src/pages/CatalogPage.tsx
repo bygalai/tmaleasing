@@ -238,7 +238,9 @@ export function CatalogPage({
         <ListingSkeletonGrid count={3} />
       ) : filtered.length === 0 ? (
         <div className="mx-auto w-full max-w-[560px] px-2 text-center text-sm font-sf text-slate-900">
-          Ничего не найдено. Попробуйте изменить запрос или фильтры
+          Ничего не найдено.
+          <br />
+          Попробуйте изменить запрос или фильтры
         </div>
       ) : (
         <VirtualizedListingGrid
