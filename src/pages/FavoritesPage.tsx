@@ -13,7 +13,7 @@ export function FavoritesPage({ items, isFavorite, toggleFavorite }: FavoritesPa
 
   if (favorites.length === 0) {
     return (
-      <section className="flex min-h-[40vh] flex-1 items-center justify-center">
+      <section className="page-transition flex min-h-[40vh] flex-1 items-center justify-center">
         <p className="font-sf text-slate-600">
           Здесь пока пусто
         </p>
@@ -22,7 +22,7 @@ export function FavoritesPage({ items, isFavorite, toggleFavorite }: FavoritesPa
   }
 
   return (
-    <section className="grid gap-4 pb-4">
+    <section className="page-transition grid gap-4 pb-4">
       {favorites.map((item) => (
         <ListingCard
           key={item.id}

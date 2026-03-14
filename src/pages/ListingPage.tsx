@@ -26,8 +26,8 @@ export function ListingPage({ items, isFavorite, toggleFavorite }: ListingPagePr
 
   if (!item) {
     return (
-      <section className="space-y-4">
-        <p className="text-sm text-white/70">Карточка не найдена.</p>
+      <section className="page-transition space-y-4">
+        <p className="text-sm text-slate-500">Карточка не найдена.</p>
         <Link to="/" className="text-sm text-[#FF5C34]">
           Вернуться в каталог
         </Link>
@@ -36,7 +36,7 @@ export function ListingPage({ items, isFavorite, toggleFavorite }: ListingPagePr
   }
 
   return (
-    <article className="space-y-4 pb-6">
+    <article className="page-transition space-y-4 pb-6">
       <div className="h-56 w-full overflow-hidden rounded-2xl">
         <ImageWithFallback
           imageUrls={item.imageUrls}

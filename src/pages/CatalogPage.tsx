@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { VirtualizedListingGrid } from '../components/listing/VirtualizedListingGrid'
 import { SearchBar, type SuggestionItem } from '../components/listing/SearchBar'
 import { FilterPanel } from '../components/listing/FilterPanel'
+import { ListingSkeletonGrid } from '../components/listing/ListingCardSkeleton'
 import { ScrollToTopButton } from '../components/ScrollToTopButton'
 import type { Listing, CategoryId } from '../types/marketplace'
 import { getTelegramUserFromInitData } from '../lib/telegram'
@@ -179,7 +180,7 @@ export function CatalogPage({
   }
 
   return (
-    <section className="space-y-4">
+    <section className="page-transition space-y-4">
       <SearchBar
         value={query}
         onChange={setQuery}
@@ -234,7 +235,7 @@ export function CatalogPage({
       ) : null}
 
       {isLoading ? (
-        <p className="text-center text-sm text-slate-600">Загружаем лучшие предложения...</p>
+        <ListingSkeletonGrid count={3} />
       ) : filtered.length === 0 ? (
         <div className="mx-auto w-full max-w-[560px] px-2 text-center text-sm font-sf text-slate-900">
           Ничего не найдено. Попробуйте изменить запрос или фильтры

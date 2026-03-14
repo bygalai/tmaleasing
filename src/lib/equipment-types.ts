@@ -45,7 +45,8 @@ const EQUIPMENT_PATTERNS: EquipmentPattern[] = [
   { keywords: ['манипулятор', 'кму'], type: 'Манипулятор' },
   { keywords: ['бортовой', 'бортовая'], type: 'Бортовой' },
   { keywords: ['тягач'], type: 'Тягач' },
-  { keywords: ['трактор'], type: 'Трактор' },
+  { keywords: ['трактор', 'беларус', 'мтз'], type: 'Трактор' },
+  { keywords: ['скаут'], type: 'Трактор' },
   { keywords: ['комбайн'], type: 'Комбайн' },
   { keywords: ['каток'], type: 'Каток' },
   { keywords: ['грейдер', 'автогрейдер'], type: 'Грейдер' },
@@ -95,12 +96,20 @@ const MODEL_PATTERNS: ModelPattern[] = [
   { regex: /\bEC\d{3}/i, type: 'Экскаватор' },             // Volvo EC210, EC480
   { regex: /\bDX\d{3}/i, type: 'Экскаватор' },             // Doosan DX225, DX340
   { regex: /\bJS\d{3}/i, type: 'Экскаватор' },             // JCB JS220, JS330
-  { regex: /\bCLG9\d{2}/i, type: 'Экскаватор' },           // LiuGong CLG922, CLG936
+  { regex: /\bCLG9\d{2}/i, type: 'Экскаватор' },           // LiuGong CLG922, CLG9035
   { regex: /\bCX\d{3}/i, type: 'Экскаватор' },             // Case CX210, CX370
   { regex: /\bSK\d{3}/i, type: 'Экскаватор' },             // Kobelco SK200, SK350
+  { regex: /\bCDM6\d{2,3}/i, type: 'Экскаватор' },         // Lonking CDM6065, CDM6225, CDM6266
+  { regex: /\bE6\d{3}/i, type: 'Экскаватор' },             // LGCE E6255F, E6210FLC
+  { regex: /\bSE\d{3}/i, type: 'Экскаватор' },             // Shantui SE265LC, SE215
+  { regex: /\bZE\d{3}/i, type: 'Экскаватор' },             // Zoomlion ZE245E, ZE215
+  { regex: /\bFR\d{3}/i, type: 'Экскаватор' },             // Lovol FR220D2, FR150D
 
   // ── Экскаваторы-погрузчики ─────────────────────────────────
   { regex: /\b[345]CX\b/i, type: 'Экскаватор-погрузчик' }, // JCB 3CX, 4CX, 5CX
+  { regex: /\b[345]SX\b/i, type: 'Экскаватор-погрузчик' }, // BULL 3SX, 4SX
+  { regex: /\bB1\d{2}[A-Z]?\b/i, type: 'Экскаватор-погрузчик' }, // New Holland B115B
+  { regex: /\bB8\d{2}/i, type: 'Экскаватор-погрузчик' },   // LGCE B877F
 
   // ── Фронтальные погрузчики ─────────────────────────────────
   { regex: /\bCDM8\d{2}/i, type: 'Фронтальный погрузчик' },  // Lonking CDM853, CDM856
@@ -108,13 +117,13 @@ const MODEL_PATTERNS: ModelPattern[] = [
   { regex: /\bZL\d{2}/i, type: 'Фронтальный погрузчик' },    // XCMG ZL50, ZL30
   { regex: /\bCLG8\d{2}/i, type: 'Фронтальный погрузчик' },  // LiuGong CLG856, CLG862
   { regex: /\bLG9\d{2}/i, type: 'Фронтальный погрузчик' },   // SDLG LG956, LG958
-  { regex: /\bL9\d{2}/i, type: 'Фронтальный погрузчик' },    // SDLG L956F, L958F
+  { regex: /\bL9\d{2}/i, type: 'Фронтальный погрузчик' },    // SDLG/LGCE L956F, L958F
   { regex: /\bDL\d{3}/i, type: 'Фронтальный погрузчик' },    // Doosan DL250, DL450
   { regex: /\bSL\d{2}W?\b/i, type: 'Фронтальный погрузчик' },// Shantui SL50W
 
   // ── Бульдозеры ─────────────────────────────────────────────
-  { regex: /\bSD\d{2}\b/i, type: 'Бульдозер' },         // Shantui SD22, SD32
-  { regex: /\bDH\d{2}\b/i, type: 'Бульдозер' },         // Shantui DH13, DH17
+  { regex: /\bSD\d{2}/i, type: 'Бульдозер' },           // Shantui SD22, SD17B3
+  { regex: /\bDH\d{2}/i, type: 'Бульдозер' },           // Shantui DH13, DH17
   { regex: /\bTY\d{3}/i, type: 'Бульдозер' },           // XCMG TY160, TY320
 
   // ── Автокраны ──────────────────────────────────────────────
@@ -144,8 +153,6 @@ const MODEL_PATTERNS: ModelPattern[] = [
 // Applied as last resort when keyword and model matching fail.
 
 const BRAND_EQUIPMENT_DEFAULTS: [string, string][] = [
-  ['lonking', 'Фронтальный погрузчик'],
-  ['лонкинг', 'Фронтальный погрузчик'],
   ['sdlg', 'Фронтальный погрузчик'],
   ['shantui', 'Бульдозер'],
   ['шантуй', 'Бульдозер'],

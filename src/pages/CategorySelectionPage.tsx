@@ -346,7 +346,7 @@ export function CategorySelectionPage({
   }, [setQueryAndUrl])
 
   return (
-    <section className="space-y-6">
+    <section className="page-transition space-y-6">
       {isShowingResults ? (
         <div
           className={`sticky top-0 z-30 -mx-4 -mt-1 flex w-full items-center justify-start overflow-hidden px-4 transition-all duration-300 ease-out ${

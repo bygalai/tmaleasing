@@ -123,6 +123,7 @@ type ScrapedListing = {
   transmission: string | null
   drivetrain: string | null
   body_color: string | null
+  body_type: string | null
 }
 
 type RawCard = {
@@ -536,6 +537,7 @@ function mapRawCardToListing(raw: RawCard, category: string): ScrapedListing | n
     transmission: null,
     drivetrain: null,
     body_color: null,
+    body_type: null,
   }
 }
 
@@ -847,6 +849,7 @@ function extractDetailFromJsonLd(payloads: unknown[]): {
   transmission: string | null
   drivetrain: string | null
   bodyColor: string | null
+  bodyType: string | null
 } {
   const seen = new Set<object>()
   const prices: number[] = []
@@ -859,6 +862,7 @@ function extractDetailFromJsonLd(payloads: unknown[]): {
   const transmissions: string[] = []
   const drivetrains: string[] = []
   const bodyColors: string[] = []
+  const bodyTypes: string[] = []
 
   const walk = (node: unknown): void => {
     if (!node) return
@@ -919,6 +923,12 @@ function extractDetailFromJsonLd(payloads: unknown[]): {
     const colorRaw = toTextValue(obj.color) ?? toTextValue(obj.bodyColor) ?? toTextValue(obj.vehicleColor)
     if (colorRaw) bodyColors.push(colorRaw)
 
+    const bodyTypeRaw =
+      toTextValue(obj.bodyType) ??
+      toTextValue(obj.vehicleConfiguration) ??
+      toTextValue(obj.vehicleBodyType)
+    if (bodyTypeRaw) bodyTypes.push(bodyTypeRaw)
+
     const priceRaw = obj.price ?? (obj.offers as Record<string, unknown> | undefined)?.price
     const priceNum = normalizeNumber(toTextValue(priceRaw))
     if (priceNum != null) prices.push(priceNum)
@@ -970,6 +980,7 @@ function extractDetailFromJsonLd(payloads: unknown[]): {
     transmission: pickFirstText(transmissions),
     drivetrain: pickFirstText(drivetrains),
     bodyColor: pickFirstText(bodyColors),
+    bodyType: pickFirstText(bodyTypes),
   }
 }
 
@@ -985,6 +996,7 @@ function extractDetailFromHtmlFallback(html: string): {
   transmission: string | null
   drivetrain: string | null
   bodyColor: string | null
+  bodyType: string | null
 } {
   const titleTag =
     html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim() ??
@@ -1111,6 +1123,23 @@ function extractDetailFromHtmlFallback(html: string): {
     titleTag?.match(/\bг\.\s*([А-Яа-яЁё -]{2,40})\s*\|/i)?.[1]?.trim() ??
     null
 
+  // VTB <title> format: "{BodyType} {Brand Model} {Year} {Color} - продажа, лизинг ..."
+  // Extract Russian title-case prefix as body type (e.g. "Экскаватор", "Фронтальный погрузчик")
+  const bodyType = (() => {
+    if (!titleTag) return null
+    const cleaned = titleTag
+      .replace(/\s*[|].*$/, '')
+      .replace(/\s*-\s*(?:продажа|покупка|купить).*$/i, '')
+      .trim()
+    if (!cleaned) return null
+    const m = cleaned.match(/^([А-Яа-яЁё][а-яё]+(?:[-\s][а-яё]+)*)\s+/)
+    return m?.[1]?.trim() || null
+  })()
+
+  const bodyTypeFromText =
+    plainText.match(/Тип\s*(?:кузова|техники)\s*[:-]\s*([A-Za-zА-Яа-яЁё0-9 -]{3,40})/i)?.[1]?.trim() ??
+    null
+
   return {
     title,
     price,
@@ -1123,6 +1152,7 @@ function extractDetailFromHtmlFallback(html: string): {
     transmission: cleanupValue(transmission, 4),
     drivetrain: cleanupValue(drivetrain, 4),
     bodyColor: cleanupValue(bodyColor, 2),
+    bodyType: bodyType ?? cleanupValue(bodyTypeFromText, 4),
   }
 }
 
@@ -1149,7 +1179,20 @@ async function enrichListingsFromDetailsViaBrowserPage(
       const jsonLd = extractJsonLdBlocks(html)
       const fromLd = extractDetailFromJsonLd(jsonLd)
       const fromHtml = extractDetailFromHtmlFallback(html)
-      const details = {
+      const details: {
+        title: string | null
+        price: number | null
+        mileage: number | null
+        year: number | null
+        imageUrl: string | null
+        vin: string | null
+        engine: string | null
+        transmission: string | null
+        drivetrain: string | null
+        bodyColor: string | null
+        bodyType: string | null
+        city: string | null
+      } = {
         title: fromLd.title ?? fromHtml.title,
         price: fromLd.price ?? fromHtml.price,
         mileage: fromLd.mileage ?? fromHtml.mileage,
@@ -1160,7 +1203,30 @@ async function enrichListingsFromDetailsViaBrowserPage(
         transmission: fromLd.transmission ?? fromHtml.transmission,
         drivetrain: fromLd.drivetrain ?? fromHtml.drivetrain,
         bodyColor: fromLd.bodyColor ?? fromHtml.bodyColor,
+        bodyType: fromLd.bodyType ?? fromHtml.bodyType,
         city: fromHtml.city,
+      }
+
+      // Fallback: extract body type by comparing listing title with <title> tag
+      if (!details.bodyType) {
+        const pageTitleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)
+        const pageTitleText = pageTitleMatch?.[1]
+          ?.replace(/<[^>]+>/g, '')
+          .replace(/\s+/g, ' ')
+          .trim()
+        if (pageTitleText && listing.title) {
+          const cleaned = pageTitleText
+            .replace(/\s*[|].*$/, '')
+            .replace(/\s*-\s*(?:продажа|покупка|купить).*$/i, '')
+            .trim()
+          const idx = cleaned.toLowerCase().indexOf(listing.title.toLowerCase())
+          if (idx > 0) {
+            const prefix = cleaned.slice(0, idx).trim()
+            if (prefix && /^[А-Яа-яЁё]/.test(prefix) && prefix.length < 50) {
+              details.bodyType = prefix
+            }
+          }
+        }
       }
 
       // Keep the catalog title as the source of truth.
@@ -1176,12 +1242,13 @@ async function enrichListingsFromDetailsViaBrowserPage(
       if (details.transmission) listing.transmission = details.transmission
       if (details.drivetrain) listing.drivetrain = details.drivetrain
       if (details.bodyColor) listing.body_color = details.bodyColor
+      if (details.bodyType) listing.body_type = details.bodyType
 
       listingsMap.set(listing.external_id, listing)
       enrichedCount += 1
 
       console.log(
-        `Enriched: ${listing.title} | Price: ${listing.price ?? 'NULL'} | Mileage: ${listing.mileage ?? 'NULL'} | Year: ${listing.year ?? 'NULL'} | City: ${listing.city ?? 'NULL'} | Color: ${listing.body_color ?? 'NULL'} | VIN: ${listing.vin ?? 'NULL'} | Image: ${listing.images[0] ?? 'NULL'}`
+        `Enriched: ${listing.title} | Type: ${listing.body_type ?? 'NULL'} | Price: ${listing.price ?? 'NULL'} | Mileage: ${listing.mileage ?? 'NULL'} | Year: ${listing.year ?? 'NULL'} | City: ${listing.city ?? 'NULL'} | Color: ${listing.body_color ?? 'NULL'} | VIN: ${listing.vin ?? 'NULL'} | Image: ${listing.images[0] ?? 'NULL'}`
       )
     } catch (error) {
       if (isShutdownError(error)) {
@@ -1659,6 +1726,7 @@ async function run(): Promise<void> {
           if (listing.transmission != null) row.transmission = listing.transmission
           if (listing.drivetrain != null) row.drivetrain = listing.drivetrain
           if (listing.body_color != null) row.body_color = listing.body_color
+          if (listing.body_type != null) row.body_type = listing.body_type
           return row
         })
 

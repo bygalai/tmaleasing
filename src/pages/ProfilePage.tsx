@@ -10,7 +10,7 @@ export function ProfilePage() {
   const initial = getTelegramAvatarInitial()
 
   return (
-    <section className="flex flex-col items-center gap-6 pt-6">
+    <section className="page-transition flex flex-col items-center gap-6 pt-6">
       {/* Аватар — большая часть, тёплое свечение как в референсе */}
       <div className="flex flex-col items-center gap-6">
         <div
