@@ -144,16 +144,23 @@ export function matchesSearch(listing: Listing, rawQuery: string): boolean {
   const normalizedQuery = normalizeForSearch(rawQuery)
   if (!normalizedQuery) return true
 
+  // Точное вхождение подстроки
   if (haystack.includes(normalizedQuery)) return true
 
+  // Пословный поиск: каждое слово запроса должно быть в haystack
+  const queryWords = normalizedQuery.split(' ').filter((w) => w.length > 0)
+  if (queryWords.length > 1 && queryWords.every((w) => haystack.includes(w))) return true
+
+  // Синонимы бренда: подменяем бренд в запросе, проверяем ПОЛНЫЙ расширенный запрос
   const rawLower = rawQuery.toLowerCase()
   for (const [key, synonyms] of Object.entries(BRAND_SYNONYMS)) {
     if (!rawLower.includes(key)) continue
     for (const synonym of synonyms) {
-      const normSynonym = normalizeForSearch(synonym)
-      if (normSynonym && haystack.includes(normSynonym)) {
-        return true
-      }
+      const expanded = normalizeForSearch(rawLower.replace(key, synonym))
+      if (!expanded) continue
+      if (haystack.includes(expanded)) return true
+      const expandedWords = expanded.split(' ').filter((w) => w.length > 0)
+      if (expandedWords.length > 1 && expandedWords.every((w) => haystack.includes(w))) return true
     }
   }
 
