@@ -25,6 +25,10 @@
   box-sizing: border-box;
 }
 
+html {
+  touch-action: manipulation;
+}
+
 html,
 body,
 #root {

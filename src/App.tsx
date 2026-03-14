@@ -33,7 +33,7 @@ function Header() {
           type="button"
           onClick={goBack}
           aria-label="Назад в каталог"
-          className="absolute left-0 flex h-10 w-10 shrink-0 items-center justify-center text-slate-900"
+          className="absolute left-0 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-900 transition-all duration-150 active:scale-90 active:opacity-60"
         >
           <svg
             aria-hidden="true"
@@ -62,7 +62,7 @@ function Header() {
           type="button"
           onClick={goToCategories}
           aria-label="Назад к выбору раздела"
-          className="absolute left-0 flex h-10 w-10 shrink-0 items-center justify-center text-slate-900"
+          className="absolute left-0 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-900 transition-all duration-150 active:scale-90 active:opacity-60"
         >
           <svg
             aria-hidden="true"
