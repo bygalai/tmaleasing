@@ -103,6 +103,7 @@ type ScrapedListing = {
   external_id: string
   title: string
   price: number | null
+  original_price: number | null
   mileage: number | null
   year: number | null
   images: string[]
@@ -371,6 +372,7 @@ function extractJsonLdBlocks(html: string): unknown[] {
 function extractDetailFromJsonLd(payloads: unknown[]): {
   title: string | null
   price: number | null
+  originalPrice: number | null
   mileage: number | null
   year: number | null
   imageUrl: string | null
@@ -492,11 +494,26 @@ function extractDetailFromJsonLd(payloads: unknown[]): {
     return filtered.length > 0 ? Math.max(...filtered) : null
   }
 
-  /** Минимальная реалистичная цена ТС — 100k; иначе ловим ежемесячный платёж/аванс (11k и т.п.). */
   const MIN_VEHICLE_PRICE = 100_000
+  const MAX_VEHICLE_PRICE = 100_000_000
+  const MAX_ORIGINAL_TO_PRICE_RATIO = 1.5
+
+  const validPrices = prices.filter((v) => Number.isFinite(v) && v >= MIN_VEHICLE_PRICE && v <= MAX_VEHICLE_PRICE)
+  let price: number | null = validPrices.length > 0 ? Math.min(...validPrices) : null
+  let originalPrice: number | null = null
+  if (validPrices.length >= 2) {
+    const minP = Math.min(...validPrices)
+    const maxP = Math.max(...validPrices)
+    if (maxP > minP && maxP <= minP * MAX_ORIGINAL_TO_PRICE_RATIO) {
+      price = minP
+      originalPrice = maxP
+    }
+  }
+
   return {
     title: bestTitle,
-    price: pickBestPrice(prices, MIN_VEHICLE_PRICE, 100_000_000),
+    price,
+    originalPrice,
     mileage: pickBest(mileages, 1),
     year: pickBest(years, 1900),
     imageUrl: pickBestImageCandidate(images) ?? null,
@@ -511,6 +528,7 @@ function extractDetailFromJsonLd(payloads: unknown[]): {
 function extractDetailFromHtmlFallback(html: string): {
   title: string | null
   price: number | null
+  originalPrice: number | null
   mileage: number | null
   year: number | null
   imageUrl: string | null
@@ -535,12 +553,19 @@ function extractDetailFromHtmlFallback(html: string): {
   const title =
     html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1]?.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim() ?? null
 
+  const MAX_ORIGINAL_TO_PRICE_RATIO = 1.5
   const priceMatches = [...html.matchAll(/(\d[\d\s\u00A0]{3,})\s*(?:₽|&#8381;|руб|р\.?)/gi)]
     .map((m) => normalizeNumber(m[1]))
     .filter((v): v is number => v != null)
     .filter((v) => v >= 100_000 && v <= 100_000_000)
-  /** Минимальная цена = обычно акционная/итоговая; отсекаем ежемесячный платёж/аванс. */
-  const price = priceMatches.length > 0 ? Math.min(...priceMatches) : null
+  let price: number | null = priceMatches.length > 0 ? Math.min(...priceMatches) : null
+  let originalPrice: number | null = null
+  if (priceMatches.length >= 2 && price != null) {
+    const maxP = Math.max(...priceMatches)
+    if (maxP > price && maxP <= price * MAX_ORIGINAL_TO_PRICE_RATIO) {
+      originalPrice = maxP
+    }
+  }
 
   const mileageText =
     plainText.match(/(\d[\d\s\u00A0]{2,})\s*(?:км|km)/i)?.[1] ??
@@ -621,6 +646,7 @@ function extractDetailFromHtmlFallback(html: string): {
   return {
     title,
     price,
+    originalPrice,
     mileage: normalizeNumber(mileageText),
     year: parseYear(yearText),
     imageUrl,
@@ -755,6 +781,11 @@ const EXTRACT_DOM_SCRIPT = `
     if (!isNaN(num) && num >= 100000 && num <= 100000000) priceMatches.push(num);
   }
   var price = priceMatches.length > 0 ? Math.min.apply(null, priceMatches) : null;
+  var originalPrice = null;
+  if (priceMatches.length >= 2 && price !== null) {
+    var maxPrice = Math.max.apply(null, priceMatches);
+    if (maxPrice > price && maxPrice <= price * 1.5) originalPrice = maxPrice;
+  }
   var mileageMatch = bodyText.match(/(\\\\d[\\\\d\\\\s\\\\u00A0]{2,})\\\\s*(?:км|km)/i);
   var mileageStr = mileageMatch && mileageMatch[1] ? mileageMatch[1].replace(/\\\\s/g, '') : null;
   var mileage = mileageStr ? parseInt(mileageStr, 10) : null;
@@ -813,13 +844,14 @@ const EXTRACT_DOM_SCRIPT = `
     });
     imageUrl = candidates[0].url;
   }
-  return { title: title, price: price, mileage: mileage, year: year, imageUrl: imageUrl, city: city };
+  return { title: title, price: price, originalPrice: originalPrice, mileage: mileage, year: year, imageUrl: imageUrl, city: city };
 })();
 `
 
 async function extractDetailFromLiveDom(page: Page): Promise<{
   title: string | null
   price: number | null
+  originalPrice: number | null
   mileage: number | null
   year: number | null
   imageUrl: string | null
@@ -830,6 +862,7 @@ async function extractDetailFromLiveDom(page: Page): Promise<{
   return {
     title: raw?.title ?? null,
     price: raw?.price != null && Number.isFinite(raw.price) ? raw.price : null,
+    originalPrice: raw?.originalPrice != null && Number.isFinite(raw.originalPrice) ? raw.originalPrice : null,
     mileage: raw?.mileage != null && Number.isFinite(raw.mileage) ? raw.mileage : null,
     year: raw?.year != null && raw.year >= 1990 && raw.year <= 2030 ? raw.year : null,
     imageUrl: raw?.imageUrl ?? null,
@@ -901,6 +934,7 @@ async function enrichAndCollectListing(
 
     const title = fromLd.title ?? fromHtml.title ?? fromDom.title ?? null
     const price = fromLd.price ?? fromHtml.price ?? fromDom.price ?? null
+    const originalPrice = fromLd.originalPrice ?? fromHtml.originalPrice ?? fromDom.originalPrice ?? null
     const mileage = fromLd.mileage ?? fromHtml.mileage ?? fromDom.mileage ?? null
     const year = fromLd.year ?? fromHtml.year ?? fromDom.year ?? null
     const imageUrl = fromLd.imageUrl ?? fromHtml.imageUrl ?? fromDom.imageUrl ?? fromApiImage ?? null
@@ -950,6 +984,7 @@ async function enrichAndCollectListing(
       external_id: buildExternalId(detailUrl),
       title: sanitizeTitle(title),
       price,
+      original_price: originalPrice,
       mileage,
       year,
       images: [absoluteImage],
@@ -974,6 +1009,139 @@ async function enrichAndCollectListing(
   }
 }
 
+/**
+ * Сравнивает текущие цены с сохранёнными в Supabase и проставляет original_price при снижении.
+ * On-page скидки (уже распознанные со страницы Europlan) имеют приоритет и не перезаписываются.
+ */
+async function applyHistoricalPriceLogic(
+  supabase: SupabaseClient,
+  listings: ScrapedListing[],
+): Promise<void> {
+  if (listings.length === 0) return
+
+  const externalIds = listings.map((l) => l.external_id)
+  const byId = new Map<
+    string,
+    { external_id: string; price: number | string | null; original_price: number | string | null }
+  >()
+
+  const HISTORICAL_BATCH = 50
+  for (let i = 0; i < externalIds.length; i += HISTORICAL_BATCH) {
+    const batch = externalIds.slice(i, i + HISTORICAL_BATCH)
+    const { data: existingRows, error } = await supabase
+      .from('listings')
+      .select('external_id, price, original_price')
+      .eq('source', SOURCE)
+      .in('external_id', batch)
+
+    if (error) {
+      console.warn(`Historical price lookup batch failed (non-fatal): ${error.message}`)
+      continue
+    }
+
+    for (const row of existingRows ?? []) {
+      const r = row as { external_id?: string; price?: number | string | null; original_price?: number | string | null }
+      if (!r.external_id) continue
+      byId.set(r.external_id, {
+        external_id: r.external_id,
+        price: r.price ?? null,
+        original_price: r.original_price ?? null,
+      })
+    }
+  }
+  const matchedByIdCount = byId.size
+
+  const listingsWithoutHistory = listings.filter((l) => !byId.has(l.external_id) && l.vin)
+  const vinToListing = new Map<string, ScrapedListing>()
+  const vinSet = new Set<string>()
+  for (const l of listingsWithoutHistory) {
+    const vin = l.vin?.trim().toUpperCase()
+    if (!vin) continue
+    vinSet.add(vin)
+    vinToListing.set(vin, l)
+  }
+
+  let vinMatched = 0
+  if (vinSet.size > 0) {
+    const vinArray = [...vinSet]
+    for (let j = 0; j < vinArray.length; j += HISTORICAL_BATCH) {
+      const vinBatch = vinArray.slice(j, j + HISTORICAL_BATCH)
+      const { data: vinRows, error: vinErr } = await supabase
+        .from('listings')
+        .select('external_id, price, original_price, vin')
+        .eq('source', SOURCE)
+        .in('vin', vinBatch)
+
+      if (vinErr) {
+        console.warn('Historical price VIN lookup failed (non-fatal):', vinErr.message)
+        continue
+      }
+
+      for (const row of vinRows ?? []) {
+        const r = row as {
+          external_id?: string
+          price?: number | string | null
+          original_price?: number | string | null
+          vin?: string | null
+        }
+        if (!r.external_id || !r.vin) continue
+        const vin = r.vin.trim().toUpperCase()
+        const listing = vinToListing.get(vin)
+        if (!listing) continue
+        listing.external_id = r.external_id
+        byId.set(r.external_id, {
+          external_id: r.external_id,
+          price: r.price ?? null,
+          original_price: r.original_price ?? null,
+        })
+        vinMatched += 1
+      }
+    }
+  }
+
+  let discounts = 0
+  let priceIncreases = 0
+  let unchanged = 0
+
+  for (const listing of listings) {
+    const currentPrice = listing.price
+    if (currentPrice == null || !Number.isFinite(currentPrice) || currentPrice <= 0) continue
+
+    if (listing.original_price != null && listing.original_price > currentPrice) continue
+
+    const prev = byId.get(listing.external_id)
+    if (!prev) {
+      if (listing.original_price == null) listing.original_price = null
+      continue
+    }
+
+    const prevPriceNum = prev.price != null ? Number(prev.price) : NaN
+    const prevOriginalNum = prev.original_price != null ? Number(prev.original_price) : NaN
+
+    if (!Number.isFinite(prevPriceNum) || prevPriceNum <= 0) {
+      listing.original_price = Number.isFinite(prevOriginalNum) && prevOriginalNum > 0 ? prevOriginalNum : listing.original_price
+      continue
+    }
+
+    const baselineOriginal = Number.isFinite(prevOriginalNum) && prevOriginalNum > prevPriceNum ? prevOriginalNum : prevPriceNum
+
+    if (currentPrice < prevPriceNum) {
+      listing.original_price = baselineOriginal
+      discounts += 1
+    } else if (currentPrice > prevPriceNum) {
+      listing.original_price = null
+      priceIncreases += 1
+    } else {
+      listing.original_price = Number.isFinite(prevOriginalNum) && prevOriginalNum > 0 ? prevOriginalNum : listing.original_price
+      unchanged += 1
+    }
+  }
+
+  console.log(
+    `Historical price logic (Europlan): matched=${byId.size} (by_external_id=${matchedByIdCount}, by_vin=${vinMatched}), discounts=${discounts}, price_up=${priceIncreases}, unchanged=${unchanged}`,
+  )
+}
+
 async function upsertListingsBatch(supabase: SupabaseClient, listings: ScrapedListing[]): Promise<void> {
   if (listings.length === 0) return
 
@@ -987,6 +1155,7 @@ async function upsertListingsBatch(supabase: SupabaseClient, listings: ScrapedLi
       images: listing.images,
     }
     if (listing.price != null) row.price = listing.price
+    row.original_price = listing.original_price ?? null
     if (listing.mileage != null) row.mileage = listing.mileage
     if (listing.year != null) row.year = listing.year
     if (listing.city != null) row.city = listing.city
@@ -1075,6 +1244,7 @@ async function scrapeListingsAndSync(supabase: SupabaseClient): Promise<void> {
 
             if (pendingBatch.length >= UPSERT_BATCH_SIZE) {
               console.log(`Flushing batch of ${pendingBatch.length} Europlan listings to Supabase...`)
+              await applyHistoricalPriceLogic(supabase, pendingBatch)
               await upsertListingsBatch(supabase, pendingBatch)
               pendingBatch = []
             }
@@ -1087,6 +1257,7 @@ async function scrapeListingsAndSync(supabase: SupabaseClient): Promise<void> {
 
     if (pendingBatch.length > 0) {
       console.log(`Flushing final batch of ${pendingBatch.length} Europlan listings to Supabase...`)
+      await applyHistoricalPriceLogic(supabase, pendingBatch)
       await upsertListingsBatch(supabase, pendingBatch)
       pendingBatch = []
     }
