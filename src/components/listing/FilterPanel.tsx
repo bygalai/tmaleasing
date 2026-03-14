@@ -6,7 +6,7 @@ import {
   emptyFilterState,
   getAvailableBrands,
   getAvailableBodyTypes,
-  applyFilters,
+  countStrictMatches,
   countActiveFilters,
 } from '../../lib/filters'
 
@@ -75,8 +75,14 @@ export function FilterPanel({
   }, [isOpen])
 
   const availableBrands = useMemo(() => getAvailableBrands(items), [items])
-  const availableBodyTypes = useMemo(() => getAvailableBodyTypes(items), [items])
-  const resultCount = useMemo(() => applyFilters(items, draft).length, [items, draft])
+
+  const itemsForBodyTypes = useMemo(() => {
+    if (draft.brands.length === 0) return items
+    return items.filter((item) => item.brand && draft.brands.includes(item.brand))
+  }, [items, draft.brands])
+  const availableBodyTypes = useMemo(() => getAvailableBodyTypes(itemsForBodyTypes), [itemsForBodyTypes])
+
+  const resultCount = useMemo(() => countStrictMatches(items, draft), [items, draft])
   const hasChanges = countActiveFilters(draft) > 0
 
   const toggleBrand = useCallback((brand: string) => {

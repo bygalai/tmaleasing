@@ -256,3 +256,26 @@ export function applyFilters(items: Listing[], f: FilterState): Listing[] {
 
   return [...matched, ...vtbEpFallback]
 }
+
+/**
+ * Число строго подходящих лотов (без VTB/Europlan fallback).
+ * Используется для кнопки «Показать N лотов» в панели фильтров.
+ */
+export function countStrictMatches(items: Listing[], f: FilterState): number {
+  const hasAny =
+    f.brands.length > 0 ||
+    f.bodyTypes.length > 0 ||
+    f.priceFrom !== '' ||
+    f.priceTo !== '' ||
+    f.mileageFrom !== '' ||
+    f.mileageTo !== ''
+  if (!hasAny) return items.length
+
+  let count = 0
+  for (const item of items) {
+    if (!matchesNonBodyTypeFilters(item, f)) continue
+    if (!matchesBodyType(item, f.bodyTypes)) continue
+    count++
+  }
+  return count
+}
