@@ -25,6 +25,7 @@ export type Listing = {
   source?: string
   bodyType?: string
   brand?: string
+  drivetrain?: string
 }
 
 export type ListingsResponse = {

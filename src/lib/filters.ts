@@ -134,6 +134,8 @@ export function extractBrand(title: string): string | undefined {
 export type FilterState = {
   brands: string[]
   bodyTypes: string[]
+  drivetrains: string[]
+  locations: string[]
   priceFrom: string
   priceTo: string
   mileageFrom: string
@@ -141,13 +143,15 @@ export type FilterState = {
 }
 
 export function emptyFilterState(): FilterState {
-  return { brands: [], bodyTypes: [], priceFrom: '', priceTo: '', mileageFrom: '', mileageTo: '' }
+  return { brands: [], bodyTypes: [], drivetrains: [], locations: [], priceFrom: '', priceTo: '', mileageFrom: '', mileageTo: '' }
 }
 
 export function countActiveFilters(f: FilterState): number {
   let n = 0
   if (f.brands.length > 0) n++
   if (f.bodyTypes.length > 0) n++
+  if (f.drivetrains.length > 0) n++
+  if (f.locations.length > 0) n++
   if (f.priceFrom || f.priceTo) n++
   if (f.mileageFrom || f.mileageTo) n++
   return n
@@ -181,9 +185,72 @@ export function getAvailableBodyTypes(items: Listing[]): FilterOption[] {
     .sort((a, b) => b.count - a.count)
 }
 
+export function getAvailableDrivetrains(items: Listing[]): FilterOption[] {
+  const map = new Map<string, number>()
+  for (const item of items) {
+    if (!item.drivetrain) continue
+    const val = item.drivetrain.trim()
+    if (!val) continue
+    map.set(val, (map.get(val) ?? 0) + 1)
+  }
+  return Array.from(map.entries())
+    .map(([value, count]) => ({ value, count }))
+    .sort((a, b) => b.count - a.count)
+}
+
+export function getAvailableLocations(items: Listing[]): FilterOption[] {
+  const map = new Map<string, number>()
+  for (const item of items) {
+    if (!item.location) continue
+    const val = item.location.trim()
+    if (!val) continue
+    map.set(val, (map.get(val) ?? 0) + 1)
+  }
+  return Array.from(map.entries())
+    .map(([value, count]) => ({ value, count }))
+    .sort((a, b) => b.count - a.count)
+}
+
 function capitalizeFirst(s: string): string {
   if (!s) return s
   return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
+}
+
+// ── Cross-filtering (faceted counts) ────────────────────────
+
+type FilterField = 'brands' | 'bodyTypes' | 'drivetrains' | 'locations'
+
+/**
+ * Фильтрует лоты по всем параметрам draft, кроме одного (`exclude`).
+ * Используется для вычисления счётчиков в каждой секции фильтров:
+ * счётчик у города учитывает выбранный бренд, тип кузова и т.д.
+ */
+export function filterItemsExcluding(items: Listing[], f: FilterState, exclude: FilterField): Listing[] {
+  return items.filter((item) => {
+    if (exclude !== 'brands' && f.brands.length > 0) {
+      if (!item.brand || !f.brands.includes(item.brand)) return false
+    }
+    if (exclude !== 'bodyTypes' && f.bodyTypes.length > 0) {
+      if (!item.bodyType) return false
+      const bt = capitalizeFirst(item.bodyType.trim())
+      if (!f.bodyTypes.includes(bt)) return false
+    }
+    if (exclude !== 'drivetrains' && f.drivetrains.length > 0) {
+      if (!item.drivetrain || !f.drivetrains.includes(item.drivetrain.trim())) return false
+    }
+    if (exclude !== 'locations' && f.locations.length > 0) {
+      if (!item.location || !f.locations.includes(item.location.trim())) return false
+    }
+    const priceFrom = f.priceFrom ? Number(f.priceFrom) : undefined
+    const priceTo = f.priceTo ? Number(f.priceTo) : undefined
+    if (priceFrom && item.priceRub < priceFrom) return false
+    if (priceTo && item.priceRub > priceTo) return false
+    const mileageFrom = f.mileageFrom ? Number(f.mileageFrom) : undefined
+    const mileageTo = f.mileageTo ? Number(f.mileageTo) : undefined
+    if (mileageFrom != null && (item.mileageKm == null || item.mileageKm < mileageFrom)) return false
+    if (mileageTo != null && (item.mileageKm == null || item.mileageKm > mileageTo)) return false
+    return true
+  })
 }
 
 // ── Filter application ──────────────────────────────────────
@@ -198,6 +265,15 @@ function matchesNonBodyTypeFilters(item: Listing, f: FilterState): boolean {
   if (f.brands.length > 0) {
     if (!item.brand || !f.brands.includes(item.brand)) return false
   }
+
+  if (f.drivetrains.length > 0) {
+    if (!item.drivetrain || !f.drivetrains.includes(item.drivetrain.trim())) return false
+  }
+
+  if (f.locations.length > 0) {
+    if (!item.location || !f.locations.includes(item.location.trim())) return false
+  }
+
   const priceFrom = f.priceFrom ? Number(f.priceFrom) : undefined
   const priceTo = f.priceTo ? Number(f.priceTo) : undefined
   if (priceFrom && item.priceRub < priceFrom) return false
@@ -229,6 +305,8 @@ export function applyFilters(items: Listing[], f: FilterState): Listing[] {
   const hasAny =
     f.brands.length > 0 ||
     f.bodyTypes.length > 0 ||
+    f.drivetrains.length > 0 ||
+    f.locations.length > 0 ||
     f.priceFrom !== '' ||
     f.priceTo !== '' ||
     f.mileageFrom !== '' ||
@@ -265,6 +343,8 @@ export function countStrictMatches(items: Listing[], f: FilterState): number {
   const hasAny =
     f.brands.length > 0 ||
     f.bodyTypes.length > 0 ||
+    f.drivetrains.length > 0 ||
+    f.locations.length > 0 ||
     f.priceFrom !== '' ||
     f.priceTo !== '' ||
     f.mileageFrom !== '' ||

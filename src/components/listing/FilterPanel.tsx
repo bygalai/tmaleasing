@@ -6,6 +6,9 @@ import {
   emptyFilterState,
   getAvailableBrands,
   getAvailableBodyTypes,
+  getAvailableDrivetrains,
+  getAvailableLocations,
+  filterItemsExcluding,
   countStrictMatches,
   countActiveFilters,
 } from '../../lib/filters'
@@ -74,13 +77,17 @@ export function FilterPanel({
     }
   }, [isOpen])
 
-  const availableBrands = useMemo(() => getAvailableBrands(items), [items])
+  const itemsForBrands = useMemo(() => filterItemsExcluding(items, draft, 'brands'), [items, draft])
+  const availableBrands = useMemo(() => getAvailableBrands(itemsForBrands), [itemsForBrands])
 
-  const itemsForBodyTypes = useMemo(() => {
-    if (draft.brands.length === 0) return items
-    return items.filter((item) => item.brand && draft.brands.includes(item.brand))
-  }, [items, draft.brands])
+  const itemsForBodyTypes = useMemo(() => filterItemsExcluding(items, draft, 'bodyTypes'), [items, draft])
   const availableBodyTypes = useMemo(() => getAvailableBodyTypes(itemsForBodyTypes), [itemsForBodyTypes])
+
+  const itemsForDrivetrains = useMemo(() => filterItemsExcluding(items, draft, 'drivetrains'), [items, draft])
+  const availableDrivetrains = useMemo(() => getAvailableDrivetrains(itemsForDrivetrains), [itemsForDrivetrains])
+
+  const itemsForLocations = useMemo(() => filterItemsExcluding(items, draft, 'locations'), [items, draft])
+  const availableLocations = useMemo(() => getAvailableLocations(itemsForLocations), [itemsForLocations])
 
   const resultCount = useMemo(() => countStrictMatches(items, draft), [items, draft])
   const hasChanges = countActiveFilters(draft) > 0
@@ -100,6 +107,24 @@ export function FilterPanel({
       bodyTypes: prev.bodyTypes.includes(bt)
         ? prev.bodyTypes.filter((t) => t !== bt)
         : [...prev.bodyTypes, bt],
+    }))
+  }, [])
+
+  const toggleDrivetrain = useCallback((dt: string) => {
+    setDraft((prev) => ({
+      ...prev,
+      drivetrains: prev.drivetrains.includes(dt)
+        ? prev.drivetrains.filter((d) => d !== dt)
+        : [...prev.drivetrains, dt],
+    }))
+  }, [])
+
+  const toggleLocation = useCallback((loc: string) => {
+    setDraft((prev) => ({
+      ...prev,
+      locations: prev.locations.includes(loc)
+        ? prev.locations.filter((l) => l !== loc)
+        : [...prev.locations, loc],
     }))
   }, [])
 
@@ -129,6 +154,14 @@ export function FilterPanel({
 
   const isTrailerCategory = category === 'pricepy'
   const mileageLabel = isTrailerCategory ? 'Наработка, м.ч.' : 'Пробег, км'
+  const drivetrainLabel =
+    category === 'legkovye'
+      ? 'Привод'
+      : category === 'pricepy'
+        ? ''
+        : !category
+          ? 'Привод / Колёсная формула'
+          : 'Колёсная формула'
   const bodyTypeLabel =
     category === 'gruzovye'
       ? 'Тип транспорта'
@@ -207,6 +240,40 @@ export function FilterPanel({
                     count={bt.count}
                     selected={draft.bodyTypes.includes(bt.value)}
                     onClick={() => toggleBodyType(bt.value)}
+                  />
+                ))}
+              </div>
+            </FilterSection>
+          )}
+
+          {/* ── Drivetrain ── */}
+          {!isTrailerCategory && availableDrivetrains.length > 0 && drivetrainLabel && (
+            <FilterSection title={drivetrainLabel}>
+              <div className="flex flex-wrap gap-2">
+                {availableDrivetrains.map((dt) => (
+                  <FilterChip
+                    key={dt.value}
+                    label={dt.value}
+                    count={dt.count}
+                    selected={draft.drivetrains.includes(dt.value)}
+                    onClick={() => toggleDrivetrain(dt.value)}
+                  />
+                ))}
+              </div>
+            </FilterSection>
+          )}
+
+          {/* ── Location ── */}
+          {availableLocations.length > 0 && (
+            <FilterSection title="Город">
+              <div className="flex flex-wrap gap-2">
+                {availableLocations.map((loc) => (
+                  <FilterChip
+                    key={loc.value}
+                    label={loc.value}
+                    count={loc.count}
+                    selected={draft.locations.includes(loc.value)}
+                    onClick={() => toggleLocation(loc.value)}
                   />
                 ))}
               </div>

@@ -99,18 +99,26 @@ function normalizeDrivetrain(value: string | null): string | null {
   const raw = value.replace(/\s+/g, ' ').trim()
   if (!raw) return null
 
-  // Schema.org enums sometimes leak into data as plain strings.
   const lowered = raw.toLowerCase()
   if (lowered.includes('frontwheeldriveconfiguration')) return 'Передний'
   if (lowered.includes('rearwheeldriveconfiguration')) return 'Задний'
   if (lowered.includes('fourwheeldriveconfiguration')) return 'Полный'
   if (lowered.includes('allwheeldriveconfiguration')) return 'Полный'
 
-  // Drop other english-ish technical leftovers.
   if (/[A-Za-z]/.test(raw) && /configuration$/i.test(raw)) return null
   if (/[A-Za-z]/.test(raw) && raw.length > 18) return null
 
-  return raw.replace(/\s+привод$/i, '').trim() || null
+  let out = raw.replace(/\s+привод$/i, '').trim()
+  if (!out) return null
+
+  // Нормализация колёсной формулы: 6X4, 6х4, 6Х4 → 6x4;
+  // а также отрезаем год, приклеенный парсером: 6x42022 → 6x4
+  out = out.replace(/(\d+)\s*[xXхХ]\s*(\d{1,2})(?:\d{4})?/g, '$1x$2')
+
+  // Унификация регистра: "гусеничный" → "Гусеничный", "колёсный" → "Колёсный"
+  out = out.charAt(0).toUpperCase() + out.slice(1)
+
+  return out || null
 }
 
 function normalizeTransmission(value: string | null): string | null {
@@ -303,6 +311,7 @@ function mapRowToListing(row: ListingsRow): Listing {
     source: row.source ?? undefined,
     bodyType: effectiveBodyType ?? undefined,
     brand: extractBrand(row.title),
+    drivetrain: drivetrain ?? undefined,
   }
 }
 
