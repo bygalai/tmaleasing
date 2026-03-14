@@ -1,9 +1,9 @@
-import { useRef } from 'react'
+import { useRef, useLayoutEffect, useReducer } from 'react'
 import { useWindowVirtualizer } from '@tanstack/react-virtual'
 import { ListingCard } from './ListingCard'
 import type { Listing } from '../../types/marketplace'
 
-const CARD_HEIGHT_ESTIMATE = 400
+const CARD_HEIGHT_ESTIMATE = 420
 const OVERSCAN = 5
 const VIRTUALIZE_THRESHOLD = 30
 
@@ -19,6 +19,11 @@ export function VirtualizedListingGrid({
   toggleFavorite,
 }: VirtualizedListingGridProps) {
   const listRef = useRef<HTMLDivElement>(null)
+  const [, forceUpdate] = useReducer((x: number) => x + 1, 0)
+
+  useLayoutEffect(() => {
+    forceUpdate()
+  }, [])
 
   const virtualizer = useWindowVirtualizer({
     count: items.length,
@@ -64,6 +69,7 @@ export function VirtualizedListingGrid({
             <div
               key={item.id}
               data-index={virtualRow.index}
+              ref={virtualizer.measureElement}
               className="absolute left-0 top-0 w-full"
               style={{
                 transform: `translateY(${virtualRow.start - virtualizer.options.scrollMargin}px)`,

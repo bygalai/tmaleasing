@@ -1265,7 +1265,7 @@ async function applyHistoricalPriceLogic(
     { external_id: string; price: number | string | null; original_price: number | string | null }
   >()
 
-  const HISTORICAL_BATCH = 180
+  const HISTORICAL_BATCH = 50
   for (let i = 0; i < externalIds.length; i += HISTORICAL_BATCH) {
     const batch = externalIds.slice(i, i + HISTORICAL_BATCH)
     const { data: existingRows, error } = await supabase
@@ -1275,8 +1275,8 @@ async function applyHistoricalPriceLogic(
       .in('external_id', batch)
 
     if (error) {
-      console.warn('Historical price lookup failed (non-fatal):', error.message)
-      return
+      console.warn(`Historical price lookup batch failed (non-fatal): ${error.message}`)
+      continue
     }
 
     for (const row of existingRows ?? []) {
@@ -1650,7 +1650,7 @@ async function run(): Promise<void> {
             images: listing.images,
           }
           if (listing.price != null) row.price = listing.price
-          if (listing.original_price != null) row.original_price = listing.original_price
+          row.original_price = listing.original_price ?? null
           if (listing.mileage != null) row.mileage = listing.mileage
           if (listing.year != null) row.year = listing.year
           if (listing.city != null) row.city = listing.city
