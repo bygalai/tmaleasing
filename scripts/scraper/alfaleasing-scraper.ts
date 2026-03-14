@@ -932,7 +932,6 @@ async function enrichAndCollectListing(
 
     const title = card?.title ?? fromLd.title ?? fromHtml.title ?? null
     const price = fromLd.price ?? fromHtml.price ?? card?.price ?? null
-    const originalPrice = fromHtml.originalPrice ?? fromLd.originalPrice ?? null
     const mileage = fromLd.mileage ?? fromHtml.mileage ?? card?.mileage ?? null
     const year = fromLd.year ?? fromHtml.year ?? card?.year ?? null
     const allImageCandidates = [
@@ -969,7 +968,7 @@ async function enrichAndCollectListing(
       external_id: buildExternalId(detailUrl),
       title: sanitizeTitle(title),
       price,
-      original_price: originalPrice ?? null,
+      original_price: null,
       mileage,
       year,
       images: [absoluteImage],
@@ -992,6 +991,137 @@ async function enrichAndCollectListing(
   }
 }
 
+/**
+ * Сравнивает текущие цены с сохранёнными в Supabase и проставляет original_price при снижении.
+ * Alfaleasing не показывает зачёркнутых цен на сайте — скидки определяются только между прогонами парсера.
+ */
+async function applyHistoricalPriceLogic(
+  supabase: SupabaseClient,
+  listings: ScrapedListing[],
+): Promise<void> {
+  if (listings.length === 0) return
+
+  const externalIds = listings.map((l) => l.external_id)
+  const byId = new Map<
+    string,
+    { external_id: string; price: number | string | null; original_price: number | string | null }
+  >()
+
+  const HISTORICAL_BATCH = 50
+  for (let i = 0; i < externalIds.length; i += HISTORICAL_BATCH) {
+    const batch = externalIds.slice(i, i + HISTORICAL_BATCH)
+    const { data: existingRows, error } = await supabase
+      .from('listings')
+      .select('external_id, price, original_price')
+      .eq('source', SOURCE)
+      .in('external_id', batch)
+
+    if (error) {
+      console.warn(`Historical price lookup batch failed (non-fatal): ${error.message}`)
+      continue
+    }
+
+    for (const row of existingRows ?? []) {
+      const r = row as { external_id?: string; price?: number | string | null; original_price?: number | string | null }
+      if (!r.external_id) continue
+      byId.set(r.external_id, {
+        external_id: r.external_id,
+        price: r.price ?? null,
+        original_price: r.original_price ?? null,
+      })
+    }
+  }
+  const matchedByIdCount = byId.size
+
+  const listingsWithoutHistory = listings.filter((l) => !byId.has(l.external_id) && l.vin)
+  const vinToListing = new Map<string, ScrapedListing>()
+  const vinSet = new Set<string>()
+  for (const l of listingsWithoutHistory) {
+    const vin = l.vin?.trim().toUpperCase()
+    if (!vin) continue
+    vinSet.add(vin)
+    vinToListing.set(vin, l)
+  }
+
+  let vinMatched = 0
+  if (vinSet.size > 0) {
+    const vinArray = [...vinSet]
+    for (let j = 0; j < vinArray.length; j += HISTORICAL_BATCH) {
+      const vinBatch = vinArray.slice(j, j + HISTORICAL_BATCH)
+      const { data: vinRows, error: vinErr } = await supabase
+        .from('listings')
+        .select('external_id, price, original_price, vin')
+        .eq('source', SOURCE)
+        .in('vin', vinBatch)
+
+      if (vinErr) {
+        console.warn('Historical price VIN lookup failed (non-fatal):', vinErr.message)
+        continue
+      }
+
+      for (const row of vinRows ?? []) {
+        const r = row as {
+          external_id?: string
+          price?: number | string | null
+          original_price?: number | string | null
+          vin?: string | null
+        }
+        if (!r.external_id || !r.vin) continue
+        const vin = r.vin.trim().toUpperCase()
+        const listing = vinToListing.get(vin)
+        if (!listing) continue
+        listing.external_id = r.external_id
+        byId.set(r.external_id, {
+          external_id: r.external_id,
+          price: r.price ?? null,
+          original_price: r.original_price ?? null,
+        })
+        vinMatched += 1
+      }
+    }
+  }
+
+  let discounts = 0
+  let priceIncreases = 0
+  let unchanged = 0
+
+  for (const listing of listings) {
+    const currentPrice = listing.price
+    if (currentPrice == null || !Number.isFinite(currentPrice) || currentPrice <= 0) continue
+
+    const prev = byId.get(listing.external_id)
+    if (!prev) {
+      listing.original_price = null
+      continue
+    }
+
+    const prevPriceNum = prev.price != null ? Number(prev.price) : NaN
+    const prevOriginalNum = prev.original_price != null ? Number(prev.original_price) : NaN
+
+    if (!Number.isFinite(prevPriceNum) || prevPriceNum <= 0) {
+      listing.original_price = Number.isFinite(prevOriginalNum) && prevOriginalNum > 0 ? prevOriginalNum : null
+      continue
+    }
+
+    const baselineOriginal = Number.isFinite(prevOriginalNum) && prevOriginalNum > prevPriceNum ? prevOriginalNum : prevPriceNum
+
+    if (currentPrice < prevPriceNum) {
+      listing.original_price = baselineOriginal
+      discounts += 1
+    } else if (currentPrice > prevPriceNum) {
+      listing.original_price = null
+      priceIncreases += 1
+    } else {
+      listing.original_price = Number.isFinite(prevOriginalNum) && prevOriginalNum > 0 ? prevOriginalNum : listing.original_price
+      unchanged += 1
+    }
+  }
+
+  console.log(
+    `Historical price logic (Alfaleasing): matched=${byId.size} (by_external_id=${matchedByIdCount}, by_vin=${vinMatched}), discounts=${discounts}, price_up=${priceIncreases}, unchanged=${unchanged}`,
+  )
+}
+
 async function upsertListingsBatch(supabase: SupabaseClient, listings: ScrapedListing[]): Promise<void> {
   if (listings.length === 0) return
 
@@ -1005,7 +1135,7 @@ async function upsertListingsBatch(supabase: SupabaseClient, listings: ScrapedLi
       images: listing.images,
     }
     if (listing.price != null) row.price = listing.price
-    if (listing.original_price != null) row.original_price = listing.original_price
+    row.original_price = listing.original_price ?? null
     if (listing.mileage != null) row.mileage = listing.mileage
     if (listing.year != null) row.year = listing.year
     if (listing.city != null) row.city = listing.city
@@ -1097,6 +1227,7 @@ async function scrapeListingsAndSync(supabase: SupabaseClient): Promise<void> {
 
           if (pendingBatch.length >= UPSERT_BATCH_SIZE) {
             console.log(`Flushing batch of ${pendingBatch.length} listings to Supabase...`)
+            await applyHistoricalPriceLogic(supabase, pendingBatch)
             await upsertListingsBatch(supabase, pendingBatch)
             pendingBatch = []
           }
@@ -1107,6 +1238,7 @@ async function scrapeListingsAndSync(supabase: SupabaseClient): Promise<void> {
 
     if (pendingBatch.length > 0) {
       console.log(`Flushing final batch of ${pendingBatch.length} listings to Supabase...`)
+      await applyHistoricalPriceLogic(supabase, pendingBatch)
       await upsertListingsBatch(supabase, pendingBatch)
       pendingBatch = []
     }
