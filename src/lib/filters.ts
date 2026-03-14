@@ -109,7 +109,7 @@ const MULTI_WORD_BRANDS: [string, string][] = [
   ['mercedes-benz', 'Mercedes-Benz'],
   ['мерседес-бенц', 'Mercedes-Benz'],
   ['мерседес бенц', 'Mercedes-Benz'],
-].sort((a, b) => b[0].length - a[0].length)
+].sort((a, b) => b[0].length - a[0].length) as [string, string][]
 
 export function extractBrand(title: string): string | undefined {
   const lower = title.toLowerCase().trim()
