@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import type { Listing, CategoryId } from '../../types/marketplace'
 import {
   type FilterState,
@@ -131,8 +132,8 @@ export function FilterPanel({
           ? 'Тип'
           : 'Тип кузова'
 
-  return (
-    <div className="fixed inset-0 z-50 font-sf">
+  return createPortal(
+    <div className="fixed inset-0 z-[60] font-sf">
       {/* Backdrop */}
       <div
         className={`absolute inset-0 bg-black/40 transition-opacity duration-300 ${
@@ -252,7 +253,8 @@ export function FilterPanel({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
