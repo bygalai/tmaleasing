@@ -1,4 +1,5 @@
 import type { Listing } from '../types/marketplace'
+import { normalizeBodyType } from './equipment-types'
 
 // ── Brand extraction ────────────────────────────────────────
 
@@ -176,7 +177,7 @@ export function getAvailableBodyTypes(items: Listing[]): FilterOption[] {
   const map = new Map<string, number>()
   for (const item of items) {
     if (!item.bodyType) continue
-    const normalized = capitalizeFirst(item.bodyType.trim())
+    const normalized = normalizeBodyType(item.bodyType)
     if (!normalized) continue
     map.set(normalized, (map.get(normalized) ?? 0) + 1)
   }
@@ -211,11 +212,6 @@ export function getAvailableLocations(items: Listing[]): FilterOption[] {
     .sort((a, b) => b.count - a.count)
 }
 
-function capitalizeFirst(s: string): string {
-  if (!s) return s
-  return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
-}
-
 // ── Cross-filtering (faceted counts) ────────────────────────
 
 type FilterField = 'brands' | 'bodyTypes' | 'drivetrains' | 'locations'
@@ -232,8 +228,8 @@ export function filterItemsExcluding(items: Listing[], f: FilterState, exclude: 
     }
     if (exclude !== 'bodyTypes' && f.bodyTypes.length > 0) {
       if (!item.bodyType) return false
-      const bt = capitalizeFirst(item.bodyType.trim())
-      if (!f.bodyTypes.includes(bt)) return false
+      const bt = normalizeBodyType(item.bodyType)
+      if (!bt || !f.bodyTypes.includes(bt)) return false
     }
     if (exclude !== 'drivetrains' && f.drivetrains.length > 0) {
       if (!item.drivetrain || !f.drivetrains.includes(item.drivetrain.trim())) return false
@@ -254,12 +250,6 @@ export function filterItemsExcluding(items: Listing[], f: FilterState, exclude: 
 }
 
 // ── Filter application ──────────────────────────────────────
-
-function isVtbOrEuroplan(source?: string): boolean {
-  if (!source) return false
-  const s = source.toLowerCase().trim()
-  return s === 'vtb' || s === 'europlan'
-}
 
 function matchesNonBodyTypeFilters(item: Listing, f: FilterState): boolean {
   if (f.brands.length > 0) {
@@ -290,16 +280,14 @@ function matchesNonBodyTypeFilters(item: Listing, f: FilterState): boolean {
 function matchesBodyType(item: Listing, selectedTypes: string[]): boolean {
   if (selectedTypes.length === 0) return true
   if (!item.bodyType) return false
-  const itemType = capitalizeFirst(item.bodyType.trim())
-  return selectedTypes.includes(itemType)
+  const itemType = normalizeBodyType(item.bodyType)
+  return !!itemType && selectedTypes.includes(itemType)
 }
 
 /**
  * Применяет фильтры к списку объявлений.
- *
- * Особое правило: если активен фильтр по типу кузова, лоты из ВТБ/Европлан
- * без указанного типа всё равно показываются — после основных отфильтрованных
- * результатов (при условии соответствия остальным фильтрам).
+ * Тип техники определяется через inference из заголовка (equipment-types.ts),
+ * поэтому фильтрация по типу кузова работает строго для всех источников.
  */
 export function applyFilters(items: Listing[], f: FilterState): Listing[] {
   const hasAny =
@@ -313,30 +301,15 @@ export function applyFilters(items: Listing[], f: FilterState): Listing[] {
     f.mileageTo !== ''
   if (!hasAny) return items
 
-  const hasBodyTypeFilter = f.bodyTypes.length > 0
-
-  if (!hasBodyTypeFilter) {
-    return items.filter((item) => matchesNonBodyTypeFilters(item, f))
-  }
-
-  const matched: Listing[] = []
-  const vtbEpFallback: Listing[] = []
-
-  for (const item of items) {
-    if (!matchesNonBodyTypeFilters(item, f)) continue
-
-    if (matchesBodyType(item, f.bodyTypes)) {
-      matched.push(item)
-    } else if (!item.bodyType && isVtbOrEuroplan(item.source)) {
-      vtbEpFallback.push(item)
-    }
-  }
-
-  return [...matched, ...vtbEpFallback]
+  return items.filter((item) => {
+    if (!matchesNonBodyTypeFilters(item, f)) return false
+    if (!matchesBodyType(item, f.bodyTypes)) return false
+    return true
+  })
 }
 
 /**
- * Число строго подходящих лотов (без VTB/Europlan fallback).
+ * Число строго подходящих лотов.
  * Используется для кнопки «Показать N лотов» в панели фильтров.
  */
 export function countStrictMatches(items: Listing[], f: FilterState): number {

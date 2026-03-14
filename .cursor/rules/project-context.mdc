@@ -1,0 +1,96 @@
+---
+description: Основная информация о проекте GONKA Marketplace — Telegram Mini App
+alwaysApply: true
+---
+
+# Проект "GONKA" — Telegram Mini App (маркетплейс транспорта)
+
+## Стек
+
+- **React 19** + **TypeScript 5.9** + **Vite 7** + **Tailwind CSS 3**
+- **Supabase** (Postgres) — БД с таблицами `listings`, `listing_price_analysis`
+- **Telegram WebApp SDK** (`@telegram-apps/sdk-react` v3)
+- **Деплой**: Vercel (SPA, catch-all rewrite на `index.html`)
+- Виртуализация списков: `@tanstack/react-virtual` (`useWindowVirtualizer`)
+
+## Структура
+
+```
+src/
+├── pages/
+│   ├── CategorySelectionPage.tsx  — Главная: категории + глобальный поиск + фильтры
+│   ├── CatalogPage.tsx            — Каталог конкретной категории + поиск + фильтры
+│   ├── ListingPage.tsx            — Детальная страница лота
+│   ├── FavoritesPage.tsx          — Избранное
+│   ├── ProfilePage.tsx / AboutPage.tsx
+├── components/
+│   ├── listing/
+│   │   ├── SearchBar.tsx          — Поисковая строка (liquid-glass стиль)
+│   │   ├── FilterPanel.tsx        — Панель фильтров (bottom sheet, через createPortal)
+│   │   ├── VirtualizedListingGrid.tsx — Виртуализированный грид лотов
+│   │   ├── ListingCard.tsx        — Карточка лота
+│   │   └── ImageWithFallback.tsx / PriceAnalysisBar.tsx
+│   ├── ScrollToTopButton.tsx      — Кнопка "наверх" (createPortal, z-[55])
+│   ├── navigation/ (BottomNav z-50, MenuButton, MenuDrawer)
+│   └── layout/AppLayout.tsx
+├── hooks/
+│   ├── useListings.ts   — Загрузка всех лотов из Supabase, дедупликация, маппинг
+│   └── useFavorites.ts  — localStorage-based избранное
+├── lib/
+│   ├── search.ts        — Fuzzy-поиск: транслитерация, синонимы брендов, пословный матч
+│   ├── filters.ts       — Типы фильтров, извлечение бренда, фасетные счётчики, applyFilters
+│   ├── supabase.ts      — Клиент Supabase
+│   ├── telegram.ts      — Telegram WebApp интеграция
+│   └── format.ts        — Форматирование цен/пробега
+├── types/
+│   └── marketplace.ts   — Listing, CategoryId, ListingBadge
+scripts/scraper/         — Puppeteer-скраперы (VTB, Europlan, Alfaleasing, Gazprom)
+```
+
+## Категории (CategoryId)
+
+`legkovye` | `gruzovye` | `speztechnika` | `pricepy`
+
+## Тип Listing (ключевые поля)
+
+`id`, `category`, `title`, `subtitle`, `priceRub`, `originalPriceRub`, `year`, `mileageKm`, `location` (город), `source` (vtb/europlan/alfaleasing/gazprom), `bodyType`, `brand` (извлекается из title), `drivetrain`, `imageUrl`, `imageUrls`, `detailUrl`, `description`, `badges`
+
+## Система фильтрации (src/lib/filters.ts + FilterPanel.tsx)
+
+6 фильтров: марка, тип кузова, привод/колёсная формула, город, цена (от/до), пробег (от/до).
+
+**Фасетные счётчики**: каждая секция показывает количество с учётом всех ДРУГИХ активных фильтров (`filterItemsExcluding`).
+
+**VTB/Europlan fallback**: при фильтре по типу кузова лоты из ВТБ/Европлан без `bodyType` показываются ПОСЛЕ отфильтрованных (не считаются в кнопке "Показать N").
+
+**Разделение глобальных/категорийных фильтров**: на главной — все бренды/типы; в разделе — только те, что есть в данной категории.
+
+**Прицепы (pricepy)**: пробег → "Наработка, м.ч.", привод скрыт, bodyType = прицеп/полуприцеп.
+
+## Поиск (src/lib/search.ts)
+
+`normalizeForSearch` — транслитерация кириллица→латиница, замена c/k→k, свёртка повторов.
+
+`matchesSearch` — 3 уровня: точное вхождение подстроки → пословный матч (каждое слово запроса в haystack) → синонимы брендов с сохранением контекста запроса.
+
+**ВАЖНО**: синонимы подменяют только бренд-часть запроса, остальные слова сохраняются. "Ford cargo" → находит только Ford Cargo, не все Форды.
+
+## Дизайн-система
+
+- Бренд-цвет: `#FF5C34`
+- Glassmorphism: `.liquid-glass` (backdrop-blur, gradient, shimmer, pointer-tracking)
+- Шрифт: SF Pro / system-ui / Inter
+- FilterPanel — iOS-like bottom sheet через `createPortal(document.body)`, z-[60]
+- BottomNav — z-50, liquid-glass-nav
+- ScrollToTopButton — z-[55], createPortal(document.body)
+
+## Нормализация данных (useListings.ts)
+
+- `normalizeDrivetrain`: Schema.org → русский (Передний/Задний/Полный), колёсные формулы `6X4`/`6х4`→`6x4`, отрезание приклеенного года (`6x42022`→`6x4`), capitalize first letter
+- `normalizeEngine`, `normalizeTransmission`, `isBodyType` (fallback body_color→body_type)
+- `extractBrand` (filters.ts): 100+ марок с кириллическими вариантами, multi-word brands
+- Дедупликация по VIN или title+year+mileage; Europlan-лоты опускаются в конец списка
+
+## Источники данных (source)
+
+`vtb`, `europlan`, `alfaleasing`, `gazprom` — скраперы в `scripts/scraper/`

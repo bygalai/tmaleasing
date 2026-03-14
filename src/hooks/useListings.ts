@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getSupabaseClient } from '../lib/supabase'
 import { extractBrand } from '../lib/filters'
+import { inferEquipmentType, normalizeBodyType } from '../lib/equipment-types'
 import type { Listing } from '../types/marketplace'
 
 const FALLBACK_IMAGE =
@@ -210,25 +211,26 @@ function mapRowToListing(row: ListingsRow): Listing {
   const transmission = isTrailer ? null : normalizeTransmission(row.transmission)
   const bodyColor = (row.body_color ?? '').replace(/\s+обивка\s*$/gi, '').trim() || null
   const bodyType = (row.body_type ?? '').trim() || null
-  // Подзаголовок: тип кузова (если есть) + цвет + двигатель + КПП + привод/колёсная формула
+  const resolvedBodyType = normalizeBodyType(
+    bodyType
+    ?? inferEquipmentType(row.title, row.category)
+    ?? (isBodyType(bodyColor) ? bodyColor!.trim() : null)
+  )
+
+  const subtitleBodyColor = bodyColor && !isBodyType(bodyColor) ? bodyColor : null
   const subtitleParts = isTrailer
-    ? [bodyColor].filter((part): part is string => Boolean(part && part.trim()))
-    : [bodyType, bodyColor, engine, transmission, drivetrain].filter(
+    ? [subtitleBodyColor].filter((part): part is string => Boolean(part && part.trim()))
+    : [resolvedBodyType, subtitleBodyColor, engine, transmission, drivetrain].filter(
         (part): part is string => Boolean(part && part.trim()),
       )
   const subtitleFallback = isTrailer ? 'Прицеп / полуприцеп' : 'Проверенный лот'
 
   const bodyColorForDescription = lowercaseFirstLetter(bodyColor)
-  const bodyTypeForDescription = lowercaseFirstLetter(bodyType)
+  const resolvedBodyTypeForDescription = lowercaseFirstLetter(resolvedBodyType)
   const drivetrainForDescription = lowercaseFirstLetter(drivetrain)
-  // body_type — явный тип кузова (Мусоровоз, Седан и т.д.). body_color — цвет.
-  // Обратная совместимость: если body_type пуст, а в body_color попал тип кузова (старые данные) — показываем как «Тип кузова».
-  const bodyTypeLine =
-    bodyTypeForDescription != null
-      ? `Тип кузова: ${bodyTypeForDescription}`
-      : bodyColorForDescription != null && isBodyType(bodyColor)
-        ? `Тип кузова: ${bodyColorForDescription}`
-        : null
+  const bodyTypeLine = resolvedBodyTypeForDescription
+    ? `Тип кузова: ${resolvedBodyTypeForDescription}`
+    : null
   const bodyColorLine =
     bodyColorForDescription != null && !isBodyType(bodyColor) ? `Цвет: ${bodyColorForDescription}` : null
 
@@ -274,11 +276,6 @@ function mapRowToListing(row: ListingsRow): Listing {
     marketHighRub = Math.round(priceRub * 1.05)
   }
 
-  const effectiveBodyType =
-    bodyType ??
-    (bodyColorForDescription != null && isBodyType(bodyColor) ? bodyColor!.trim() : undefined) ??
-    undefined
-
   return {
     id: row.id,
     category: row.category ?? undefined,
@@ -309,7 +306,7 @@ function mapRowToListing(row: ListingsRow): Listing {
       ? { discountPercent: Math.round((1 - priceRub / originalPriceRub) * 100) }
       : {}),
     source: row.source ?? undefined,
-    bodyType: effectiveBodyType ?? undefined,
+    bodyType: resolvedBodyType ?? undefined,
     brand: extractBrand(row.title),
     drivetrain: drivetrain ?? undefined,
   }

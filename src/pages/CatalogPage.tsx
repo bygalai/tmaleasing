@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { VirtualizedListingGrid } from '../components/listing/VirtualizedListingGrid'
 import { SearchBar, type SuggestionItem } from '../components/listing/SearchBar'
 import { FilterPanel } from '../components/listing/FilterPanel'
+import { ScrollToTopButton } from '../components/ScrollToTopButton'
 import type { Listing, CategoryId } from '../types/marketplace'
 import { getTelegramUserFromInitData } from '../lib/telegram'
 import {
@@ -245,6 +246,8 @@ export function CatalogPage({
           toggleFavorite={toggleFavorite}
         />
       )}
+
+      <ScrollToTopButton />
 
       <FilterPanel
         isOpen={isFilterOpen}

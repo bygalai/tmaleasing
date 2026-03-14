@@ -1,4 +1,5 @@
 import { ListingCard } from '../components/listing/ListingCard'
+import { ScrollToTopButton } from '../components/ScrollToTopButton'
 import type { Listing } from '../types/marketplace'
 
 type FavoritesPageProps = {
@@ -30,6 +31,7 @@ export function FavoritesPage({ items, isFavorite, toggleFavorite }: FavoritesPa
           onToggleFavorite={toggleFavorite}
         />
       ))}
+      <ScrollToTopButton />
     </section>
   )
 }
