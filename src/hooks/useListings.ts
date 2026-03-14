@@ -185,8 +185,8 @@ function isBodyType(value: string | null): boolean {
   )
 }
 
-// Показываем старую цену только при правдоподобной скидке (обычно до ~33%). Иначе не показываем «скидку».
-const MAX_ORIGINAL_TO_PRICE_RATIO = 1.5
+// Показываем старую цену только при правдоподобной скидке (до ~50%). Иначе не показываем «скидку».
+const MAX_ORIGINAL_TO_PRICE_RATIO = 2.0
 
 function mapRowToListing(row: ListingsRow): Listing {
   const priceRub = Math.round(toNumber(row.price) ?? 0)

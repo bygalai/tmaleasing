@@ -496,7 +496,7 @@ function extractDetailFromJsonLd(payloads: unknown[]): {
 
   const MIN_VEHICLE_PRICE = 100_000
   const MAX_VEHICLE_PRICE = 100_000_000
-  const MAX_ORIGINAL_TO_PRICE_RATIO = 1.5
+  const MAX_ORIGINAL_TO_PRICE_RATIO = 2.0
 
   const validPrices = prices.filter((v) => Number.isFinite(v) && v >= MIN_VEHICLE_PRICE && v <= MAX_VEHICLE_PRICE)
   let price: number | null = validPrices.length > 0 ? Math.min(...validPrices) : null
@@ -553,17 +553,54 @@ function extractDetailFromHtmlFallback(html: string): {
   const title =
     html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1]?.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim() ?? null
 
-  const MAX_ORIGINAL_TO_PRICE_RATIO = 1.5
-  const priceMatches = [...html.matchAll(/(\d[\d\s\u00A0]{3,})\s*(?:₽|&#8381;|руб|р\.?)/gi)]
-    .map((m) => normalizeNumber(m[1]))
-    .filter((v): v is number => v != null)
-    .filter((v) => v >= 100_000 && v <= 100_000_000)
-  let price: number | null = priceMatches.length > 0 ? Math.min(...priceMatches) : null
+  const MAX_ORIGINAL_TO_PRICE_RATIO = 2.0
+  const EXCLUDE_SNIPPET = /мес|месяц|аванс|платеж\s+от|ежемесячный|сумма\s+договора|полная\s+стоимость/i
+  const priceRe = /(\d[\d\s\u00A0.]{2,})\s*(?:₽|&#8381;|руб|р\.?)/gi
+  const rawMatches: { num: number; pos: number }[] = []
+  let pm: RegExpExecArray | null
+  while ((pm = priceRe.exec(plainText)) !== null) {
+    const num = normalizeNumber(pm[1])
+    if (num == null || num < 100_000 || num > 100_000_000) continue
+    const snippet = plainText.slice(Math.max(0, pm.index - 80), pm.index + (pm[0].length + 60)).toLowerCase()
+    if (EXCLUDE_SNIPPET.test(snippet)) continue
+    rawMatches.push({ num, pos: pm.index })
+  }
+  const priceMatches = rawMatches.map((p) => p.num)
+
+  let price: number | null = null
   let originalPrice: number | null = null
-  if (priceMatches.length >= 2 && price != null) {
-    const maxP = Math.max(...priceMatches)
-    if (maxP > price && maxP <= price * MAX_ORIGINAL_TO_PRICE_RATIO) {
-      originalPrice = maxP
+
+  const costLabel = plainText.search(/Цена|цена|Стоимость|стоимость/i)
+  if (costLabel !== -1) {
+    const afterCost = plainText.slice(costLabel, costLabel + 300)
+    const nearPrices: number[] = []
+    let cm: RegExpExecArray | null
+    const costRe = /(\d[\d\s\u00A0.]{2,})\s*(?:₽|руб|р\.?)/gi
+    while ((cm = costRe.exec(afterCost)) !== null) {
+      const n = normalizeNumber(cm[1])
+      if (n != null && n >= 100_000 && n <= 100_000_000) nearPrices.push(n)
+    }
+    if (nearPrices.length >= 2) {
+      const minP = Math.min(...nearPrices)
+      const maxP = Math.max(...nearPrices)
+      if (maxP > minP && maxP <= minP * MAX_ORIGINAL_TO_PRICE_RATIO) {
+        price = minP
+        originalPrice = maxP
+      } else {
+        price = minP
+      }
+    } else if (nearPrices.length === 1) {
+      price = nearPrices[0]
+    }
+  }
+
+  if (price == null && priceMatches.length > 0) {
+    price = Math.min(...priceMatches)
+    if (priceMatches.length >= 2) {
+      const maxP = Math.max(...priceMatches)
+      if (maxP > price && maxP <= price * MAX_ORIGINAL_TO_PRICE_RATIO) {
+        originalPrice = maxP
+      }
     }
   }
 
@@ -784,7 +821,7 @@ const EXTRACT_DOM_SCRIPT = `
   var originalPrice = null;
   if (priceMatches.length >= 2 && price !== null) {
     var maxPrice = Math.max.apply(null, priceMatches);
-    if (maxPrice > price && maxPrice <= price * 1.5) originalPrice = maxPrice;
+    if (maxPrice > price && maxPrice <= price * 2.0) originalPrice = maxPrice;
   }
   var mileageMatch = bodyText.match(/(\\\\d[\\\\d\\\\s\\\\u00A0]{2,})\\\\s*(?:км|km)/i);
   var mileageStr = mileageMatch && mileageMatch[1] ? mileageMatch[1].replace(/\\\\s/g, '') : null;
@@ -1236,8 +1273,11 @@ async function scrapeListingsAndSync(supabase: SupabaseClient): Promise<void> {
             scrapedIds.add(listing.external_id)
             totalListings += 1
             pendingBatch.push(listing)
+            const discountInfo = listing.original_price
+              ? ` | скидка с ${listing.original_price} ₽`
+              : ''
             console.log(
-              `+ [${section.category}] ${listing.title} | ${listing.price ?? '?'} ₽ | ${listing.year ?? '?'} г. | ${
+              `+ [${section.category}] ${listing.title} | ${listing.price ?? '?'} ₽${discountInfo} | ${listing.year ?? '?'} г. | ${
                 listing.images[0] ? 'img' : 'no img'
               }`
             )
