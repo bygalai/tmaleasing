@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getSupabaseClient } from '../lib/supabase'
+import { extractBrand } from '../lib/filters'
 import type { Listing } from '../types/marketplace'
 
 const FALLBACK_IMAGE =
@@ -265,6 +266,11 @@ function mapRowToListing(row: ListingsRow): Listing {
     marketHighRub = Math.round(priceRub * 1.05)
   }
 
+  const effectiveBodyType =
+    bodyType ??
+    (bodyColorForDescription != null && isBodyType(bodyColor) ? bodyColor!.trim() : undefined) ??
+    undefined
+
   return {
     id: row.id,
     category: row.category ?? undefined,
@@ -294,6 +300,9 @@ function mapRowToListing(row: ListingsRow): Listing {
     ...(originalPriceRub != null
       ? { discountPercent: Math.round((1 - priceRub / originalPriceRub) * 100) }
       : {}),
+    source: row.source ?? undefined,
+    bodyType: effectiveBodyType ?? undefined,
+    brand: extractBrand(row.title),
   }
 }
 

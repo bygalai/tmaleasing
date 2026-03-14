@@ -1,5 +1,7 @@
 export type ListingBadge = 'in_stock' | 'leasing' | 'discount'
 
+export type CategoryId = 'legkovye' | 'gruzovye' | 'speztechnika' | 'pricepy'
+
 export type Listing = {
   id: string
   category?: string
@@ -20,6 +22,9 @@ export type Listing = {
   description: string
   badges: ListingBadge[]
   discountPercent?: number
+  source?: string
+  bodyType?: string
+  brand?: string
 }
 
 export type ListingsResponse = {

@@ -2,16 +2,21 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { VirtualizedListingGrid } from '../components/listing/VirtualizedListingGrid'
 import { SearchBar, type SuggestionItem } from '../components/listing/SearchBar'
-import type { Listing } from '../types/marketplace'
+import { FilterPanel } from '../components/listing/FilterPanel'
+import type { Listing, CategoryId } from '../types/marketplace'
 import {
   BRAND_SYNONYMS,
   DEFAULT_SUGGESTIONS_BY_CATEGORY,
   matchesSearch,
   normalizeForSearch,
 } from '../lib/search'
+import {
+  type FilterState,
+  emptyFilterState,
+  countActiveFilters,
+  applyFilters,
+} from '../lib/filters'
 import { getTelegramUserFromInitData } from '../lib/telegram'
-
-export type CategoryId = 'legkovye' | 'gruzovye' | 'speztechnika' | 'pricepy'
 
 type Category = {
   id: CategoryId
@@ -159,6 +164,9 @@ export function CategorySelectionPage({
   const [history, setHistory] = useState<string[]>([])
   const [isSearchFocused, setIsSearchFocused] = useState(false)
   const [showSearchBackButton, setShowSearchBackButton] = useState(false)
+  const [filters, setFilters] = useState<FilterState>(emptyFilterState)
+  const [isFilterOpen, setIsFilterOpen] = useState(false)
+  const activeFilterCount = countActiveFilters(filters)
 
   useEffect(() => {
     if (qFromUrl !== query) setQuery(qFromUrl)
@@ -201,12 +209,20 @@ export function CategorySelectionPage({
   }, [])
 
   const filtered = useMemo(() => {
+    let result = items
     const trimmed = query.trim()
-    if (!trimmed) return items
-    return items.filter((item) => matchesSearch(item, trimmed))
-  }, [items, query])
+    if (trimmed) {
+      result = result.filter((item) => matchesSearch(item, trimmed))
+    }
+    if (countActiveFilters(filters) > 0) {
+      result = applyFilters(result, filters)
+    }
+    return result
+  }, [items, query, filters])
 
   const normalizedQuery = query.trim()
+  const hasActiveFilters = activeFilterCount > 0
+  const isShowingResults = normalizedQuery.length > 0 || hasActiveFilters
 
   const saveToHistory = useCallback(
     (term: string) => {
@@ -292,7 +308,7 @@ export function CategorySelectionPage({
   const discountedItems = items.filter((item) => item.badges.includes('discount'))
 
   useEffect(() => {
-    if (normalizedQuery.length === 0) {
+    if (!isShowingResults) {
       setShowSearchBackButton(false)
       return
     }
@@ -307,7 +323,7 @@ export function CategorySelectionPage({
     window.addEventListener('scroll', handleScroll, { passive: true })
 
     return () => window.removeEventListener('scroll', handleScroll)
-  }, [normalizedQuery.length])
+  }, [isShowingResults])
 
   const backBtnRef = useRef<HTMLButtonElement>(null)
   const handleBackPointerMove = useCallback((e: React.PointerEvent) => {
@@ -323,9 +339,14 @@ export function CategorySelectionPage({
     backBtnRef.current?.style.setProperty('--my', '50%')
   }, [])
 
+  const handleClearResults = useCallback(() => {
+    setQueryAndUrl('')
+    setFilters(emptyFilterState())
+  }, [setQueryAndUrl])
+
   return (
     <section className="space-y-6">
-      {normalizedQuery.length > 0 ? (
+      {isShowingResults ? (
         <div
           className={`sticky top-0 z-30 -mx-4 -mt-1 flex w-full items-center justify-start px-4 ${
             showSearchBackButton ? 'pb-2 pt-2' : 'pb-0 pt-0 h-0 pointer-events-none'
@@ -334,7 +355,7 @@ export function CategorySelectionPage({
           <button
             ref={backBtnRef}
             type="button"
-            onClick={() => setQueryAndUrl('')}
+            onClick={handleClearResults}
             onPointerMove={handleBackPointerMove}
             onPointerLeave={handleBackPointerLeave}
             aria-label="Назад к каталогу"
@@ -373,11 +394,26 @@ export function CategorySelectionPage({
         onSubmit={() => saveToHistory(query)}
       />
 
-      {normalizedQuery.length > 0 ? (
+      {isShowingResults ? (
         <section className="space-y-3">
-          <h2 className="font-sf font-bold tracking-tight text-slate-900 [font-size:clamp(20px,5vw,26px)]">
-            Результаты поиска
-          </h2>
+          <div className="flex items-center justify-between">
+            <h2 className="font-sf font-bold tracking-tight text-slate-900 [font-size:clamp(20px,5vw,26px)]">
+              {normalizedQuery ? 'Результаты поиска' : 'Все лоты'}
+            </h2>
+            <button
+              type="button"
+              aria-label="Фильтры"
+              onClick={() => setIsFilterOpen(true)}
+              className="relative flex h-10 w-10 items-center justify-center text-slate-600 transition hover:text-slate-900"
+            >
+              <FilterIcon />
+              {activeFilterCount > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#FF5C34] px-1 text-[10px] font-bold text-white">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+          </div>
           {filtered.length > 0 ? (
             <VirtualizedListingGrid
               items={filtered}
@@ -386,13 +422,15 @@ export function CategorySelectionPage({
             />
           ) : (
             <p className="text-sm text-slate-600">
-              По запросу «{normalizedQuery}» ничего не найдено. Попробуйте другой запрос.
+              {normalizedQuery
+                ? `По запросу «${normalizedQuery}» ничего не найдено. Попробуйте другой запрос.`
+                : 'По заданным фильтрам ничего не найдено. Попробуйте изменить параметры.'}
             </p>
           )}
         </section>
       ) : null}
 
-      {normalizedQuery.length === 0 ? (
+      {!isShowingResults ? (
         <>
           <header className="flex items-center justify-between">
             <h1 className="font-bold tracking-tight text-slate-900 font-sf [font-size:clamp(28px,7vw,34px)]">
@@ -401,21 +439,27 @@ export function CategorySelectionPage({
             <button
               type="button"
               aria-label="Фильтры"
-              className="flex h-10 w-10 items-center justify-center text-slate-600 transition hover:text-slate-900"
+              onClick={() => setIsFilterOpen(true)}
+              className="relative flex h-10 w-10 items-center justify-center text-slate-600 transition hover:text-slate-900"
             >
               <FilterIcon />
+              {activeFilterCount > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#FF5C34] px-1 text-[10px] font-bold text-white">
+                  {activeFilterCount}
+                </span>
+              )}
             </button>
           </header>
 
           <div className="grid grid-cols-2 grid-rows-3 gap-3 pb-4">
-        <CategoryCard
-          category={CATEGORIES.find((c) => c.id === 'gruzovye')!}
-          className="col-start-2 row-span-3 row-start-1"
-        />
-        <CategoryCard category={CATEGORIES.find((c) => c.id === 'legkovye')!} />
-        <CategoryCard category={CATEGORIES.find((c) => c.id === 'speztechnika')!} />
-        <CategoryCard category={CATEGORIES.find((c) => c.id === 'pricepy')!} />
-      </div>
+            <CategoryCard
+              category={CATEGORIES.find((c) => c.id === 'gruzovye')!}
+              className="col-start-2 row-span-3 row-start-1"
+            />
+            <CategoryCard category={CATEGORIES.find((c) => c.id === 'legkovye')!} />
+            <CategoryCard category={CATEGORIES.find((c) => c.id === 'speztechnika')!} />
+            <CategoryCard category={CATEGORIES.find((c) => c.id === 'pricepy')!} />
+          </div>
 
           {discountedItems.length > 0 && (
             <section className="space-y-3">
@@ -431,6 +475,14 @@ export function CategorySelectionPage({
           )}
         </>
       ) : null}
+
+      <FilterPanel
+        isOpen={isFilterOpen}
+        onClose={() => setIsFilterOpen(false)}
+        filters={filters}
+        onApply={setFilters}
+        items={items}
+      />
     </section>
   )
 }

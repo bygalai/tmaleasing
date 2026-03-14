@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { VirtualizedListingGrid } from '../components/listing/VirtualizedListingGrid'
 import { SearchBar, type SuggestionItem } from '../components/listing/SearchBar'
-import type { Listing } from '../types/marketplace'
-import type { CategoryId } from './CategorySelectionPage'
+import { FilterPanel } from '../components/listing/FilterPanel'
+import type { Listing, CategoryId } from '../types/marketplace'
 import { getTelegramUserFromInitData } from '../lib/telegram'
 import {
   BRAND_SYNONYMS,
@@ -11,6 +11,12 @@ import {
   matchesSearch,
   normalizeForSearch,
 } from '../lib/search'
+import {
+  type FilterState,
+  emptyFilterState,
+  countActiveFilters,
+  applyFilters,
+} from '../lib/filters'
 
 type CatalogPageProps = {
   items: Listing[]
@@ -35,6 +41,9 @@ export function CatalogPage({
   const [query, setQuery] = useState('')
   const [history, setHistory] = useState<string[]>([])
   const [isSearchFocused, setIsSearchFocused] = useState(false)
+  const [filters, setFilters] = useState<FilterState>(emptyFilterState)
+  const [isFilterOpen, setIsFilterOpen] = useState(false)
+  const activeFilterCount = countActiveFilters(filters)
 
   useEffect(() => {
     try {
@@ -66,10 +75,16 @@ export function CatalogPage({
   }, [items, categoryId])
 
   const filtered = useMemo(() => {
+    let result = categoryItems
     const trimmed = query.trim()
-    if (!trimmed) return categoryItems
-    return categoryItems.filter((item) => matchesSearch(item, trimmed))
-  }, [categoryItems, query])
+    if (trimmed) {
+      result = result.filter((item) => matchesSearch(item, trimmed))
+    }
+    if (countActiveFilters(filters) > 0) {
+      result = applyFilters(result, filters)
+    }
+    return result
+  }, [categoryItems, query, filters])
 
   const normalizedQuery = query.trim()
 
@@ -177,6 +192,40 @@ export function CatalogPage({
         onSubmit={() => saveToHistory(query)}
       />
 
+      {/* Filter bar */}
+      <div className="mx-auto flex w-full max-w-[560px] items-center justify-between">
+        <p className="text-[13px] font-sf text-slate-500">
+          {isLoading
+            ? 'Загрузка...'
+            : `${filtered.length.toLocaleString('ru-RU')} ${filtered.length % 10 === 1 && filtered.length % 100 !== 11 ? 'лот' : filtered.length % 10 >= 2 && filtered.length % 10 <= 4 && (filtered.length % 100 < 10 || filtered.length % 100 >= 20) ? 'лота' : 'лотов'}`}
+        </p>
+        <button
+          type="button"
+          aria-label="Фильтры"
+          onClick={() => setIsFilterOpen(true)}
+          className="relative flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[13px] font-medium text-slate-600 transition active:bg-slate-100"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-4 w-4"
+            aria-hidden
+          >
+            <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" />
+          </svg>
+          <span>Фильтры</span>
+          {activeFilterCount > 0 && (
+            <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#FF5C34] px-1 text-[10px] font-bold text-white">
+              {activeFilterCount}
+            </span>
+          )}
+        </button>
+      </div>
+
       {error ? (
         <div className="mx-auto max-w-[560px] rounded-xl border border-[#FF5C34]/40 bg-[#FF5C34]/10 px-3 py-2 text-xs text-[#9A3412]">
           {error}
@@ -187,7 +236,7 @@ export function CatalogPage({
         <p className="text-center text-sm text-slate-600">Загружаем лучшие предложения...</p>
       ) : filtered.length === 0 ? (
         <div className="mx-auto w-full max-w-[560px] px-2 text-center text-sm font-sf text-slate-900">
-          Ничего не найдено. Попробуйте ещё раз
+          Ничего не найдено. Попробуйте изменить запрос или фильтры
         </div>
       ) : (
         <VirtualizedListingGrid
@@ -196,6 +245,15 @@ export function CatalogPage({
           toggleFavorite={toggleFavorite}
         />
       )}
+
+      <FilterPanel
+        isOpen={isFilterOpen}
+        onClose={() => setIsFilterOpen(false)}
+        filters={filters}
+        onApply={setFilters}
+        items={categoryItems}
+        category={categoryId}
+      />
     </section>
   )
 }
