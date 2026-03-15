@@ -1221,8 +1221,9 @@ async function scrapeListingsAndSync(supabase: SupabaseClient): Promise<void> {
 
   const page = await browser.newPage()
   await configurePageForStealth(page)
-  page.setDefaultNavigationTimeout(90_000)
-  page.setDefaultTimeout(45_000)
+  // No time limit: let long-running scrapes complete (GitHub Action has 6h job limit)
+  page.setDefaultNavigationTimeout(0)
+  page.setDefaultTimeout(0)
 
   const scrapedIds = new Set<string>()
   const UPSERT_BATCH_SIZE = 200
