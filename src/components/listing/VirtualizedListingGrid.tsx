@@ -1,11 +1,11 @@
-import { useRef, useLayoutEffect, useReducer } from 'react'
+import { memo, useRef, useLayoutEffect, useReducer } from 'react'
 import { useWindowVirtualizer } from '@tanstack/react-virtual'
 import { ListingCard } from './ListingCard'
 import type { Listing } from '../../types/marketplace'
 
 const CARD_HEIGHT_ESTIMATE = 420
-const OVERSCAN = 5
-const VIRTUALIZE_THRESHOLD = 30
+const OVERSCAN = 3
+const VIRTUALIZE_THRESHOLD = 15
 
 type VirtualizedListingGridProps = {
   items: Listing[]
@@ -13,7 +13,7 @@ type VirtualizedListingGridProps = {
   toggleFavorite: (id: string) => void
 }
 
-export function VirtualizedListingGrid({
+export const VirtualizedListingGrid = memo(function VirtualizedListingGrid({
   items,
   isFavorite,
   toggleFavorite,
@@ -88,4 +88,4 @@ export function VirtualizedListingGrid({
       </div>
     </div>
   )
-}
+})

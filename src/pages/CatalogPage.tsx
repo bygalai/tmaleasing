@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useDeferredValue, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { VirtualizedListingGrid } from '../components/listing/VirtualizedListingGrid'
 import { SearchBar, type SuggestionItem } from '../components/listing/SearchBar'
@@ -71,6 +71,9 @@ export function CatalogPage({
     }
   }, [])
 
+  const deferredQuery = useDeferredValue(query)
+  const deferredFilters = useDeferredValue(filters)
+
   const categoryItems = useMemo(() => {
     if (!categoryId) return items
     return items.filter((item) => (item.category ?? 'legkovye') === categoryId)
@@ -78,15 +81,15 @@ export function CatalogPage({
 
   const filtered = useMemo(() => {
     let result = categoryItems
-    const trimmed = query.trim()
+    const trimmed = deferredQuery.trim()
     if (trimmed) {
       result = result.filter((item) => matchesSearch(item, trimmed))
     }
-    if (countActiveFilters(filters) > 0) {
-      result = applyFilters(result, filters)
+    if (countActiveFilters(deferredFilters) > 0) {
+      result = applyFilters(result, deferredFilters)
     }
     return result
-  }, [categoryItems, query, filters])
+  }, [categoryItems, deferredQuery, deferredFilters])
 
   const normalizedQuery = query.trim()
 
@@ -154,6 +157,7 @@ export function CatalogPage({
   }, [normalizedQuery, allCandidates])
 
   const focusSuggestions: SuggestionItem[] = useMemo(() => {
+    if (!isSearchFocused) return []
     if (history.length > 0) {
       return history.slice(0, 5).map((h) => ({
         label: h,
@@ -166,7 +170,7 @@ export function CatalogPage({
       kind: 'suggestion' as const,
       count: categoryItems.filter((item) => matchesSearch(item, d)).length,
     }))
-  }, [history, baseDefaults, categoryItems])
+  }, [isSearchFocused, history, baseDefaults, categoryItems])
 
   const effectiveSuggestions: SuggestionItem[] = isSearchFocused
     ? normalizedQuery.length > 0

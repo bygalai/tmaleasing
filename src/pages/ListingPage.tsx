@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ImageWithFallback } from '../components/listing/ImageWithFallback'
+import { SwipeGallery } from '../components/listing/SwipeGallery'
 import { PriceAnalysisBar } from '../components/listing/PriceAnalysisBar'
 import { formatMileage, formatMileageHours, splitPriceRub } from '../lib/format'
 import {
@@ -38,10 +38,10 @@ export function ListingPage({ items, isFavorite, toggleFavorite }: ListingPagePr
   return (
     <article className="page-transition space-y-4 pb-6">
       <div className="h-56 w-full overflow-hidden rounded-2xl">
-        <ImageWithFallback
+        <SwipeGallery
           imageUrls={item.imageUrls}
           alt={item.title}
-          className="h-full w-full object-cover"
+          className="h-full w-full rounded-2xl"
           showPlaceholderWhenFailed
         />
       </div>

@@ -160,44 +160,44 @@ function App() {
       </header>
 
       <Routes>
-        <Route
-          path="/"
-          element={
-            <CategorySelectionPage
-              items={items}
-              isFavorite={isFavorite}
-              toggleFavorite={toggleFavorite}
-              onSearchFocusedChange={setIsSearchFocused}
-            />
-          }
-        />
-        <Route
-          path="/catalog/:category"
-          element={
-            <CatalogPage
-              items={items}
-              isLoading={isLoading}
-              error={error}
-              isFavorite={isFavorite}
-              toggleFavorite={toggleFavorite}
-              onSearchFocusedChange={setIsSearchFocused}
-            />
-          }
-        />
-        <Route
-          path="/listing/:id"
-          element={
-            <ListingPage items={items} isFavorite={isFavorite} toggleFavorite={toggleFavorite} />
-          }
-        />
-        <Route
-          path="/favorites"
-          element={
-            <FavoritesPage items={items} isFavorite={isFavorite} toggleFavorite={toggleFavorite} />
-          }
-        />
-        <Route path="/profile" element={<ProfilePage />} />
-        <Route path="/about" element={<AboutPage />} />
+          <Route
+            path="/"
+            element={
+              <CategorySelectionPage
+                items={items}
+                isFavorite={isFavorite}
+                toggleFavorite={toggleFavorite}
+                onSearchFocusedChange={setIsSearchFocused}
+              />
+            }
+          />
+          <Route
+            path="/catalog/:category"
+            element={
+              <CatalogPage
+                items={items}
+                isLoading={isLoading}
+                error={error}
+                isFavorite={isFavorite}
+                toggleFavorite={toggleFavorite}
+                onSearchFocusedChange={setIsSearchFocused}
+              />
+            }
+          />
+          <Route
+            path="/listing/:id"
+            element={
+              <ListingPage items={items} isFavorite={isFavorite} toggleFavorite={toggleFavorite} />
+            }
+          />
+          <Route
+            path="/favorites"
+            element={
+              <FavoritesPage items={items} isFavorite={isFavorite} toggleFavorite={toggleFavorite} />
+            }
+          />
+          <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/about" element={<AboutPage />} />
         <Route path="/catalog" element={<Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

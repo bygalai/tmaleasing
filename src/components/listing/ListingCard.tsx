@@ -56,6 +56,11 @@ export const ListingCard = memo(function ListingCard({ item, isFavorite, onToggl
           showPlaceholderWhenFailed
         />
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
+        {item.imageUrls.length > 1 && (
+          <div className="absolute bottom-3 left-3 z-20 rounded-lg bg-black/50 px-2 py-1 font-sf text-[11px] text-white backdrop-blur-sm">
+            {item.imageUrls.length} фото
+          </div>
+        )}
         <div className="absolute left-3 right-3 top-3 z-20 flex items-center justify-between gap-2">
           <div className="flex flex-wrap gap-1.5">
             {item.badges

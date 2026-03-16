@@ -77,19 +77,34 @@ export function FilterPanel({
     }
   }, [isOpen])
 
-  const itemsForBrands = useMemo(() => filterItemsExcluding(items, draft, 'brands'), [items, draft])
+  const itemsForBrands = useMemo(
+    () => (isOpen ? filterItemsExcluding(items, draft, 'brands') : []),
+    [items, draft, isOpen],
+  )
   const availableBrands = useMemo(() => getAvailableBrands(itemsForBrands), [itemsForBrands])
 
-  const itemsForBodyTypes = useMemo(() => filterItemsExcluding(items, draft, 'bodyTypes'), [items, draft])
+  const itemsForBodyTypes = useMemo(
+    () => (isOpen ? filterItemsExcluding(items, draft, 'bodyTypes') : []),
+    [items, draft, isOpen],
+  )
   const availableBodyTypes = useMemo(() => getAvailableBodyTypes(itemsForBodyTypes), [itemsForBodyTypes])
 
-  const itemsForDrivetrains = useMemo(() => filterItemsExcluding(items, draft, 'drivetrains'), [items, draft])
+  const itemsForDrivetrains = useMemo(
+    () => (isOpen ? filterItemsExcluding(items, draft, 'drivetrains') : []),
+    [items, draft, isOpen],
+  )
   const availableDrivetrains = useMemo(() => getAvailableDrivetrains(itemsForDrivetrains), [itemsForDrivetrains])
 
-  const itemsForLocations = useMemo(() => filterItemsExcluding(items, draft, 'locations'), [items, draft])
+  const itemsForLocations = useMemo(
+    () => (isOpen ? filterItemsExcluding(items, draft, 'locations') : []),
+    [items, draft, isOpen],
+  )
   const availableLocations = useMemo(() => getAvailableLocations(itemsForLocations), [itemsForLocations])
 
-  const resultCount = useMemo(() => countStrictMatches(items, draft), [items, draft])
+  const resultCount = useMemo(
+    () => (isOpen ? countStrictMatches(items, draft) : 0),
+    [items, draft, isOpen],
+  )
   const hasChanges = countActiveFilters(draft) > 0
 
   const toggleBrand = useCallback((brand: string) => {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useDeferredValue, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { VirtualizedListingGrid } from '../components/listing/VirtualizedListingGrid'
 import { SearchBar, type SuggestionItem } from '../components/listing/SearchBar'
@@ -209,17 +209,20 @@ export function CategorySelectionPage({
     }
   }, [])
 
+  const deferredQuery = useDeferredValue(query)
+  const deferredFilters = useDeferredValue(filters)
+
   const filtered = useMemo(() => {
     let result = items
-    const trimmed = query.trim()
+    const trimmed = deferredQuery.trim()
     if (trimmed) {
       result = result.filter((item) => matchesSearch(item, trimmed))
     }
-    if (countActiveFilters(filters) > 0) {
-      result = applyFilters(result, filters)
+    if (countActiveFilters(deferredFilters) > 0) {
+      result = applyFilters(result, deferredFilters)
     }
     return result
-  }, [items, query, filters])
+  }, [items, deferredQuery, deferredFilters])
 
   const normalizedQuery = query.trim()
   const hasActiveFilters = activeFilterCount > 0
@@ -286,6 +289,7 @@ export function CategorySelectionPage({
   }, [normalizedQuery, allCandidates])
 
   const focusSuggestions: SuggestionItem[] = useMemo(() => {
+    if (!isSearchFocused) return []
     if (history.length > 0) {
       return history.slice(0, 5).map((h) => ({
         label: h,
@@ -298,7 +302,7 @@ export function CategorySelectionPage({
       kind: 'suggestion' as const,
       count: items.filter((item) => matchesSearch(item, d)).length,
     }))
-  }, [history, baseDefaults, items])
+  }, [isSearchFocused, history, baseDefaults, items])
 
   const effectiveSuggestions: SuggestionItem[] = isSearchFocused
     ? normalizedQuery.length > 0

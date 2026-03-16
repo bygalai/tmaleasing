@@ -443,7 +443,16 @@ export function useListings() {
           anyWindow.__tmaDeduped = ordered
         }
 
-        const mapped = ordered.map(mapRowToListing)
+        // Батчируем mapRowToListing, чтобы не блокировать main thread при 1000+ лотах
+        const BATCH_SIZE = 80
+        const mapped: Listing[] = []
+        for (let i = 0; i < ordered.length; i += BATCH_SIZE) {
+          const batch = ordered.slice(i, i + BATCH_SIZE).map(mapRowToListing)
+          mapped.push(...batch)
+          if (i + BATCH_SIZE < ordered.length) {
+            await new Promise((r) => setTimeout(r, 0))
+          }
+        }
 
         // Debug: expose items and per-category counts in browser console
         if (typeof window !== 'undefined') {
