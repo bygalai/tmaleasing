@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { useCallback, useEffect, useRef, useState, type MouseEvent, type TouchEvent } from 'react'
 
 type SwipeGalleryProps = {
   imageUrls: string[]
@@ -17,6 +18,26 @@ const GALLERY_SCROLL_STYLE = {
   touchAction: 'pan-x' as const,
 }
 
+const TAP_TOLERANCE_PX = 10
+const SWIPE_THRESHOLD_PX = 36
+
+type TouchTrack = {
+  x: number
+  y: number
+  scrollLeft: number
+  moved: boolean
+} | null
+
+function clampIndex(value: number, max: number): number {
+  return Math.max(0, Math.min(value, max))
+}
+
+function snapToIndex(el: HTMLDivElement | null, index: number, behavior: ScrollBehavior = 'smooth') {
+  if (!el) return
+  const width = el.clientWidth || 1
+  el.scrollTo({ left: width * index, behavior })
+}
+
 export function SwipeGallery({
   imageUrls,
   alt,
@@ -25,7 +46,9 @@ export function SwipeGallery({
 }: SwipeGalleryProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const lightboxRef = useRef<HTMLDivElement>(null)
-  const touchStartRef = useRef<{ x: number; y: number } | null>(null)
+  const galleryTouchRef = useRef<TouchTrack>(null)
+  const lightboxTouchRef = useRef<TouchTrack>(null)
+  const suppressTapUntilRef = useRef(0)
   const [activeIndex, setActiveIndex] = useState(0)
   const [failedUrls, setFailedUrls] = useState<Set<string>>(new Set())
   const [lightboxOpen, setLightboxOpen] = useState(false)
@@ -41,32 +64,6 @@ export function SwipeGallery({
   const openLightbox = useCallback((index: number) => {
     setLightboxIndex(index)
     setLightboxOpen(true)
-  }, [])
-
-  const handleGalleryTap = useCallback(
-    (index: number) => (e: React.TouchEvent | React.MouseEvent) => {
-      const isTouch = 'touches' in e
-      if (isTouch) {
-        const touch = (e as React.TouchEvent).changedTouches[0]
-        const start = touchStartRef.current
-        if (start) {
-          const dx = Math.abs(touch.clientX - start.x)
-          const dy = Math.abs(touch.clientY - start.y)
-          if (dx > 15 || dy > 15) return
-        }
-      }
-      openLightbox(index)
-    },
-    [openLightbox],
-  )
-
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    const t = e.touches[0]
-    touchStartRef.current = { x: t.clientX, y: t.clientY }
-  }, [])
-
-  const handleTouchEnd = useCallback(() => {
-    touchStartRef.current = null
   }, [])
 
   const closeLightbox = useCallback(() => {
@@ -97,6 +94,12 @@ export function SwipeGallery({
       el.removeEventListener('scroll', updateIndex)
       cancelAnimationFrame(rafId)
     }
+  }, [validUrls.length])
+
+  useEffect(() => {
+    if (validUrls.length === 0) return
+    setActiveIndex((prev) => clampIndex(prev, validUrls.length - 1))
+    setLightboxIndex((prev) => clampIndex(prev, validUrls.length - 1))
   }, [validUrls.length])
 
   useEffect(() => {
@@ -160,19 +163,105 @@ export function SwipeGallery({
     draggable: false,
     referrerPolicy: 'no-referrer' as const,
     style: { touchAction: 'pan-x' as const },
-    className: 'h-full w-full object-cover select-none',
+    className: 'max-h-full max-w-full object-contain select-none',
   }
+
+  const handleGalleryTouchStart = useCallback((e: TouchEvent<HTMLDivElement>) => {
+    const t = e.touches[0]
+    const el = scrollRef.current
+    galleryTouchRef.current = {
+      x: t.clientX,
+      y: t.clientY,
+      scrollLeft: el?.scrollLeft ?? 0,
+      moved: false,
+    }
+  }, [])
+
+  const handleGalleryTouchMove = useCallback((e: TouchEvent<HTMLDivElement>) => {
+    const t = e.touches[0]
+    const data = galleryTouchRef.current
+    if (!data) return
+    if (Math.abs(t.clientX - data.x) > TAP_TOLERANCE_PX || Math.abs(t.clientY - data.y) > TAP_TOLERANCE_PX) {
+      data.moved = true
+    }
+  }, [])
+
+  const handleGalleryTouchEnd = useCallback((e: TouchEvent<HTMLDivElement>) => {
+    const data = galleryTouchRef.current
+    const el = scrollRef.current
+    if (!data || !el || validUrls.length <= 1) {
+      galleryTouchRef.current = null
+      return
+    }
+    const t = e.changedTouches[0]
+    const deltaX = data.x - t.clientX
+    const width = el.clientWidth || 1
+    const startIndex = clampIndex(Math.round(data.scrollLeft / width), validUrls.length - 1)
+    const nearestIndex = clampIndex(Math.round(el.scrollLeft / width), validUrls.length - 1)
+    let targetIndex = nearestIndex
+    if (Math.abs(deltaX) >= SWIPE_THRESHOLD_PX) {
+      targetIndex = clampIndex(startIndex + (deltaX > 0 ? 1 : -1), validUrls.length - 1)
+    }
+    snapToIndex(el, targetIndex)
+    setActiveIndex(targetIndex)
+    if (data.moved) suppressTapUntilRef.current = Date.now() + 250
+    galleryTouchRef.current = null
+  }, [validUrls.length])
+
+  const handleGalleryClick = useCallback((_e: MouseEvent<HTMLDivElement>) => {
+    if (Date.now() < suppressTapUntilRef.current) return
+    openLightbox(activeIndex)
+  }, [activeIndex, openLightbox])
+
+  const handleLightboxTouchStart = useCallback((e: TouchEvent<HTMLDivElement>) => {
+    const t = e.touches[0]
+    const el = lightboxRef.current
+    lightboxTouchRef.current = {
+      x: t.clientX,
+      y: t.clientY,
+      scrollLeft: el?.scrollLeft ?? 0,
+      moved: false,
+    }
+  }, [])
+
+  const handleLightboxTouchMove = useCallback((e: TouchEvent<HTMLDivElement>) => {
+    const t = e.touches[0]
+    const data = lightboxTouchRef.current
+    if (!data) return
+    if (Math.abs(t.clientX - data.x) > TAP_TOLERANCE_PX || Math.abs(t.clientY - data.y) > TAP_TOLERANCE_PX) {
+      data.moved = true
+    }
+  }, [])
+
+  const handleLightboxTouchEnd = useCallback((e: TouchEvent<HTMLDivElement>) => {
+    const data = lightboxTouchRef.current
+    const el = lightboxRef.current
+    if (!data || !el || validUrls.length <= 1) {
+      lightboxTouchRef.current = null
+      return
+    }
+    const t = e.changedTouches[0]
+    const deltaX = data.x - t.clientX
+    const width = el.clientWidth || 1
+    const startIndex = clampIndex(Math.round(data.scrollLeft / width), validUrls.length - 1)
+    const nearestIndex = clampIndex(Math.round(el.scrollLeft / width), validUrls.length - 1)
+    let targetIndex = nearestIndex
+    if (Math.abs(deltaX) >= SWIPE_THRESHOLD_PX) {
+      targetIndex = clampIndex(startIndex + (deltaX > 0 ? 1 : -1), validUrls.length - 1)
+    }
+    snapToIndex(el, targetIndex)
+    setLightboxIndex(targetIndex)
+    lightboxTouchRef.current = null
+  }, [validUrls.length])
 
   if (validUrls.length === 1) {
     return (
       <div
         className={`relative flex cursor-pointer overflow-hidden ${className}`}
         onClick={() => openLightbox(0)}
-        onTouchStart={handleTouchStart}
-        onTouchEnd={(e) => {
-          if (e.changedTouches[0]) handleGalleryTap(0)(e as unknown as React.TouchEvent)
-          handleTouchEnd()
-        }}
+        onTouchStart={handleGalleryTouchStart}
+        onTouchMove={handleGalleryTouchMove}
+        onTouchEnd={handleGalleryTouchEnd}
         role="button"
         tabIndex={0}
         onKeyDown={(e) => e.key === 'Enter' && openLightbox(0)}
@@ -194,17 +283,14 @@ export function SwipeGallery({
       <div
         ref={scrollRef}
         data-swipe-gallery
-        className="flex h-full w-full cursor-pointer overflow-x-auto overflow-y-hidden overscroll-x-contain scroll-smooth [scrollbar-width:none] [-ms-overflow-style:none]"
+        className="flex h-full w-full cursor-pointer overflow-x-auto overflow-y-hidden overscroll-x-contain scroll-smooth bg-slate-100 [scrollbar-width:none] [-ms-overflow-style:none]"
         style={GALLERY_SCROLL_STYLE}
         role="region"
         aria-label={`Галерея: ${validUrls.length} фото. Нажмите для просмотра`}
-        onClick={() => openLightbox(activeIndex)}
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
-        onTouchEndCapture={(e) => {
-          const touch = e.changedTouches[0]
-          if (touch) handleGalleryTap(activeIndex)(e as unknown as React.TouchEvent)
-        }}
+        onClick={handleGalleryClick}
+        onTouchStart={handleGalleryTouchStart}
+        onTouchMove={handleGalleryTouchMove}
+        onTouchEnd={handleGalleryTouchEnd}
         onKeyDown={(e) => e.key === 'Enter' && openLightbox(activeIndex)}
       >
         <style>{`
@@ -214,8 +300,8 @@ export function SwipeGallery({
         {validUrls.map((url, i) => (
           <div
             key={`${url}-${i}`}
-            className="h-full min-w-full shrink-0 snap-center snap-always"
-            style={{ scrollSnapAlign: 'center' }}
+            className="flex h-full min-w-full shrink-0 snap-center snap-always items-center justify-center"
+            style={{ scrollSnapAlign: 'center', scrollSnapStop: 'always' }}
           >
             <img
               src={url}
@@ -244,66 +330,76 @@ export function SwipeGallery({
         </div>
       </div>
 
-      {lightboxOpen && (
-        <div
-          className="fixed inset-0 z-50 flex flex-col bg-black"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Просмотр фото"
-        >
-          <button
-            type="button"
-            onClick={closeLightbox}
-            className="absolute right-4 top-4 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition active:bg-black/70"
-            style={{ top: 'max(1rem, env(safe-area-inset-top))' }}
-            aria-label="Закрыть"
-          >
-            <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
-          </button>
-
-          <div
-            ref={lightboxRef}
-            data-swipe-gallery
-            className="flex flex-1 overflow-x-auto overflow-y-hidden overscroll-x-contain scroll-smooth [scrollbar-width:none] [-ms-overflow-style:none]"
-            style={GALLERY_SCROLL_STYLE}
-            onClick={(e) => e.target === e.currentTarget && closeLightbox()}
-          >
-            <style>{`
-              [data-swipe-gallery]::-webkit-scrollbar { display: none; }
-            `}</style>
-            {validUrls.map((url, i) => (
-              <div
-                key={`lightbox-${url}-${i}`}
-                className="flex min-w-full shrink-0 snap-center snap-always items-center justify-center p-4"
-                style={{ scrollSnapAlign: 'center' }}
+      {lightboxOpen && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-[999] flex flex-col bg-black"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Просмотр фото"
+            >
+              <button
+                type="button"
+                onClick={closeLightbox}
+                className="absolute right-4 top-4 z-[1000] flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition active:bg-black/70"
+                style={{ top: 'max(1rem, env(safe-area-inset-top))' }}
+                aria-label="Закрыть"
               >
-                <img
-                  src={url}
-                  alt={`${alt} — фото ${i + 1}`}
-                  className="max-h-full max-w-full object-contain"
-                  draggable={false}
-                  referrerPolicy="no-referrer"
-                  style={{ touchAction: 'pan-x' }}
-                  onClick={(e) => e.stopPropagation()}
-                />
-              </div>
-            ))}
-          </div>
+                <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
 
-          <div className="flex justify-center gap-1.5 py-3">
-            {validUrls.map((_, i) => (
-              <span
-                key={i}
-                className={`h-2 w-2 shrink-0 rounded-full transition-colors ${
-                  i === lightboxIndex ? 'bg-white' : 'bg-white/40'
-                }`}
-              />
-            ))}
-          </div>
-        </div>
-      )}
+              <div className="pointer-events-none absolute left-4 top-4 z-[1000] rounded-full bg-black/40 px-2 py-1 text-xs text-white">
+                {lightboxIndex + 1}/{validUrls.length}
+              </div>
+
+              <div
+                ref={lightboxRef}
+                data-swipe-gallery
+                className="flex flex-1 overflow-x-auto overflow-y-hidden overscroll-x-contain scroll-smooth [scrollbar-width:none] [-ms-overflow-style:none]"
+                style={GALLERY_SCROLL_STYLE}
+                onTouchStart={handleLightboxTouchStart}
+                onTouchMove={handleLightboxTouchMove}
+                onTouchEnd={handleLightboxTouchEnd}
+                onClick={(e) => e.target === e.currentTarget && closeLightbox()}
+              >
+                <style>{`
+                  [data-swipe-gallery]::-webkit-scrollbar { display: none; }
+                `}</style>
+                {validUrls.map((url, i) => (
+                  <div
+                    key={`lightbox-${url}-${i}`}
+                    className="flex min-w-full shrink-0 snap-center snap-always items-center justify-center p-4"
+                    style={{ scrollSnapAlign: 'center', scrollSnapStop: 'always' }}
+                  >
+                    <img
+                      src={url}
+                      alt={`${alt} — фото ${i + 1}`}
+                      className="max-h-full max-w-full object-contain select-none"
+                      draggable={false}
+                      referrerPolicy="no-referrer"
+                      style={{ touchAction: 'pan-x' }}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </div>
+                ))}
+              </div>
+
+              <div className="pointer-events-none flex justify-center gap-1.5 py-3">
+                {validUrls.map((_, i) => (
+                  <span
+                    key={i}
+                    className={`h-2 w-2 shrink-0 rounded-full transition-colors ${
+                      i === lightboxIndex ? 'bg-white' : 'bg-white/40'
+                    }`}
+                  />
+                ))}
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   )
 }
