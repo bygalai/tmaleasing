@@ -405,11 +405,12 @@ export function CategorySelectionPage({
               type="button"
               aria-label="Фильтры"
               onClick={() => setIsFilterOpen(true)}
-              className="relative flex h-10 w-10 items-center justify-center text-slate-600 transition hover:text-slate-900"
+              className="relative flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-white transition hover:opacity-90"
             >
+              <span className="text-[14px] font-medium">Фильтры</span>
               <FilterIcon />
               {activeFilterCount > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#FF5C34] px-1 text-[10px] font-bold text-white">
+                <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-white/25 px-1 text-[10px] font-bold">
                   {activeFilterCount}
                 </span>
               )}
@@ -441,11 +442,12 @@ export function CategorySelectionPage({
               type="button"
               aria-label="Фильтры"
               onClick={() => setIsFilterOpen(true)}
-              className="relative flex h-10 w-10 items-center justify-center text-slate-600 transition hover:text-slate-900"
+              className="relative flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-white transition hover:opacity-90"
             >
+              <span className="text-[14px] font-medium">Фильтры</span>
               <FilterIcon />
               {activeFilterCount > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#FF5C34] px-1 text-[10px] font-bold text-white">
+                <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-white/25 px-1 text-[10px] font-bold">
                   {activeFilterCount}
                 </span>
               )}

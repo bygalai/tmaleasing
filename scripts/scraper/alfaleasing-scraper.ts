@@ -116,6 +116,7 @@ type ScrapedListing = {
   transmission: string | null
   drivetrain: string | null
   body_color: string | null
+  body_type: string | null
 }
 
 // --- env & supabase ---
@@ -508,6 +509,7 @@ function extractDetailFromHtmlFallback(html: string, category: string): {
   transmission: string | null
   drivetrain: string | null
   bodyColor: string | null
+  bodyType: string | null
 } {
   const plainText = html
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
@@ -687,6 +689,13 @@ function extractDetailFromHtmlFallback(html: string, category: string): {
     plainText.match(/Цвет\s*кузова\s*[:-]\s*([A-Za-zА-Яа-яЁё0-9 -]{3,40})/i)?.[1]?.trim() ??
     plainText.match(/Цвет\s*[:-]\s*([A-Za-zА-Яа-яЁё0-9 -]{3,40})/i)?.[1]?.trim() ??
     null
+
+  const bodyTypeRaw =
+    plainText.match(/Подвид\s+техники\s*([A-Za-zА-Яа-яЁё0-9\s\-/()]+?)(?=\s*Тип\s+движителя|$)/i)?.[1]?.trim() ??
+    plainText.match(/назначением\s+(?:самоходной\s+)?машины\s*\([^)]*\)\s*([А-Яа-яЁё][А-Яа-яЁё\s\-/()]+?)(?=\s+Марка|\s+Категория|$)/i)?.[1]?.trim() ??
+    null
+  const BODY_TYPE_NO_DATA = /^(нет\s+данных|не\s+указан[оа]?|—|-|н\/д|нет)$/i
+  const bodyType = bodyTypeRaw && !BODY_TYPE_NO_DATA.test(bodyTypeRaw) ? bodyTypeRaw : null
   const transmission =
     plainText.match(/Коробка\s*[:-]\s*([A-Za-zА-Яа-яЁё0-9 -]{2,60})/i)?.[1]?.trim() ??
     plainText.match(/Трансмиссия\s*[:-]\s*([A-Za-zА-Яа-яЁё0-9 -]{2,60})/i)?.[1]?.trim() ??
@@ -726,6 +735,7 @@ function extractDetailFromHtmlFallback(html: string, category: string): {
     transmission: cleanupValue(transmission, 4),
     drivetrain: cleanupValue(drivetrain, 4),
     bodyColor: cleanupValue(bodyColor, 2),
+    bodyType: bodyType ? cleanupValue(bodyType, 5) : null,
   }
 }
 
@@ -945,6 +955,7 @@ async function enrichAndCollectListing(
     const transmission = card?.transmission ?? fromLd.transmission ?? fromHtml.transmission ?? null
     const drivetrain = card?.drivetrain ?? fromLd.drivetrain ?? fromHtml.drivetrain ?? null
     const bodyColor = card?.bodyColor ?? fromLd.bodyColor ?? fromHtml.bodyColor ?? null
+    const bodyType = fromHtml.bodyType ?? null
 
     if (!title || !isRealCarTitle(title)) {
       console.warn(`  skip (no title): ${detailUrl}`)
@@ -981,6 +992,7 @@ async function enrichAndCollectListing(
       transmission: transmission || null,
       drivetrain: drivetrain || null,
       body_color: bodyColor || null,
+      body_type: bodyType || null,
     }
 
     return listing
@@ -1144,6 +1156,7 @@ async function upsertListingsBatch(supabase: SupabaseClient, listings: ScrapedLi
     if (listing.transmission != null) row.transmission = listing.transmission
     if (listing.drivetrain != null) row.drivetrain = listing.drivetrain
     if (listing.body_color != null) row.body_color = listing.body_color
+    if (listing.body_type != null) row.body_type = listing.body_type
     return row
   })
 
@@ -1222,7 +1235,7 @@ async function scrapeListingsAndSync(supabase: SupabaseClient): Promise<void> {
           console.log(
             `+ [${section.category}] ${listing.title} | ${listing.price ?? '?'} ₽ | ${listing.year ?? '?'} г. | ${
               listing.city ?? '?'
-            }`
+            } | body_type: ${listing.body_type ?? '-'}`
           )
 
           if (pendingBatch.length >= UPSERT_BATCH_SIZE) {
