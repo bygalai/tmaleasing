@@ -47,7 +47,6 @@ export function SwipeGallery({
   const scrollRef = useRef<HTMLDivElement>(null)
   const lightboxRef = useRef<HTMLDivElement>(null)
   const galleryTouchRef = useRef<TouchTrack>(null)
-  const lightboxTouchRef = useRef<TouchTrack>(null)
   const suppressTapUntilRef = useRef(0)
   const [activeIndex, setActiveIndex] = useState(0)
   const [failedUrls, setFailedUrls] = useState<Set<string>>(new Set())
@@ -118,8 +117,15 @@ export function SwipeGallery({
   useEffect(() => {
     if (!lightboxOpen || !lightboxRef.current) return
     const el = lightboxRef.current
-    const itemWidth = el.offsetWidth
-    el.scrollLeft = lightboxIndex * itemWidth
+    const scrollToIndex = () => {
+      const w = el.clientWidth || el.offsetWidth || 1
+      el.scrollLeft = lightboxIndex * w
+    }
+    requestAnimationFrame(() => {
+      requestAnimationFrame(scrollToIndex)
+    })
+    const t = setTimeout(scrollToIndex, 100)
+    return () => clearTimeout(t)
   }, [lightboxOpen, lightboxIndex])
 
   useEffect(() => {
@@ -213,46 +219,6 @@ export function SwipeGallery({
     openLightbox(activeIndex)
   }, [activeIndex, openLightbox])
 
-  const handleLightboxTouchStart = useCallback((e: TouchEvent<HTMLDivElement>) => {
-    const t = e.touches[0]
-    const el = lightboxRef.current
-    lightboxTouchRef.current = {
-      x: t.clientX,
-      y: t.clientY,
-      scrollLeft: el?.scrollLeft ?? 0,
-      moved: false,
-    }
-  }, [])
-
-  const handleLightboxTouchMove = useCallback((e: TouchEvent<HTMLDivElement>) => {
-    const t = e.touches[0]
-    const data = lightboxTouchRef.current
-    if (!data) return
-    if (Math.abs(t.clientX - data.x) > TAP_TOLERANCE_PX || Math.abs(t.clientY - data.y) > TAP_TOLERANCE_PX) {
-      data.moved = true
-    }
-  }, [])
-
-  const handleLightboxTouchEnd = useCallback((e: TouchEvent<HTMLDivElement>) => {
-    const data = lightboxTouchRef.current
-    const el = lightboxRef.current
-    if (!data || !el || validUrls.length <= 1) {
-      lightboxTouchRef.current = null
-      return
-    }
-    const t = e.changedTouches[0]
-    const deltaX = data.x - t.clientX
-    const width = el.clientWidth || 1
-    const startIndex = clampIndex(Math.round(data.scrollLeft / width), validUrls.length - 1)
-    const nearestIndex = clampIndex(Math.round(el.scrollLeft / width), validUrls.length - 1)
-    let targetIndex = nearestIndex
-    if (Math.abs(deltaX) >= SWIPE_THRESHOLD_PX) {
-      targetIndex = clampIndex(startIndex + (deltaX > 0 ? 1 : -1), validUrls.length - 1)
-    }
-    snapToIndex(el, targetIndex)
-    setLightboxIndex(targetIndex)
-    lightboxTouchRef.current = null
-  }, [validUrls.length])
 
   if (validUrls.length === 1) {
     return (
@@ -337,11 +303,15 @@ export function SwipeGallery({
               role="dialog"
               aria-modal="true"
               aria-label="Просмотр фото"
+              style={{
+                height: '100dvh',
+                minHeight: '-webkit-fill-available',
+              }}
             >
               <button
                 type="button"
                 onClick={closeLightbox}
-                className="absolute right-4 top-4 z-[1000] flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition active:bg-black/70"
+                className="absolute right-4 z-[1000] flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-sm transition active:bg-black/80"
                 style={{ top: 'max(1rem, env(safe-area-inset-top))' }}
                 aria-label="Закрыть"
               >
@@ -350,18 +320,23 @@ export function SwipeGallery({
                 </svg>
               </button>
 
-              <div className="pointer-events-none absolute left-4 top-4 z-[1000] rounded-full bg-black/40 px-2 py-1 text-xs text-white">
-                {lightboxIndex + 1}/{validUrls.length}
+              <div
+                className="pointer-events-none absolute left-4 z-[1000] rounded-full bg-black/50 px-2.5 py-1 text-xs font-medium text-white"
+                style={{ top: 'max(1rem, env(safe-area-inset-top))' }}
+              >
+                {lightboxIndex + 1} / {validUrls.length}
               </div>
 
               <div
                 ref={lightboxRef}
                 data-swipe-gallery
-                className="flex flex-1 overflow-x-auto overflow-y-hidden overscroll-x-contain scroll-smooth [scrollbar-width:none] [-ms-overflow-style:none]"
-                style={GALLERY_SCROLL_STYLE}
-                onTouchStart={handleLightboxTouchStart}
-                onTouchMove={handleLightboxTouchMove}
-                onTouchEnd={handleLightboxTouchEnd}
+                className="absolute left-0 right-0 top-0 bottom-0 flex overflow-x-auto overflow-y-hidden overscroll-x-contain scroll-smooth [scrollbar-width:none] [-ms-overflow-style:none]"
+                style={{
+                  ...GALLERY_SCROLL_STYLE,
+                  top: 'max(3rem, calc(env(safe-area-inset-top) + 3rem))',
+                  bottom: 'max(4rem, env(safe-area-inset-bottom))',
+                  minHeight: 0,
+                }}
                 onClick={(e) => e.target === e.currentTarget && closeLightbox()}
               >
                 <style>{`
@@ -370,15 +345,21 @@ export function SwipeGallery({
                 {validUrls.map((url, i) => (
                   <div
                     key={`lightbox-${url}-${i}`}
-                    className="flex min-w-full shrink-0 snap-center snap-always items-center justify-center p-4"
-                    style={{ scrollSnapAlign: 'center', scrollSnapStop: 'always' }}
+                    className="flex h-full w-full min-w-full shrink-0 snap-center snap-always items-center justify-center bg-black p-4"
+                    style={{
+                      scrollSnapAlign: 'center',
+                      scrollSnapStop: 'always',
+                      width: '100%',
+                      minWidth: '100%',
+                    }}
                   >
                     <img
                       src={url}
                       alt={`${alt} — фото ${i + 1}`}
-                      className="max-h-full max-w-full object-contain select-none"
+                      className="h-auto max-h-full w-auto max-w-full object-contain select-none"
                       draggable={false}
                       referrerPolicy="no-referrer"
+                      loading="eager"
                       style={{ touchAction: 'pan-x' }}
                       onClick={(e) => e.stopPropagation()}
                     />
@@ -386,7 +367,10 @@ export function SwipeGallery({
                 ))}
               </div>
 
-              <div className="pointer-events-none flex justify-center gap-1.5 py-3">
+              <div
+                className="pointer-events-none absolute bottom-0 left-0 right-0 flex justify-center gap-2 py-4"
+                style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+              >
                 {validUrls.map((_, i) => (
                   <span
                     key={i}
