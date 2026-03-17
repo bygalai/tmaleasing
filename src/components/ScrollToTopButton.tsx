@@ -32,7 +32,7 @@ export function ScrollToTopButton() {
       type="button"
       onClick={scrollToTop}
       aria-label="Наверх"
-      className={`liquid-glass-nav right-4 z-[55] flex h-8 w-8 items-center justify-center rounded-full transition-all duration-300 ease-out active:scale-90 ${
+      className={`liquid-glass-nav right-4 z-[55] flex h-9 w-9 items-center justify-center rounded-full transition-all duration-300 ease-out active:scale-90 ${
         visible
           ? 'opacity-100 translate-y-0'
           : 'pointer-events-none opacity-0 translate-y-4'
@@ -42,7 +42,7 @@ export function ScrollToTopButton() {
       <svg
         aria-hidden="true"
         viewBox="0 0 24 24"
-        className="relative z-10 h-5 w-5"
+        className="relative z-10 h-6 w-6"
         fill="none"
         stroke="currentColor"
         strokeWidth="2.5"

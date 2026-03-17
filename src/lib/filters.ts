@@ -158,6 +158,68 @@ export function countActiveFilters(f: FilterState): number {
   return n
 }
 
+// ── URL serialization (for preserving catalog state on back navigation) ─ ─
+
+const PARAM_QUERY = 'q'
+const PARAM_BRANDS = 'brands'
+const PARAM_BODY_TYPES = 'bodyTypes'
+const PARAM_DRIVETRAINS = 'drivetrains'
+const PARAM_LOCATIONS = 'locations'
+const PARAM_PRICE_FROM = 'priceFrom'
+const PARAM_PRICE_TO = 'priceTo'
+const PARAM_MILEAGE_FROM = 'mileageFrom'
+const PARAM_MILEAGE_TO = 'mileageTo'
+
+function parseArray(value: string | null): string[] {
+  if (!value || typeof value !== 'string') return []
+  return value
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean)
+}
+
+function parseString(value: string | null): string {
+  if (!value || typeof value !== 'string') return ''
+  return value.trim()
+}
+
+export function parseCatalogStateFromSearchParams(params: URLSearchParams): {
+  query: string
+  filters: FilterState
+} {
+  return {
+    query: parseString(params.get(PARAM_QUERY)),
+    filters: {
+      brands: parseArray(params.get(PARAM_BRANDS)),
+      bodyTypes: parseArray(params.get(PARAM_BODY_TYPES)),
+      drivetrains: parseArray(params.get(PARAM_DRIVETRAINS)),
+      locations: parseArray(params.get(PARAM_LOCATIONS)),
+      priceFrom: parseString(params.get(PARAM_PRICE_FROM)),
+      priceTo: parseString(params.get(PARAM_PRICE_TO)),
+      mileageFrom: parseString(params.get(PARAM_MILEAGE_FROM)),
+      mileageTo: parseString(params.get(PARAM_MILEAGE_TO)),
+    },
+  }
+}
+
+export function catalogStateToSearchParams(
+  query: string,
+  filters: FilterState,
+): URLSearchParams {
+  const params = new URLSearchParams()
+  const trimmed = query.trim()
+  if (trimmed) params.set(PARAM_QUERY, trimmed)
+  if (filters.brands.length > 0) params.set(PARAM_BRANDS, filters.brands.join(','))
+  if (filters.bodyTypes.length > 0) params.set(PARAM_BODY_TYPES, filters.bodyTypes.join(','))
+  if (filters.drivetrains.length > 0) params.set(PARAM_DRIVETRAINS, filters.drivetrains.join(','))
+  if (filters.locations.length > 0) params.set(PARAM_LOCATIONS, filters.locations.join(','))
+  if (filters.priceFrom) params.set(PARAM_PRICE_FROM, filters.priceFrom)
+  if (filters.priceTo) params.set(PARAM_PRICE_TO, filters.priceTo)
+  if (filters.mileageFrom) params.set(PARAM_MILEAGE_FROM, filters.mileageFrom)
+  if (filters.mileageTo) params.set(PARAM_MILEAGE_TO, filters.mileageTo)
+  return params
+}
+
 // ── Available options (derived from data) ───────────────────
 
 export type FilterOption = { value: string; count: number }

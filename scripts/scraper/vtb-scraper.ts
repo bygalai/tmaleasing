@@ -395,6 +395,19 @@ function toTextValue(value: unknown): string | null {
   return null
 }
 
+/**
+ * Убирает год, приклеенный к колёсной формуле (6x42023 → 6x4).
+ * Иначе в фильтрах создаются отдельные чипы "6x42023", "4x22023" вместо "6x4", "4x2".
+ */
+function normalizeDrivetrainForScraper(value: string | null): string | null {
+  if (!value) return null
+  let out = value.replace(/\s+/g, ' ').trim()
+  if (!out) return null
+  out = out.replace(/(\d+)\s*[xXхХ]\s*(\d{1,2})(?:\s*[,\/\-]?\s*)?(19|20)\d{2}\b/g, (_, a, b) => `${a}x${b}`)
+  out = out.replace(/(\d+)\s*[xXхХ]\s*(\d{1,2})/g, (_, a, b) => `${a}x${b}`)
+  return out || null
+}
+
 function mergeRawCards(cards: RawCard[]): RawCard[] {
   const map = new Map<string, RawCard>()
   for (const card of cards) {
@@ -1240,7 +1253,8 @@ async function enrichListingsFromDetailsViaBrowserPage(
       if (details.vin) listing.vin = details.vin
       if (details.engine) listing.engine = details.engine
       if (details.transmission) listing.transmission = details.transmission
-      if (details.drivetrain) listing.drivetrain = details.drivetrain
+      const cleanedDrivetrain = normalizeDrivetrainForScraper(details.drivetrain)
+      if (cleanedDrivetrain) listing.drivetrain = cleanedDrivetrain
       if (details.bodyColor) listing.body_color = details.bodyColor
       if (details.bodyType) listing.body_type = details.bodyType
 

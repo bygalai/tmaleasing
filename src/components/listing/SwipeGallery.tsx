@@ -169,7 +169,7 @@ export function SwipeGallery({
     draggable: false,
     referrerPolicy: 'no-referrer' as const,
     style: { touchAction: 'pan-x' as const },
-    className: 'max-h-full max-w-full object-contain select-none',
+    className: 'min-h-0 min-w-0 max-h-full max-w-full shrink-0 object-contain object-center select-none',
   }
 
   const handleGalleryTouchStart = useCallback((e: TouchEvent<HTMLDivElement>) => {
@@ -223,7 +223,7 @@ export function SwipeGallery({
   if (validUrls.length === 1) {
     return (
       <div
-        className={`relative flex cursor-pointer overflow-hidden ${className}`}
+        className={`relative flex min-h-0 cursor-pointer items-center justify-center overflow-hidden bg-slate-100 ${className}`}
         onClick={() => openLightbox(0)}
         onTouchStart={handleGalleryTouchStart}
         onTouchMove={handleGalleryTouchMove}
@@ -238,7 +238,10 @@ export function SwipeGallery({
           alt={alt}
           loading="lazy"
           onError={() => handleImageError(validUrls[0])}
-          {...imageProps}
+          className="min-h-0 min-w-0 max-h-full max-w-full shrink-0 object-contain object-center select-none"
+          draggable={false}
+          referrerPolicy="no-referrer"
+          style={{ touchAction: 'pan-x' }}
         />
       </div>
     )

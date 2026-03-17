@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useDeferredValue, useMemo, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { VirtualizedListingGrid } from '../components/listing/VirtualizedListingGrid'
 import { SearchBar, type SuggestionItem } from '../components/listing/SearchBar'
 import { FilterPanel } from '../components/listing/FilterPanel'
@@ -15,9 +15,10 @@ import {
 } from '../lib/search'
 import {
   type FilterState,
-  emptyFilterState,
   countActiveFilters,
   applyFilters,
+  parseCatalogStateFromSearchParams,
+  catalogStateToSearchParams,
 } from '../lib/filters'
 
 type CatalogPageProps = {
@@ -39,11 +40,39 @@ export function CatalogPage({
 }: CatalogPageProps) {
   const { category } = useParams<{ category?: string }>()
   const categoryId = category as CategoryId | undefined
+  const [searchParams, setSearchParams] = useSearchParams()
 
-  const [query, setQuery] = useState('')
+  const { query, filters } = useMemo(
+    () => parseCatalogStateFromSearchParams(searchParams),
+    [searchParams],
+  )
+
+  const updateCatalogState = useCallback(
+    (nextQuery: string, nextFilters: FilterState) => {
+      const params = catalogStateToSearchParams(nextQuery, nextFilters)
+      setSearchParams(params, { replace: true })
+    },
+    [setSearchParams],
+  )
+
+  const setQuery = useCallback(
+    (value: string | ((prev: string) => string)) => {
+      const next = typeof value === 'function' ? value(query) : value
+      updateCatalogState(next, filters)
+    },
+    [query, filters, updateCatalogState],
+  )
+
+  const setFilters = useCallback(
+    (value: FilterState | ((prev: FilterState) => FilterState)) => {
+      const next = typeof value === 'function' ? value(filters) : value
+      updateCatalogState(query, next)
+    },
+    [query, filters, updateCatalogState],
+  )
+
   const [history, setHistory] = useState<string[]>([])
   const [isSearchFocused, setIsSearchFocused] = useState(false)
-  const [filters, setFilters] = useState<FilterState>(emptyFilterState)
   const [isFilterOpen, setIsFilterOpen] = useState(false)
   const activeFilterCount = countActiveFilters(filters)
 
@@ -69,7 +98,7 @@ export function CatalogPage({
     } catch {
       // ignore
     }
-  }, [])
+  }, [categoryId])
 
   const deferredQuery = useDeferredValue(query)
   const deferredFilters = useDeferredValue(filters)
