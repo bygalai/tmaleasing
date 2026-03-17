@@ -330,6 +330,7 @@ function getErrorMessage(err: unknown): string {
 export function useListings() {
   const [items, setItems] = useState<Listing[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [isAlmostReady, setIsAlmostReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -382,6 +383,8 @@ export function useListings() {
           }
           from += PAGE_SIZE
         }
+
+        if (!cancelled) setIsAlmostReady(true)
 
         const rows = allRows
 
@@ -495,5 +498,5 @@ export function useListings() {
     }
   }, [])
 
-  return { items, isLoading, error }
+  return { items, isLoading, isAlmostReady, error }
 }

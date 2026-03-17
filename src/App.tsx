@@ -95,7 +95,7 @@ function Header() {
 
 function App() {
   const location = useLocation()
-  const { items, isLoading, error } = useListings()
+  const { items, isLoading, isAlmostReady, error } = useListings()
   const { favorites, isFavorite, toggleFavorite } = useFavorites()
   const [splashVisible, setSplashVisible] = useState(true)
   const [isSearchFocused, setIsSearchFocused] = useState(false)
@@ -142,7 +142,11 @@ function App() {
 
   if (splashVisible) {
     return (
-      <SplashScreen onReady={handleSplashReady} isAppReady={!isLoading} />
+      <SplashScreen
+        onReady={handleSplashReady}
+        isAppReady={!isLoading}
+        isAlmostReady={isAlmostReady}
+      />
     )
   }
 
