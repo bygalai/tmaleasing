@@ -92,6 +92,8 @@ export default async function handler(req: { method?: string; body?: unknown }, 
     `💰 Цена: *${price}₽*`,
     '',
     `🔗 [Открыть объявление](${lead.detailUrl})`,
+    '',
+    `💬 Ответ: \`/reply ${lead.userId} Ваш текст\``,
   ]
 
   const managerChat = MANAGER_CHAT_ID ? Number(MANAGER_CHAT_ID) : lead.userId

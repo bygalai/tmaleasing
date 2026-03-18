@@ -21,6 +21,7 @@ type TelegramUpdate = {
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const MANAGER_CHAT_ID = process.env.TELEGRAM_MANAGER_CHAT_ID
 const MINIAPP_URL = process.env.MINIAPP_URL ?? 'https://tma-tawny.vercel.app'
+const REPLY_COMMAND_RE = /^\/reply(?:@\w+)?\s+(-?\d+)\s+([\s\S]+)$/i
 
 async function callTelegram<T = unknown>(method: string, body: Record<string, unknown>): Promise<T> {
   if (!BOT_TOKEN) {
@@ -79,6 +80,21 @@ function formatPriceRubCompact(value: number): string {
   return raw.replace(/\s/g, '.')
 }
 
+function getManagerChatId(): number | null {
+  if (!MANAGER_CHAT_ID) return null
+  const parsed = Number(MANAGER_CHAT_ID)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function parseReplyCommand(text: string): { userId: number; messageText: string } | null {
+  const match = text.trim().match(REPLY_COMMAND_RE)
+  if (!match) return null
+  const userId = Number(match[1])
+  const messageText = match[2].trim()
+  if (!Number.isFinite(userId) || !messageText) return null
+  return { userId, messageText }
+}
+
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {
     res.status(200).send('OK')
@@ -90,6 +106,67 @@ export default async function handler(req: any, res: any) {
   try {
     const msg = update.message
     if (!msg) {
+      res.status(200).send('OK')
+      return
+    }
+
+    // Команда менеджера: /reply <userId> <текст>
+    if (msg.text?.trim().startsWith('/reply')) {
+      const managerChatId = getManagerChatId()
+      if (managerChatId == null) {
+        await callTelegram('sendMessage', {
+          chat_id: msg.chat.id,
+          text:
+            '⚠️ Не задан TELEGRAM_MANAGER_CHAT_ID.\n' +
+            'Добавьте переменную окружения и повторите команду.',
+        })
+        res.status(200).send('OK')
+        return
+      }
+
+      if (msg.chat.id !== managerChatId) {
+        await callTelegram('sendMessage', {
+          chat_id: msg.chat.id,
+          text: '⛔ Команда /reply доступна только в чате менеджера.',
+        })
+        res.status(200).send('OK')
+        return
+      }
+
+      const parsedReply = parseReplyCommand(msg.text)
+      if (!parsedReply) {
+        await callTelegram('sendMessage', {
+          chat_id: msg.chat.id,
+          text:
+            'Неверный формат команды.\n' +
+            'Используйте: /reply <userId> <текст>\n\n' +
+            'Пример:\n' +
+            '/reply 123456789 Здравствуйте! Готовы обсудить условия по лоту.',
+        })
+        res.status(200).send('OK')
+        return
+      }
+
+      try {
+        await callTelegram('sendMessage', {
+          chat_id: parsedReply.userId,
+          text: parsedReply.messageText,
+        })
+        await callTelegram('sendMessage', {
+          chat_id: msg.chat.id,
+          text: `✅ Отправлено пользователю [id: ${parsedReply.userId}]`,
+        })
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err)
+        await callTelegram('sendMessage', {
+          chat_id: msg.chat.id,
+          text:
+            `❌ Не удалось отправить сообщение пользователю [id: ${parsedReply.userId}].\n` +
+            `Причина: ${errorMessage}\n\n` +
+            'Проверьте, что пользователь уже взаимодействовал с ботом (нажал /start или открыл Mini App).',
+        })
+      }
+
       res.status(200).send('OK')
       return
     }
@@ -159,6 +236,8 @@ export default async function handler(req: any, res: any) {
           `💰 Цена: *${price}₽*`,
           '',
           `🔗 [Открыть объявление](${lead.detailUrl})`,
+          '',
+          `💬 Ответ: \`/reply ${msg.from?.id ?? msg.chat.id} Ваш текст\``,
         ]
 
         const managerChat = MANAGER_CHAT_ID ? Number(MANAGER_CHAT_ID) : msg.chat.id
