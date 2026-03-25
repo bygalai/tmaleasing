@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html lang="ru" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GONKA — Конфискованная техника лизинговых компаний в Telegram</title>
+  <meta name="description" content="Агрегатор изъятой техники из ВТБ, Европлана, Альфа-Лизинга и Газпромбанка. Единый поиск, аналитика цен, мгновенный доступ через Telegram.">
+  <meta property="og:title" content="GONKA — Весь конфискат лизинга в одном Telegram-окне">
+  <meta property="og:description" content="4 источника. Тысячи лотов. Аналитика цен. Без регистрации.">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32'><circle cx='16' cy='16' r='16' fill='%23FF5C34'/></svg>">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: '#FF5C34',
+            'brand-dark': '#d94a24',
+            'brand-tint': '#FFE1D5',
+          },
+          fontFamily: {
+            sf: ['-apple-system', 'BlinkMacSystemFont', '"SF Pro Text"', 'system-ui', '"Inter"', '"Helvetica Neue"', 'sans-serif'],
+            display: ['"Helvetica Neue"', 'Helvetica', 'Arial', 'sans-serif'],
+          },
+        }
+      }
+    }
+  </script>
+
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+
+  <style>
+    /* ── Base ──────────────────────────────────────────────── */
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html {
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text',
+                   system-ui, 'Inter', 'Helvetica Neue', sans-serif;
+      font-synthesis: none;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    body {
+      margin: 0;
+      color: #0f172a;
+      background:
+        radial-gradient(ellipse 1100px 600px at 85% -5%, rgba(255, 92, 52, 0.07), transparent 60%),
+        radial-gradient(ellipse 900px 500px at 10% 85%, rgba(59, 130, 246, 0.04), transparent 60%),
+        #ffffff;
+      overflow-x: hidden;
+    }
+
+    /* ── Liquid Glass System ───────────────────────────────── */
+
+    .liquid-glass {
+      position: relative;
+      overflow: hidden;
+      background: linear-gradient(
+        168deg,
+        rgba(255, 255, 255, 0.82) 0%,
+        rgba(255, 255, 255, 0.52) 45%,
+        rgba(255, 255, 255, 0.64) 100%
+      );
+      border: 1px solid rgba(255, 255, 255, 0.70);
+      box-shadow:
+        0 0 0 0.5px rgba(15, 23, 42, 0.06),
+        0 1px 2px rgba(15, 23, 42, 0.04),
+        0 4px 12px rgba(15, 23, 42, 0.05),
+        0 14px 36px rgba(15, 23, 42, 0.09),
+        inset 0 0.5px 0 rgba(255, 255, 255, 1),
+        inset 0 -0.5px 0 rgba(15, 23, 42, 0.04);
+      -webkit-backdrop-filter: blur(40px) saturate(190%) brightness(108%);
+      backdrop-filter: blur(40px) saturate(190%) brightness(108%);
+    }
+
+    .liquid-glass::after {
+      content: '';
+      pointer-events: none;
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      background:
+        linear-gradient(178deg, rgba(255, 255, 255, 0.72) 0%, transparent 35%),
+        radial-gradient(500px 180px at 90% 120%, rgba(255, 92, 52, 0.07), transparent 65%),
+        radial-gradient(400px 200px at -10% 100%, rgba(59, 130, 246, 0.05), transparent 65%);
+      mix-blend-mode: overlay;
+      opacity: 0.70;
+      z-index: 2;
+    }
+
+    /* Shimmer sweep */
+    .liquid-glass-shimmer {
+      pointer-events: none;
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      z-index: 3;
+      overflow: hidden;
+    }
+
+    .liquid-glass-shimmer::before {
+      content: '';
+      position: absolute;
+      top: -20%;
+      left: -60%;
+      width: 38%;
+      height: 140%;
+      background: linear-gradient(
+        105deg,
+        transparent 30%,
+        rgba(255, 255, 255, 0.50) 47%,
+        rgba(255, 255, 255, 0.78) 50%,
+        rgba(255, 255, 255, 0.50) 53%,
+        transparent 70%
+      );
+      transform: skewX(-18deg);
+      animation: liquid-shimmer 7s 1.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+      opacity: 0;
+    }
+
+    @keyframes liquid-shimmer {
+      0%   { left: -60%; opacity: 0; }
+      4%   { opacity: 0.7; }
+      28%  { left: 140%; opacity: 0; }
+      100% { left: 140%; opacity: 0; }
+    }
+
+    /* Nav glass */
+    .liquid-glass-nav {
+      position: relative;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.72);
+      border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+      box-shadow: 0 1px 12px rgba(15, 23, 42, 0.06);
+      -webkit-backdrop-filter: blur(32px) saturate(180%);
+      backdrop-filter: blur(32px) saturate(180%);
+    }
+
+    /* ── Brand Gradient ────────────────────────────────────── */
+
+    .brand-gradient {
+      background: linear-gradient(135deg, #FF5C34 0%, #d94a24 100%);
+      box-shadow: 0 4px 16px rgba(255, 92, 52, 0.30);
+      transition: all 280ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .brand-gradient:hover {
+      background: linear-gradient(135deg, #ff6b47 0%, #FF5C34 100%);
+      box-shadow: 0 6px 24px rgba(255, 92, 52, 0.40);
+      transform: translateY(-1px);
+    }
+
+    .brand-gradient:active {
+      transform: translateY(0) scale(0.98);
+      box-shadow: 0 2px 8px rgba(255, 92, 52, 0.30);
+    }
+
+    /* ── Phone Mockup ──────────────────────────────────────── */
+
+    .phone-container {
+      position: relative;
+      z-index: 1;
+    }
+
+    .phone-glow {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 380px;
+      height: 380px;
+      transform: translate(-50%, -50%);
+      background: radial-gradient(circle, rgba(255, 92, 52, 0.12) 0%, transparent 70%);
+      border-radius: 50%;
+      z-index: -1;
+      filter: blur(40px);
+    }
+
+    .phone-frame {
+      width: 268px;
+      height: 548px;
+      border-radius: 42px;
+      border: 3px solid #1c1c1e;
+      background: #000;
+      padding: 10px;
+      position: relative;
+      box-shadow:
+        0 0 0 1.5px #333,
+        0 25px 60px -10px rgba(0, 0, 0, 0.28),
+        0 10px 25px -5px rgba(0, 0, 0, 0.18),
+        inset 0 0 20px rgba(255, 255, 255, 0.03);
+      animation: phone-float 5s ease-in-out infinite;
+    }
+
+    @keyframes phone-float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-8px); }
+    }
+
+    .phone-screen {
+      width: 100%;
+      height: 100%;
+      border-radius: 33px;
+      background: #fff;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .dynamic-island {
+      position: absolute;
+      top: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 84px;
+      height: 24px;
+      background: #000;
+      border-radius: 16px;
+      z-index: 20;
+    }
+
+    /* Mock app content inside phone */
+    .mock-app {
+      padding: 42px 12px 8px;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+      overflow: hidden;
+    }
+
+    .mock-logo {
+      text-align: center;
+      font-family: Helvetica, Arial, sans-serif;
+      font-weight: 800;
+      font-size: 18px;
+      color: #FF5C34;
+      letter-spacing: -0.02em;
+    }
+
+    .mock-search {
+      height: 30px;
+      border-radius: 10px;
+      background: rgba(0, 0, 0, 0.04);
+      border: 1px solid rgba(0, 0, 0, 0.06);
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      gap: 6px;
+    }
+
+    .mock-search-icon {
+      width: 12px;
+      height: 12px;
+      border: 1.5px solid #94a3b8;
+      border-radius: 50%;
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    .mock-search-icon::after {
+      content: '';
+      position: absolute;
+      bottom: -3px;
+      right: -3px;
+      width: 5px;
+      height: 1.5px;
+      background: #94a3b8;
+      transform: rotate(45deg);
+    }
+
+    .mock-search-text {
+      font-size: 10px;
+      color: #94a3b8;
+    }
+
+    .mock-cats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 5px;
+    }
+
+    .mock-cat {
+      height: 36px;
+      border-radius: 8px;
+      background: #f8fafc;
+      border: 1px solid rgba(0, 0, 0, 0.06);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 8px;
+      font-weight: 600;
+      color: #475569;
+    }
+
+    .mock-cat.accent {
+      background: linear-gradient(135deg, #FF5C34, #d94a24);
+      color: #fff;
+      border-color: transparent;
+    }
+
+    .mock-section-title {
+      font-size: 9px;
+      font-weight: 700;
+      color: #0f172a;
+      margin-top: 2px;
+    }
+
+    .mock-card {
+      display: flex;
+      gap: 8px;
+      background: #fff;
+      border-radius: 10px;
+      border: 1px solid rgba(0, 0, 0, 0.06);
+      padding: 6px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    }
+
+    .mock-card-img {
+      width: 52px;
+      height: 40px;
+      border-radius: 6px;
+      flex-shrink: 0;
+      background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%);
+    }
+
+    .mock-card-body {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .mock-card-title {
+      font-size: 8px;
+      font-weight: 600;
+      color: #0f172a;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .mock-card-sub {
+      font-size: 7px;
+      color: #64748b;
+    }
+
+    .mock-card-price {
+      font-size: 9px;
+      font-weight: 700;
+      color: #FF5C34;
+    }
+
+    .mock-badge {
+      display: inline-block;
+      font-size: 6px;
+      font-weight: 600;
+      background: #dcfce7;
+      color: #16a34a;
+      padding: 1px 4px;
+      border-radius: 3px;
+    }
+
+    .mock-nav {
+      margin-top: auto;
+      display: flex;
+      justify-content: space-around;
+      padding: 6px 0 2px;
+      border-top: 1px solid rgba(0, 0, 0, 0.06);
+    }
+
+    .mock-nav-item {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: #cbd5e1;
+    }
+
+    .mock-nav-item.active {
+      background: #FF5C34;
+    }
+
+    /* ── Price Analysis Bar Mockup ─────────────────────────── */
+
+    .price-bar {
+      height: 8px;
+      border-radius: 4px;
+      background: linear-gradient(90deg, #2aa871 0%, #fbbf24 40%, #FF5C34 100%);
+      position: relative;
+    }
+
+    .price-marker {
+      position: absolute;
+      top: -3px;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #fff;
+      border: 2.5px solid #0f172a;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+      transform: translateX(-50%);
+    }
+
+    /* ── Scroll Reveal ─────────────────────────────────────── */
+
+    .reveal {
+      opacity: 0;
+      transform: translateY(32px);
+      transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+                  transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .reveal.revealed {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .reveal-delay-1 { transition-delay: 0.1s; }
+    .reveal-delay-2 { transition-delay: 0.2s; }
+    .reveal-delay-3 { transition-delay: 0.3s; }
+
+    /* ── Utility ───────────────────────────────────────────── */
+
+    .text-gradient {
+      background: linear-gradient(135deg, #FF5C34 0%, #d94a24 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+
+    .feature-icon-wrap {
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, #FFE1D5 0%, #fff0eb 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    /* Hero background shapes */
+    .hero-bg-shape {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(80px);
+      opacity: 0.5;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    /* Source badge */
+    .source-badge {
+      padding: 8px 16px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.6);
+      border: 1px solid rgba(15, 23, 42, 0.06);
+      box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
+      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(12px);
+      font-size: 13px;
+      font-weight: 500;
+      color: #475569;
+      white-space: nowrap;
+      transition: all 200ms ease;
+    }
+
+    .source-badge:hover {
+      background: rgba(255, 255, 255, 0.85);
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+    }
+
+    /* Stat card */
+    .stat-card {
+      text-align: center;
+      padding: 24px 16px;
+    }
+
+    .stat-number {
+      font-size: clamp(28px, 5vw, 40px);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1;
+    }
+
+    /* Trust check */
+    .trust-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .trust-icon {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #dcfce7;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    @media (max-width: 768px) {
+      .phone-frame {
+        width: 230px;
+        height: 470px;
+        border-radius: 36px;
+        padding: 8px;
+      }
+
+      .phone-screen { border-radius: 29px; }
+      .dynamic-island { width: 72px; height: 20px; top: 7px; }
+      .phone-glow { width: 300px; height: 300px; }
+    }
+
+    @media (max-width: 480px) {
+      .phone-frame {
+        width: 200px;
+        height: 408px;
+        border-radius: 32px;
+      }
+
+      .phone-screen { border-radius: 25px; }
+      .mock-app { padding-top: 36px; gap: 5px; }
+      .mock-cat { height: 28px; font-size: 7px; }
+      .mock-card-img { width: 42px; height: 32px; }
+    }
+  </style>
+</head>
+
+<body class="font-sf text-slate-900">
+
+  <!-- ═══════════════ NAV ═══════════════ -->
+  <nav class="liquid-glass-nav fixed top-0 left-0 right-0 z-50">
+    <div class="max-w-6xl mx-auto px-5 h-14 flex items-center justify-between">
+      <a href="#" class="font-display font-bold text-lg tracking-tight text-brand select-none">
+        "GONKA"
+      </a>
+      <a
+        href="https://t.me/GONKACONFBOT"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="brand-gradient text-white px-5 py-2 rounded-xl text-sm font-semibold select-none"
+      >
+        Открыть в Telegram
+      </a>
+    </div>
+  </nav>
+
+  <main>
+
+    <!-- ═══════════════ HERO ═══════════════ -->
+    <section class="relative min-h-screen flex items-center pt-20 pb-16 overflow-hidden">
+      <!-- Background shapes -->
+      <div class="hero-bg-shape" style="width:600px;height:600px;top:-15%;right:-10%;background:rgba(255,92,52,0.08)"></div>
+      <div class="hero-bg-shape" style="width:400px;height:400px;bottom:5%;left:-8%;background:rgba(59,130,246,0.06)"></div>
+
+      <div class="max-w-6xl mx-auto px-5 w-full relative z-10">
+        <div class="flex flex-col lg:flex-row items-center gap-12 lg:gap-16">
+
+          <!-- Text -->
+          <div class="flex-1 text-center lg:text-left max-w-xl lg:max-w-none">
+            <div class="reveal">
+              <span class="inline-block text-xs font-semibold tracking-[0.16em] text-brand uppercase mb-4 px-3 py-1.5 rounded-full bg-brand-tint/60">
+                Telegram Mini App
+              </span>
+            </div>
+
+            <h1 class="reveal reveal-delay-1 font-display font-bold leading-[1.08] tracking-tight mb-5"
+                style="font-size:clamp(32px, 6vw, 56px)">
+              Весь конфискат лизинга —
+              <span class="text-gradient">в одном окне</span>
+            </h1>
+
+            <p class="reveal reveal-delay-2 text-slate-500 text-base sm:text-lg leading-relaxed mb-8 max-w-lg mx-auto lg:mx-0">
+              Агрегатор изъятой техники из ВТБ, Европлана, Альфа&#8209;Лизинга и&nbsp;Газпромбанка.
+              Аналитика цен, мгновенный поиск ниже рынка&nbsp;&mdash; без&nbsp;регистрации и&nbsp;установки.
+            </p>
+
+            <div class="reveal reveal-delay-3 flex flex-col sm:flex-row items-center gap-4 justify-center lg:justify-start">
+              <a
+                href="https://t.me/GONKACONFBOT"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="brand-gradient text-white font-semibold text-base px-8 py-3.5 rounded-2xl flex items-center gap-2.5 select-none"
+              >
+                Открыть в Telegram
+                <i data-lucide="arrow-right" class="w-5 h-5"></i>
+              </a>
+              <span class="text-sm text-slate-400">Бесплатно. Без регистрации.</span>
+            </div>
+          </div>
+
+          <!-- Phone Mockup -->
+          <div class="reveal reveal-delay-2 flex-shrink-0">
+            <div class="phone-container">
+              <div class="phone-glow"></div>
+              <div class="phone-frame">
+                <div class="dynamic-island"></div>
+                <div class="phone-screen">
+                  <div class="mock-app">
+                    <div class="mock-logo">"GONKA"</div>
+                    <div class="mock-search">
+                      <div class="mock-search-icon"></div>
+                      <span class="mock-search-text">Поиск техники...</span>
+                    </div>
+                    <div class="mock-cats">
+                      <div class="mock-cat">Легковые</div>
+                      <div class="mock-cat accent">Грузовые</div>
+                      <div class="mock-cat">Спецтехника</div>
+                      <div class="mock-cat">Прицепы</div>
+                    </div>
+                    <div class="mock-section-title">Выгодно</div>
+                    <div class="mock-card">
+                      <div class="mock-card-img"></div>
+                      <div class="mock-card-body">
+                        <div class="mock-card-title">Toyota Camry 2021</div>
+                        <div class="mock-card-sub">47 000 км · Москва</div>
+                        <div style="display:flex;align-items:center;gap:4px">
+                          <span class="mock-card-price">1 890 000 ₽</span>
+                          <span class="mock-badge">−12%</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="mock-card">
+                      <div class="mock-card-img"></div>
+                      <div class="mock-card-body">
+                        <div class="mock-card-title">КАМАЗ 65115-48</div>
+                        <div class="mock-card-sub">82 000 км · Казань</div>
+                        <div style="display:flex;align-items:center;gap:4px">
+                          <span class="mock-card-price">3 450 000 ₽</span>
+                          <span class="mock-badge">−8%</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="mock-card">
+                      <div class="mock-card-img"></div>
+                      <div class="mock-card-body">
+                        <div class="mock-card-title">Komatsu PC200</div>
+                        <div class="mock-card-sub">4 120 м.ч. · Екатеринбург</div>
+                        <span class="mock-card-price">6 200 000 ₽</span>
+                      </div>
+                    </div>
+                    <div class="mock-nav">
+                      <div class="mock-nav-item active"></div>
+                      <div class="mock-nav-item"></div>
+                      <div class="mock-nav-item"></div>
+                      <div class="mock-nav-item"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════ SOURCES ═══════════════ -->
+    <section class="py-10 relative z-10">
+      <div class="max-w-6xl mx-auto px-5">
+        <div class="reveal flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 flex-wrap">
+          <span class="text-xs font-medium text-slate-400 uppercase tracking-[0.12em] mr-2">Источники:</span>
+          <div class="source-badge">ВТБ Лизинг</div>
+          <div class="source-badge">Европлан</div>
+          <div class="source-badge">Альфа-Лизинг</div>
+          <div class="source-badge">Газпромбанк</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════ FEATURES ═══════════════ -->
+    <section class="py-16 sm:py-24">
+      <div class="max-w-6xl mx-auto px-5">
+
+        <div class="text-center mb-14 reveal">
+          <h2 class="font-display font-bold tracking-tight mb-3" style="font-size:clamp(24px, 4.5vw, 40px)">
+            Почему GONKA
+          </h2>
+          <p class="text-slate-500 text-base max-w-md mx-auto">
+            Три причины, по которым профессионалы рынка выбирают нас
+          </p>
+        </div>
+
+        <div class="grid md:grid-cols-3 gap-6">
+
+          <!-- Feature 1: Search -->
+          <div class="reveal reveal-delay-1 liquid-glass rounded-2xl p-7 relative">
+            <div class="liquid-glass-shimmer rounded-2xl"></div>
+            <div class="relative z-10">
+              <div class="feature-icon-wrap mb-5">
+                <i data-lucide="search" class="w-5 h-5 text-brand"></i>
+              </div>
+              <h3 class="font-display font-bold text-lg mb-2 tracking-tight">Умный поиск</h3>
+              <p class="text-slate-500 text-sm leading-relaxed">
+                Пишите как удобно&nbsp;&mdash; кириллицей, латиницей, с&nbsp;опечатками.
+                <span class="text-slate-700 font-medium">Шакман&nbsp;= Shacman</span>,
+                <span class="text-slate-700 font-medium">Камри&nbsp;= Toyota&nbsp;Camry</span>.
+                Система найдёт всё.
+              </p>
+            </div>
+          </div>
+
+          <!-- Feature 2: Analytics -->
+          <div class="reveal reveal-delay-2 liquid-glass rounded-2xl p-7 relative">
+            <div class="liquid-glass-shimmer rounded-2xl"></div>
+            <div class="relative z-10">
+              <div class="feature-icon-wrap mb-5">
+                <i data-lucide="bar-chart-3" class="w-5 h-5 text-brand"></i>
+              </div>
+              <h3 class="font-display font-bold text-lg mb-2 tracking-tight">Аналитика цены</h3>
+              <p class="text-slate-500 text-sm leading-relaxed mb-4">
+                Видите сразу&nbsp;&mdash; лот ниже рынка или&nbsp;нет. Визуальная шкала выгоды на&nbsp;основе квантилей аналогичных моделей.
+              </p>
+              <!-- Mini Price Analysis Bar -->
+              <div class="bg-white/60 rounded-xl p-3 border border-black/5">
+                <div class="flex justify-between text-[10px] text-slate-400 mb-1.5">
+                  <span>Ниже рынка</span>
+                  <span>Выше</span>
+                </div>
+                <div class="price-bar">
+                  <div class="price-marker" style="left: 28%"></div>
+                </div>
+                <div class="text-[10px] text-emerald-600 font-medium mt-1.5">
+                  Цена ниже рынка на 12%
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Feature 3: Telegram -->
+          <div class="reveal reveal-delay-3 liquid-glass rounded-2xl p-7 relative">
+            <div class="liquid-glass-shimmer rounded-2xl"></div>
+            <div class="relative z-10">
+              <div class="feature-icon-wrap mb-5">
+                <i data-lucide="zap" class="w-5 h-5 text-brand"></i>
+              </div>
+              <h3 class="font-display font-bold text-lg mb-2 tracking-tight">1 секунда до старта</h3>
+              <p class="text-slate-500 text-sm leading-relaxed">
+                Нативное приложение внутри Telegram. Без скачивания, без регистрации.
+                <span class="text-slate-700 font-medium">Открыл&nbsp;&mdash; нашёл&nbsp;&mdash; оставил заявку.</span>
+              </p>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════ STATS ═══════════════ -->
+    <section class="py-16 sm:py-20">
+      <div class="max-w-4xl mx-auto px-5">
+        <div class="reveal liquid-glass rounded-3xl overflow-hidden relative">
+          <div class="liquid-glass-shimmer rounded-3xl"></div>
+          <div class="relative z-10 grid grid-cols-2 md:grid-cols-4 divide-x divide-black/5">
+            <div class="stat-card">
+              <div class="stat-number text-brand">4</div>
+              <div class="text-xs text-slate-500 mt-2 font-medium">источника</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-number text-slate-900">10K+</div>
+              <div class="text-xs text-slate-500 mt-2 font-medium">лотов</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-number text-slate-900">6</div>
+              <div class="text-xs text-slate-500 mt-2 font-medium">фильтров</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-number text-emerald-600">0 ₽</div>
+              <div class="text-xs text-slate-500 mt-2 font-medium">за доступ</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════ TRUST ═══════════════ -->
+    <section class="py-16 sm:py-24">
+      <div class="max-w-6xl mx-auto px-5">
+        <div class="flex flex-col lg:flex-row gap-12 lg:gap-20 items-center">
+
+          <!-- Text -->
+          <div class="flex-1 max-w-lg">
+            <div class="reveal">
+              <h2 class="font-display font-bold tracking-tight mb-6" style="font-size:clamp(24px, 4.5vw, 36px)">
+                Продукт от экспертов рынка
+              </h2>
+            </div>
+
+            <div class="space-y-5">
+              <div class="reveal reveal-delay-1 trust-item">
+                <div class="trust-icon">
+                  <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-600"></i>
+                </div>
+                <div>
+                  <div class="font-semibold text-sm mb-0.5">Официальные источники</div>
+                  <div class="text-slate-500 text-sm leading-relaxed">Данные напрямую с площадок ВТБ, Европлана, Альфа-Лизинга и Газпромбанка. Никаких серых схем.</div>
+                </div>
+              </div>
+
+              <div class="reveal reveal-delay-2 trust-item">
+                <div class="trust-icon">
+                  <i data-lucide="scale" class="w-3.5 h-3.5 text-emerald-600"></i>
+                </div>
+                <div>
+                  <div class="font-semibold text-sm mb-0.5">Чистая юридическая история</div>
+                  <div class="text-slate-500 text-sm leading-relaxed">Каждый лот&nbsp;&mdash; техника, изъятая по&nbsp;договору лизинга. Прозрачная цепочка владения, документальное подтверждение.</div>
+                </div>
+              </div>
+
+              <div class="reveal reveal-delay-3 trust-item">
+                <div class="trust-icon">
+                  <i data-lucide="trending-down" class="w-3.5 h-3.5 text-emerald-600"></i>
+                </div>
+                <div>
+                  <div class="font-semibold text-sm mb-0.5">Реальная аналитика цен</div>
+                  <div class="text-slate-500 text-sm leading-relaxed">Алгоритм сравнивает каждый лот с&nbsp;аналогами по&nbsp;квантилям. Вы видите объективную картину, а&nbsp;не&nbsp;маркетинг.</div>
+                </div>
+              </div>
+
+              <div class="reveal trust-item" style="transition-delay:0.4s">
+                <div class="trust-icon">
+                  <i data-lucide="headphones" class="w-3.5 h-3.5 text-emerald-600"></i>
+                </div>
+                <div>
+                  <div class="font-semibold text-sm mb-0.5">Консультация специалиста</div>
+                  <div class="text-slate-500 text-sm leading-relaxed">Помощь на&nbsp;каждом этапе&nbsp;&mdash; от&nbsp;подбора до&nbsp;оформления сделки. Работаем с&nbsp;профессионалами рынка.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Visual: Filter demo -->
+          <div class="reveal reveal-delay-2 flex-1 max-w-sm w-full">
+            <div class="liquid-glass rounded-2xl p-6 relative">
+              <div class="liquid-glass-shimmer rounded-2xl"></div>
+              <div class="relative z-10">
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-[0.1em] mb-4">Фильтры</div>
+
+                <div class="space-y-3 mb-5">
+                  <div class="flex flex-wrap gap-1.5">
+                    <span class="text-[11px] font-medium px-2.5 py-1 rounded-lg bg-brand text-white shadow-sm">Toyota</span>
+                    <span class="text-[11px] font-medium px-2.5 py-1 rounded-lg bg-white/80 text-slate-600 border border-black/6">КАМАЗ</span>
+                    <span class="text-[11px] font-medium px-2.5 py-1 rounded-lg bg-white/80 text-slate-600 border border-black/6">Komatsu</span>
+                    <span class="text-[11px] font-medium px-2.5 py-1 rounded-lg bg-white/80 text-slate-600 border border-black/6">Volvo</span>
+                  </div>
+                  <div class="flex gap-2">
+                    <div class="flex-1 bg-white/60 border border-black/6 rounded-lg px-3 py-1.5 text-[11px] text-slate-400">от 500 000 ₽</div>
+                    <div class="flex-1 bg-white/60 border border-black/6 rounded-lg px-3 py-1.5 text-[11px] text-slate-400">до 5 000 000 ₽</div>
+                  </div>
+                  <div class="flex flex-wrap gap-1.5">
+                    <span class="text-[11px] font-medium px-2.5 py-1 rounded-lg bg-white/80 text-slate-600 border border-black/6">Седан</span>
+                    <span class="text-[11px] font-medium px-2.5 py-1 rounded-lg bg-brand text-white shadow-sm">Самосвал</span>
+                    <span class="text-[11px] font-medium px-2.5 py-1 rounded-lg bg-white/80 text-slate-600 border border-black/6">Тягач</span>
+                  </div>
+                </div>
+
+                <div class="bg-brand text-white text-center py-2.5 rounded-xl text-xs font-semibold shadow-[0_4px_12px_rgba(255,92,52,0.25)]">
+                  Показать 847 лотов
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════ FINAL CTA ═══════════════ -->
+    <section class="py-16 sm:py-24">
+      <div class="max-w-3xl mx-auto px-5">
+        <div class="reveal liquid-glass rounded-3xl p-8 sm:p-12 text-center relative overflow-hidden">
+          <div class="liquid-glass-shimmer rounded-3xl"></div>
+
+          <!-- Decorative glow -->
+          <div class="absolute -top-20 left-1/2 -translate-x-1/2 w-[400px] h-[200px] bg-brand/8 rounded-full blur-[80px] pointer-events-none"></div>
+
+          <div class="relative z-10">
+            <h2 class="font-display font-bold tracking-tight mb-4" style="font-size:clamp(22px, 4vw, 34px)">
+              Начните находить выгодные лоты<br class="hidden sm:block"> прямо сейчас
+            </h2>
+            <p class="text-slate-500 text-sm sm:text-base mb-8 max-w-md mx-auto">
+              4 площадки. Тысячи лотов. Один Telegram.
+              Присоединяйтесь к&nbsp;профессионалам, которые уже экономят.
+            </p>
+            <a
+              href="https://t.me/GONKACONFBOT"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="brand-gradient inline-flex items-center gap-3 text-white font-semibold text-base sm:text-lg px-10 py-4 rounded-2xl select-none"
+            >
+              <i data-lucide="send" class="w-5 h-5"></i>
+              Открыть в Telegram
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ═══════════════ FOOTER ═══════════════ -->
+  <footer class="py-10 border-t border-black/5">
+    <div class="max-w-6xl mx-auto px-5 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <div class="font-display font-bold text-sm text-slate-400 tracking-tight select-none">
+        "GONKA" CONFISCATED MARKET
+      </div>
+      <div class="text-xs text-slate-400">
+        &copy; 2025&ndash;2026 GONKA. Все права защищены.
+      </div>
+    </div>
+  </footer>
+
+  <!-- ═══════════════ SCRIPTS ═══════════════ -->
+  <script>
+    lucide.createIcons();
+
+    const revealObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('revealed');
+            revealObserver.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.08, rootMargin: '0px 0px -40px 0px' }
+    );
+
+    document.querySelectorAll('.reveal').forEach((el) => {
+      revealObserver.observe(el);
+    });
+  </script>
+
+</body>
+</html>
