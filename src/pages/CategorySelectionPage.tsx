@@ -28,6 +28,24 @@ type Category = {
   topLeftText?: string
 }
 
+/** Порядок в блоке «Выгодно»: грузовые → спецтехника → легковые → прицепы */
+const PROFITABLE_SECTION_CATEGORY_RANK: Record<CategoryId, number> = {
+  gruzovye: 0,
+  speztechnika: 1,
+  legkovye: 2,
+  pricepy: 3,
+}
+
+function compareListingForProfitableSection(a: Listing, b: Listing): number {
+  const rank = (cat?: string) => {
+    if (cat && cat in PROFITABLE_SECTION_CATEGORY_RANK) {
+      return PROFITABLE_SECTION_CATEGORY_RANK[cat as CategoryId]
+    }
+    return 99
+  }
+  return rank(a.category) - rank(b.category)
+}
+
 const CATEGORIES: Category[] = [
   {
     id: 'legkovye',
@@ -310,7 +328,11 @@ export function CategorySelectionPage({
       : focusSuggestions
     : []
 
-  const discountedItems = items.filter((item) => item.badges.includes('discount'))
+  const discountedItems = useMemo(() => {
+    return items
+      .filter((item) => item.badges.includes('discount'))
+      .sort(compareListingForProfitableSection)
+  }, [items])
 
   useEffect(() => {
     if (!isShowingResults) {
