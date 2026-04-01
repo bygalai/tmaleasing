@@ -78,6 +78,7 @@ const BAD_IMAGE_SUBSTRINGS = [
   'no-image',
   'default.',
   'empty',
+  'local/templates',
 ]
 
 const TITLE_BLOCKLIST = new Set([
@@ -239,21 +240,75 @@ function isBadImageCandidate(value: string | null | undefined): boolean {
   return false
 }
 
+function imageCandidateScore(url: string): number {
+  const lowered = url.toLowerCase()
+  let points = 0
+  if (/\.(jpe?g|png|webp)(\?|#|$)/i.test(lowered)) points += 5
+  if (
+    lowered.includes('/upload/') ||
+    lowered.includes('/images/') ||
+    lowered.includes('/media/') ||
+    lowered.includes('/photo/')
+  ) {
+    points += 3
+  }
+  if (lowered.includes('/img/')) points -= 1
+  return points
+}
+
+/** Отсекаем иконки и мелкие превью по параметрам в URL. */
+function isLikelyAlfaleasingLotPhotoUrl(absoluteUrl: string): boolean {
+  if (isBadImageCandidate(absoluteUrl)) return false
+  const lower = absoluteUrl.toLowerCase()
+  const wMatch = lower.match(/[?&]w=(\d+)/)
+  if (wMatch && Number(wMatch[1]) > 0 && Number(wMatch[1]) <= 64) return false
+  const hMatch = lower.match(/[?&]h=(\d+)/)
+  if (hMatch && Number(hMatch[1]) > 0 && Number(hMatch[1]) <= 64) return false
+  return imageCandidateScore(absoluteUrl) >= 3
+}
+
+const MAX_IMAGES_PER_LISTING = 60
+
+function normalizeImageDedupeKey(absoluteUrl: string): string {
+  try {
+    const u = new URL(absoluteUrl)
+    u.hash = ''
+    return `${u.hostname.toLowerCase()}${u.pathname.toLowerCase()}`
+  } catch {
+    return absoluteUrl.toLowerCase()
+  }
+}
+
+/**
+ * Собирает все уникальные фото лота: порядок тиров — JSON-LD → DOM-галерея → карточка каталога → HTML.
+ * В каждом тире сохраняется порядок появления (как на сайте).
+ */
+function mergeUniqueListingImages(tiers: ReadonlyArray<ReadonlyArray<string>>): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const tier of tiers) {
+    for (const raw of tier) {
+      if (typeof raw !== 'string') continue
+      const abs = toAbsoluteUrl(raw.trim())
+      if (!abs || !isAlfaleasingUrl(abs)) continue
+      if (!isLikelyAlfaleasingLotPhotoUrl(abs)) continue
+      const key = normalizeImageDedupeKey(abs)
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push(abs)
+      if (out.length >= MAX_IMAGES_PER_LISTING) return out
+    }
+  }
+  return out
+}
+
 function pickBestImageCandidate(candidates: Array<string | null | undefined>): string | null {
   const urls = candidates
     .map((v) => (typeof v === 'string' ? v.trim() : ''))
     .filter((v) => v.length > 0)
     .filter((v) => !isBadImageCandidate(v))
   if (urls.length === 0) return null
-  const score = (url: string): number => {
-    const lowered = url.toLowerCase()
-    let points = 0
-    if (/\.(jpe?g|png|webp)(\?|#|$)/i.test(lowered)) points += 5
-    if (lowered.includes('/upload/') || lowered.includes('/images/') || lowered.includes('/media/') || lowered.includes('/photo/')) points += 3
-    if (lowered.includes('/img/')) points -= 1
-    return points
-  }
-  urls.sort((a, b) => score(b) - score(a))
+  urls.sort((a, b) => imageCandidateScore(b) - imageCandidateScore(a))
   return urls[0]
 }
 
@@ -922,6 +977,56 @@ async function loadAllCatalogItems(page: Page, maxIterations: number): Promise<v
   }
 }
 
+/**
+ * Фото из видимой галереи карточки (main / Product / article), без логотипов и мелких иконок.
+ * Дополняет JSON-LD и regex-HTML, чтобы забрать все слайды, а не одно превью.
+ */
+async function extractDetailPageGalleryUrls(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const BAD_SUB = [
+      'logo',
+      'favicon',
+      'sprite',
+      'icon',
+      'apple-touch',
+      'banner',
+      'telegram',
+      'vk.',
+      'placeholder',
+      '1x1',
+      'no-image',
+      'default.',
+      'local/templates',
+    ]
+    function isBadSrc(src: string): boolean {
+      if (!src) return true
+      const s = src.toLowerCase().trim()
+      if (s.startsWith('data:')) return true
+      if (s.endsWith('.svg')) return true
+      return BAD_SUB.some((b) => s.includes(b))
+    }
+    const root =
+      document.querySelector('main') ??
+      document.querySelector('[itemtype*="Product"]') ??
+      document.querySelector('article') ??
+      document.body
+    if (!root) return []
+    const imgs = root.querySelectorAll<HTMLImageElement>('img[src], img[data-src]')
+    const out: string[] = []
+    const seen = new Set<string>()
+    for (const img of imgs) {
+      const src = (img.getAttribute('data-src') || img.getAttribute('src') || '').trim()
+      if (!src || isBadSrc(src)) continue
+      if (img.naturalWidth > 0 && img.naturalWidth < 100) continue
+      if (img.naturalHeight > 0 && img.naturalHeight < 70) continue
+      if (seen.has(src)) continue
+      seen.add(src)
+      out.push(src)
+    }
+    return out
+  })
+}
+
 // --- enrich each detail page and build ScrapedListing ---
 
 async function enrichAndCollectListing(
@@ -934,6 +1039,7 @@ async function enrichAndCollectListing(
     await page.goto(detailUrl, { waitUntil: 'domcontentloaded' })
     await sleep(process.env.CI ? 2000 : 4000)
     const html = await page.content()
+    const fromDomGallery = await extractDetailPageGalleryUrls(page)
 
     const jsonLd = extractJsonLdBlocks(html)
     const fromLd = extractDetailFromJsonLd(jsonLd)
@@ -944,11 +1050,6 @@ async function enrichAndCollectListing(
     const price = fromLd.price ?? fromHtml.price ?? card?.price ?? null
     const mileage = fromLd.mileage ?? fromHtml.mileage ?? card?.mileage ?? null
     const year = fromLd.year ?? fromHtml.year ?? card?.year ?? null
-    const allImageCandidates = [
-      ...(card?.imageUrls ?? []),
-      ...(fromLd.imageUrls ?? []),
-      ...(fromHtml.imageUrls ?? []),
-    ].filter(Boolean) as string[]
     const city = card?.city ?? fromHtml.city ?? null
     const vin = fromLd.vin ?? fromHtml.vin ?? null
     const engine = card?.engine ?? fromLd.engine ?? fromHtml.engine ?? null
@@ -967,12 +1068,26 @@ async function enrichAndCollectListing(
       return null
     }
 
-    const absoluteImage = allImageCandidates.length > 0
-      ? toAbsoluteUrl(pickBestImageCandidate(allImageCandidates))
-      : null
-    if (!absoluteImage || isBadImageCandidate(absoluteImage)) {
-      console.warn(`  skip (no real image): ${title.slice(0, 40)}...`)
-      return null
+    let images = mergeUniqueListingImages([
+      fromLd.imageUrls ?? [],
+      fromDomGallery,
+      card?.imageUrls ?? [],
+      fromHtml.imageUrls ?? [],
+    ])
+
+    if (images.length === 0) {
+      const allImageCandidates = [
+        ...(card?.imageUrls ?? []),
+        ...(fromLd.imageUrls ?? []),
+        ...(fromHtml.imageUrls ?? []),
+        ...fromDomGallery,
+      ].filter(Boolean) as string[]
+      const absoluteImage = allImageCandidates.length > 0 ? toAbsoluteUrl(pickBestImageCandidate(allImageCandidates)) : null
+      if (!absoluteImage || isBadImageCandidate(absoluteImage)) {
+        console.warn(`  skip (no real image): ${title.slice(0, 40)}...`)
+        return null
+      }
+      images = [absoluteImage]
     }
 
     const listing: ScrapedListing = {
@@ -982,7 +1097,7 @@ async function enrichAndCollectListing(
       original_price: null,
       mileage,
       year,
-      images: [absoluteImage],
+      images,
       listing_url: detailUrl,
       source: SOURCE,
       category,

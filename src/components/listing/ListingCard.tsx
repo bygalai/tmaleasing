@@ -4,6 +4,9 @@ import { formatMileage, formatMileageHours, splitPriceRub } from '../../lib/form
 import type { Listing } from '../../types/marketplace'
 import { ImageWithFallback } from './ImageWithFallback'
 
+/** Единая высота карточки (px); виртуализаторы импортируют это значение. */
+export const LISTING_CARD_HEIGHT_PX = 452
+
 const isTrailer = (item: Listing) => item.category === 'pricepy'
 
 type ListingCardProps = {
@@ -43,11 +46,11 @@ export const ListingCard = memo(function ListingCard({ item, isFavorite, onToggl
   return (
     <Link
       to={`/listing/${item.id}`}
-      className="relative mx-auto block w-full max-w-[560px] overflow-hidden rounded-lg border border-black/10 bg-white/70 shadow-[0_14px_45px_rgba(15,23,42,0.10)] transition active:scale-[0.99]"
-      style={{ WebkitTapHighlightColor: 'transparent' }}
+      className="relative mx-auto flex w-full max-w-[560px] flex-col overflow-hidden rounded-lg border border-black/10 bg-white/70 shadow-[0_14px_45px_rgba(15,23,42,0.10)] transition active:scale-[0.99]"
+      style={{ WebkitTapHighlightColor: 'transparent', height: LISTING_CARD_HEIGHT_PX }}
     >
-    <article>
-      <div className="relative h-48 w-full">
+    <article className="flex h-full min-h-0 flex-col">
+      <div className="relative h-48 w-full shrink-0">
         <ImageWithFallback
           imageUrls={item.imageUrls}
           alt={item.title}
@@ -89,40 +92,44 @@ export const ListingCard = memo(function ListingCard({ item, isFavorite, onToggl
         </div>
       </div>
 
-      <div className="relative space-y-3 border-t border-black/10 bg-white p-4">
-        <div>
-          <p className="relative z-10 font-sf text-lg font-semibold uppercase text-slate-900">{item.title}</p>
-          <p className="relative z-10 font-sf text-sm text-slate-600">{item.subtitle}</p>
-        </div>
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden border-t border-black/10 bg-white p-4">
+        <div className="flex min-h-0 flex-1 flex-col gap-3">
+          <div className="min-h-0 shrink-0">
+            <p className="relative z-10 line-clamp-2 font-sf text-lg font-semibold uppercase leading-tight text-slate-900">
+              {item.title}
+            </p>
+            <p className="relative z-10 mt-1 line-clamp-2 font-sf text-sm leading-snug text-slate-600">{item.subtitle}</p>
+          </div>
 
-        <div className="relative z-10 grid grid-cols-[auto_1fr] gap-2 font-sf text-xs text-slate-600">
-          <span>{item.year ? `Год: ${item.year}` : 'Год: —'}</span>
-          {isTrailer(item) ? (
-            <span>Наработка: {formatMileageHours(item.mileageKm)}</span>
-          ) : (
-            <span>Пробег: {formatMileage(item.mileageKm)}</span>
-          )}
-          <span>{item.location ?? '—'}</span>
-          <span>Проверенный лот</span>
-        </div>
+          <div className="relative z-10 grid min-h-0 shrink-0 grid-cols-[auto_1fr] gap-x-2 gap-y-1 font-sf text-xs text-slate-600">
+            <span className="whitespace-nowrap">{item.year ? `Год: ${item.year}` : 'Год: —'}</span>
+            {isTrailer(item) ? (
+              <span className="min-w-0 truncate text-right">Наработка: {formatMileageHours(item.mileageKm)}</span>
+            ) : (
+              <span className="min-w-0 truncate text-right">Пробег: {formatMileage(item.mileageKm)}</span>
+            )}
+            <span className="min-w-0 truncate">{item.location ?? '—'}</span>
+            <span className="text-right text-slate-600">Проверенный лот</span>
+          </div>
 
-        <div className="relative z-10 flex flex-col gap-0.5">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex flex-col gap-0.5">
-              {item.originalPriceRub != null && item.originalPriceRub > item.priceRub ? (
-                <p className="font-sf text-base tabular-nums text-slate-500">
-                  <span className="line-through">{splitPriceRub(item.originalPriceRub).amount}</span>
+          <div className="relative z-10 mt-auto flex shrink-0 flex-col gap-0.5 pt-1">
+            <div className="flex items-end justify-between gap-2">
+              <div className="min-w-0 flex flex-col gap-0.5">
+                {item.originalPriceRub != null && item.originalPriceRub > item.priceRub ? (
+                  <p className="font-sf text-base tabular-nums text-slate-500">
+                    <span className="line-through">{splitPriceRub(item.originalPriceRub).amount}</span>
+                    <span className="align-top text-slate-400 text-[0.75em]"> ₽</span>
+                  </p>
+                ) : null}
+                <p className="font-sf text-2xl font-bold tabular-nums tracking-tight text-[#FF5C34]">
+                  {splitPriceRub(item.priceRub).amount}
                   <span className="align-top text-slate-400 text-[0.75em]"> ₽</span>
                 </p>
-              ) : null}
-              <p className="font-sf text-2xl font-bold tabular-nums tracking-tight text-[#FF5C34]">
-                {splitPriceRub(item.priceRub).amount}
-                <span className="align-top text-slate-400 text-[0.75em]"> ₽</span>
-              </p>
+              </div>
+              <span className="shrink-0 font-sf rounded-xl bg-[#FF5C34] px-3 py-2 text-sm font-semibold text-white transition hover:opacity-90 sm:px-4 sm:py-2.5">
+                Подробнее
+              </span>
             </div>
-            <span className="font-sf rounded-xl bg-[#FF5C34] px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90">
-              Подробнее
-            </span>
           </div>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { AppLayout } from './components/layout/AppLayout'
 import { ScrollToTop } from './components/ScrollToTop'
@@ -6,12 +6,13 @@ import { BottomNav } from './components/navigation/BottomNav'
 import { SplashScreen } from './components/SplashScreen'
 import { useFavorites } from './hooks/useFavorites'
 import { useListings } from './hooks/useListings'
-import { AboutPage } from './pages/AboutPage'
-import { CatalogPage } from './pages/CatalogPage'
 import { CategorySelectionPage } from './pages/CategorySelectionPage'
-import { FavoritesPage } from './pages/FavoritesPage'
-import { ListingPage } from './pages/ListingPage'
-import { ProfilePage } from './pages/ProfilePage'
+
+const CatalogPage = lazy(() => import('./pages/CatalogPage').then((m) => ({ default: m.CatalogPage })))
+const ListingPage = lazy(() => import('./pages/ListingPage').then((m) => ({ default: m.ListingPage })))
+const FavoritesPage = lazy(() => import('./pages/FavoritesPage').then((m) => ({ default: m.FavoritesPage })))
+const ProfilePage = lazy(() => import('./pages/ProfilePage').then((m) => ({ default: m.ProfilePage })))
+const AboutPage = lazy(() => import('./pages/AboutPage').then((m) => ({ default: m.AboutPage })))
 
 function Header() {
   const location = useLocation()
@@ -163,7 +164,8 @@ function App() {
         <Header />
       </header>
 
-      <Routes>
+      <Suspense fallback={<div className="min-h-[40vh]" aria-hidden />}>
+        <Routes>
           <Route
             path="/"
             element={
@@ -202,9 +204,10 @@ function App() {
           />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/about" element={<AboutPage />} />
-        <Route path="/catalog" element={<Navigate to="/" replace />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+          <Route path="/catalog" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
 
       {!isSearchFocused && <BottomNav favoritesCount={favorites.length} />}
     </AppLayout>

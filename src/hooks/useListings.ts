@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { readListingsCache, writeListingsCache } from '../lib/listings-cache'
 import { getSupabaseClient } from '../lib/supabase'
 import { extractBrand } from '../lib/filters'
 import { inferEquipmentType, normalizeBodyType } from '../lib/equipment-types'
@@ -327,62 +328,92 @@ function getErrorMessage(err: unknown): string {
   }
 }
 
+const LISTINGS_SELECT =
+  'id,category,title,price,original_price,mileage,year,images,listing_url,created_at,city,vin,engine,transmission,drivetrain,body_color,body_type,source,listing_price_analysis(market_low,market_avg,market_high,sample_size)'
+
 export function useListings() {
-  const [items, setItems] = useState<Listing[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  const cacheBootstrap = useMemo(() => {
+    const cached = readListingsCache()
+    return {
+      items: cached ?? [],
+      hadCache: Boolean(cached && cached.length > 0),
+    }
+  }, [])
+
+  const [items, setItems] = useState<Listing[]>(cacheBootstrap.items)
+  const [isLoading, setIsLoading] = useState(!cacheBootstrap.hadCache)
   const [isAlmostReady, setIsAlmostReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
+    const hadCachedOnStart = cacheBootstrap.hadCache
 
     async function load() {
       if (cancelled) return
-      setIsLoading(true)
+      if (!hadCachedOnStart) {
+        setIsLoading(true)
+      }
       setError(null)
 
       try {
         const supabase = getSupabaseClient()
 
-        // Supabase SaaS по умолчанию отдаёт максимум ~1000 строк за запрос.
-        // Собираем данные батчами по 1000, чтобы поддерживать до 10k лотов.
         const PAGE_SIZE = 1000
         const MAX_ITEMS = 10_000
-        const allRows: ListingsRow[] = []
-        let from = 0
-        let totalCount: number | null = null
-        // eslint-disable-next-line no-constant-condition
-        while (true) {
-          const query = supabase
-            .from('listings')
-            .select(
-              'id,category,title,price,original_price,mileage,year,images,listing_url,created_at,city,vin,engine,transmission,drivetrain,body_color,body_type,source,listing_price_analysis(market_low,market_avg,market_high,sample_size)',
-              from === 0 ? { count: 'exact' as const } : undefined,
-            )
-            .order('created_at', { ascending: false })
-            .range(from, from + PAGE_SIZE - 1)
 
-          const { data, error: supabaseError, count } = await query
-          if (supabaseError) throw supabaseError
+        const firstRes = await supabase
+          .from('listings')
+          .select(LISTINGS_SELECT, { count: 'exact' })
+          .order('created_at', { ascending: false })
+          .range(0, PAGE_SIZE - 1)
 
-          if (from === 0 && typeof count === 'number') {
-            totalCount = count
+        if (firstRes.error) throw firstRes.error
+
+        const allRows: ListingsRow[] = [...((firstRes.data ?? []) as ListingsRow[])]
+        const totalCount = typeof firstRes.count === 'number' ? firstRes.count : null
+        const targetTotal = Math.min(totalCount ?? allRows.length, MAX_ITEMS)
+
+        if (allRows.length === PAGE_SIZE && targetTotal > PAGE_SIZE) {
+          const extraStarts: number[] = []
+          for (let from = PAGE_SIZE; from < targetTotal; from += PAGE_SIZE) {
+            extraStarts.push(from)
           }
-
-          const batch = (data ?? []) as ListingsRow[]
-          allRows.push(...batch)
-
-          if (batch.length < PAGE_SIZE || allRows.length >= MAX_ITEMS) {
-            // eslint-disable-next-line no-console
-            console.log(
-              'useListings: fetched rows',
-              allRows.length,
-              totalCount != null ? `(server count ≈ ${totalCount})` : '',
-            )
-            break
+          const rest = await Promise.all(
+            extraStarts.map((from) =>
+              supabase
+                .from('listings')
+                .select(LISTINGS_SELECT)
+                .order('created_at', { ascending: false })
+                .range(from, Math.min(from + PAGE_SIZE - 1, targetTotal - 1)),
+            ),
+          )
+          for (const r of rest) {
+            if (r.error) throw r.error
+            allRows.push(...((r.data ?? []) as ListingsRow[]))
           }
-          from += PAGE_SIZE
+        } else if (allRows.length === PAGE_SIZE && (totalCount == null || totalCount > PAGE_SIZE)) {
+          let from = PAGE_SIZE
+          while (allRows.length < MAX_ITEMS) {
+            const { data, error: pageError } = await supabase
+              .from('listings')
+              .select(LISTINGS_SELECT)
+              .order('created_at', { ascending: false })
+              .range(from, from + PAGE_SIZE - 1)
+            if (pageError) throw pageError
+            const batch = (data ?? []) as ListingsRow[]
+            allRows.push(...batch)
+            if (batch.length < PAGE_SIZE) break
+            from += PAGE_SIZE
+          }
         }
+
+        // eslint-disable-next-line no-console
+        console.log(
+          'useListings: fetched rows',
+          allRows.length,
+          totalCount != null ? `(server count ≈ ${totalCount})` : '',
+        )
 
         if (!cancelled) setIsAlmostReady(true)
 
@@ -475,16 +506,19 @@ export function useListings() {
 
         if (!cancelled) {
           setItems(mapped)
+          writeListingsCache(mapped)
         }
       } catch (err) {
-        // Supabase часто возвращает ошибки не как instance of Error.
-        // Показываем реальную причину, чтобы можно было быстро починить.
         const rawMessage = getErrorMessage(err)
         const message = rawMessage ? `Supabase: ${rawMessage}` : 'Не удалось загрузить список техники из Supabase'
-        console.error('Failed to load listings from Supabase:', err)
         if (!cancelled) {
-          setError(message)
-          setItems([])
+          if (hadCachedOnStart) {
+            console.warn('Listings refresh failed; showing cached catalog.', err)
+          } else {
+            console.error('Failed to load listings from Supabase:', err)
+            setError(message)
+            setItems([])
+          }
         }
       } finally {
         if (!cancelled) setIsLoading(false)
@@ -496,7 +530,7 @@ export function useListings() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [cacheBootstrap.hadCache])
 
   return { items, isLoading, isAlmostReady, error }
 }

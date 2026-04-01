@@ -1,9 +1,10 @@
 import { memo, useRef, useLayoutEffect, useReducer } from 'react'
 import { useWindowVirtualizer } from '@tanstack/react-virtual'
-import { ListingCard } from './ListingCard'
+import { ListingCard, LISTING_CARD_HEIGHT_PX } from './ListingCard'
 import type { Listing } from '../../types/marketplace'
 
-const CARD_HEIGHT_ESTIMATE = 420
+/** Высота строки: карточка + отступ pb-4 под следующий ряд */
+const CARD_HEIGHT_ESTIMATE = LISTING_CARD_HEIGHT_PX + 16
 const OVERSCAN = 3
 const VIRTUALIZE_THRESHOLD = 15
 

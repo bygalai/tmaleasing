@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useDeferredValue, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { HorizontalListingStrip } from '../components/listing/HorizontalListingStrip'
 import { VirtualizedListingGrid } from '../components/listing/VirtualizedListingGrid'
 import { SearchBar, type SuggestionItem } from '../components/listing/SearchBar'
 import { FilterPanel } from '../components/listing/FilterPanel'
@@ -495,7 +496,7 @@ export function CategorySelectionPage({
               <h2 className="font-sf font-bold tracking-tight text-slate-900 [font-size:clamp(28px,7vw,34px)]">
                 Выгодно
               </h2>
-              <VirtualizedListingGrid
+              <HorizontalListingStrip
                 items={discountedItems}
                 isFavorite={isFavorite}
                 toggleFavorite={toggleFavorite}

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { getUserDisplayName, notifyAppReady } from '../lib/telegram'
 
-const MIN_DISPLAY_MS = 1800
+/** Минимум на сплэше: слишком долго задерживает вход (особенно при медленном канале в РФ). */
+const MIN_DISPLAY_MS = 550
 const FADEOUT_MS = 350
 const HINT_DELAY_MS = 4000
 const HINT_PHRASE_DURATION_MS = 3000

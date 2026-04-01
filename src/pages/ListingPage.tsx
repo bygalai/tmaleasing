@@ -136,7 +136,7 @@ export function ListingPage({ items, isFavorite, toggleFavorite }: ListingPagePr
           else window.open('https://t.me/GONKACONFBOT', '_blank', 'noreferrer')
         }}
       >
-        {submitting ? 'Отправка…' : submitted ? 'Заявка отправлена!' : 'Оставить заявку'}
+        {submitting ? 'Отправка…' : submitted ? 'Заявка отправлена!' : 'Связаться с менеджером'}
       </button>
     </article>
   )
