@@ -27,11 +27,11 @@ class RootErrorBoundary extends Component<{ children: ReactNode }, { err: Error 
             fontFamily: 'system-ui, sans-serif',
             maxWidth: 520,
             margin: '48px auto',
-            color: '#0f172a',
+            color: '#fafafa',
           }}
         >
           <h1 style={{ fontSize: 20, fontWeight: 700 }}>Не удалось загрузить приложение</h1>
-          <p style={{ color: '#64748b', marginTop: 12, lineHeight: 1.5 }}>
+          <p style={{ color: '#a1a1aa', marginTop: 12, lineHeight: 1.5 }}>
             Обновите страницу. Если экран был белым после прошлого визита — в браузере очистите данные сайта для этого
             адреса (битый кэш каталога). Для локальной разработки нужен файл <code>.env</code> с{' '}
             <code>VITE_SUPABASE_URL</code> и <code>VITE_SUPABASE_ANON_KEY</code>.
@@ -42,7 +42,7 @@ class RootErrorBoundary extends Component<{ children: ReactNode }, { err: Error 
               padding: 12,
               fontSize: 12,
               overflow: 'auto',
-              background: '#f1f5f9',
+              background: '#18181b',
               borderRadius: 8,
             }}
           >

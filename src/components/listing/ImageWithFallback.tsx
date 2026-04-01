@@ -12,7 +12,7 @@ type ImageWithFallbackProps = {
 }
 
 const PLACEHOLDER_STYLE =
-  'bg-slate-200 text-slate-400 flex items-center justify-center text-sm font-sf'
+  'bg-zinc-900 text-zinc-600 flex items-center justify-center text-sm font-sf'
 
 export function ImageWithFallback({
   imageUrls,

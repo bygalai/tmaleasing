@@ -38,8 +38,8 @@ body,
 
 body {
   min-width: 320px;
-  color: #0f172a;
-  background: #ffffff;
+  color: #fafafa;
+  background: #000000;
 }
 
 /* ── Liquid Glass ────────────────────────────────────────── */
@@ -53,23 +53,19 @@ body {
 
   background: linear-gradient(
     168deg,
-    rgba(255, 255, 255, 0.82) 0%,
-    rgba(255, 255, 255, 0.52) 45%,
-    rgba(255, 255, 255, 0.64) 100%
+    rgba(24, 24, 27, 0.92) 0%,
+    rgba(9, 9, 11, 0.88) 48%,
+    rgba(24, 24, 27, 0.9) 100%
   );
 
-  border: 1px solid rgba(255, 255, 255, 0.70);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 
   box-shadow:
-    0 0 0 0.5px rgba(15, 23, 42, 0.06),
-    0 1px 2px rgba(15, 23, 42, 0.04),
-    0 4px 12px rgba(15, 23, 42, 0.05),
-    0 14px 36px rgba(15, 23, 42, 0.09),
-    inset 0 0.5px 0 rgba(255, 255, 255, 1),
-    inset 0 -0.5px 0 rgba(15, 23, 42, 0.04);
+    0 0 0 0.5px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
 
-  -webkit-backdrop-filter: blur(40px) saturate(190%) brightness(108%);
-  backdrop-filter: blur(40px) saturate(190%) brightness(108%);
+  -webkit-backdrop-filter: blur(28px) saturate(140%);
+  backdrop-filter: blur(28px) saturate(140%);
 
   transition:
     border-color 320ms cubic-bezier(0.4, 0, 0.2, 1),
@@ -84,12 +80,12 @@ body {
   inset: 0;
   border-radius: inherit;
   background: radial-gradient(
-    ellipse 260px 140px at var(--mx) var(--my),
-    rgba(255, 255, 255, 0.95) 0%,
-    rgba(255, 255, 255, 0.30) 30%,
-    transparent 68%
+    ellipse 220px 120px at var(--mx) var(--my),
+    rgba(255, 255, 255, 0.14) 0%,
+    rgba(255, 255, 255, 0.04) 35%,
+    transparent 70%
   );
-  opacity: 0.45;
+  opacity: 0.85;
   transition: opacity 500ms cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 2;
 }
@@ -101,24 +97,8 @@ body {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background:
-    linear-gradient(
-      178deg,
-      rgba(255, 255, 255, 0.72) 0%,
-      transparent 35%
-    ),
-    radial-gradient(
-      500px 180px at 90% 120%,
-      rgba(255, 92, 52, 0.07),
-      transparent 65%
-    ),
-    radial-gradient(
-      400px 200px at -10% 100%,
-      rgba(59, 130, 246, 0.05),
-      transparent 65%
-    );
-  mix-blend-mode: overlay;
-  opacity: 0.70;
+  background: linear-gradient(178deg, rgba(255, 255, 255, 0.06) 0%, transparent 42%);
+  opacity: 1;
   z-index: 2;
 }
 
@@ -128,15 +108,11 @@ body {
 
 /* Focus — brand-accent glow ring */
 .liquid-glass:focus-within {
-  border-color: rgba(255, 92, 52, 0.28);
+  border-color: rgba(255, 92, 52, 0.45);
   box-shadow:
-    0 0 0 0.5px rgba(255, 92, 52, 0.18),
-    0 0 0 3px rgba(255, 92, 52, 0.08),
-    0 1px 2px rgba(15, 23, 42, 0.04),
-    0 4px 12px rgba(15, 23, 42, 0.05),
-    0 14px 36px rgba(15, 23, 42, 0.09),
-    inset 0 0.5px 0 rgba(255, 255, 255, 1),
-    inset 0 -0.5px 0 rgba(15, 23, 42, 0.04);
+    0 0 0 0.5px rgba(255, 92, 52, 0.25),
+    0 0 0 3px rgba(255, 92, 52, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .liquid-glass:focus-within::before {
@@ -163,9 +139,9 @@ body {
   background: linear-gradient(
     105deg,
     transparent 30%,
-    rgba(255, 255, 255, 0.50) 47%,
-    rgba(255, 255, 255, 0.78) 50%,
-    rgba(255, 255, 255, 0.50) 53%,
+    rgba(255, 255, 255, 0.08) 47%,
+    rgba(255, 255, 255, 0.14) 50%,
+    rgba(255, 255, 255, 0.08) 53%,
     transparent 70%
   );
   transform: skewX(-18deg);
@@ -217,15 +193,11 @@ body {
 .liquid-glass-apple-dark {
   position: relative;
   overflow: hidden;
-  /* Lighter / more transparent "iOS-like" glass on white background */
-  background: rgba(255, 255, 255, 0.30);
-  border: 1px solid rgba(15, 23, 42, 0.10);
-  box-shadow:
-    0 22px 60px rgba(15, 23, 42, 0.16),
-    inset 0 1px 0 rgba(255, 255, 255, 0.75),
-    inset 0 -1px 0 rgba(15, 23, 42, 0.08);
-  -webkit-backdrop-filter: blur(24px) saturate(185%) contrast(110%);
-  backdrop-filter: blur(24px) saturate(185%) contrast(110%);
+  background: rgba(24, 24, 27, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  -webkit-backdrop-filter: blur(20px) saturate(130%);
+  backdrop-filter: blur(20px) saturate(130%);
 }
 
 .liquid-glass-apple-dark::before {
@@ -234,11 +206,8 @@ body {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background:
-    radial-gradient(900px 220px at 25% 0%, rgba(255, 255, 255, 0.70), transparent 68%),
-    radial-gradient(560px 320px at 110% 130%, rgba(255, 92, 52, 0.14), transparent 72%),
-    radial-gradient(560px 340px at -20% 140%, rgba(59, 130, 246, 0.12), transparent 74%);
-  opacity: 0.75;
+  background: radial-gradient(600px 200px at 30% 0%, rgba(255, 255, 255, 0.08), transparent 65%);
+  opacity: 1;
 }
 
 .liquid-glass-apple-dark::after {
@@ -247,22 +216,19 @@ body {
   position: absolute;
   inset: 1px;
   border-radius: inherit;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.08));
-  mix-blend-mode: overlay;
-  opacity: 0.55;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent);
+  opacity: 1;
 }
 
 /* Bottom nav — более прозрачное стекло, менее закруглённое */
 .liquid-glass-nav {
   position: relative;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.18);
-  border: 1px solid rgba(15, 23, 42, 0.06);
-  box-shadow:
-    0 4px 24px rgba(15, 23, 42, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5);
-  -webkit-backdrop-filter: blur(32px) saturate(180%);
-  backdrop-filter: blur(32px) saturate(180%);
+  background: rgba(9, 9, 11, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  -webkit-backdrop-filter: blur(28px) saturate(130%);
+  backdrop-filter: blur(28px) saturate(130%);
 }
 
 .liquid-glass-nav::before {
@@ -271,12 +237,8 @@ body {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: radial-gradient(
-    ellipse 120% 80% at 50% 0%,
-    rgba(255, 255, 255, 0.4) 0%,
-    transparent 60%
-  );
-  opacity: 0.8;
+  background: radial-gradient(ellipse 120% 80% at 50% 0%, rgba(255, 255, 255, 0.06) 0%, transparent 55%);
+  opacity: 1;
 }
 
 /* Splash screen — раскрывающаяся приветственная надпись */
@@ -318,13 +280,12 @@ body {
 .splash-text-loading {
   background: linear-gradient(
     90deg,
-    #0f172a 0%,
-    #0f172a 25%,
-    #FF5C34 40%,
-    #FF5C34 50%,
-    #FF5C34 60%,
-    #0f172a 75%,
-    #0f172a 100%
+    #fafafa 0%,
+    #fafafa 22%,
+    #FF5C34 42%,
+    #FF5C34 58%,
+    #fafafa 78%,
+    #fafafa 100%
   );
   background-size: 200% 100%;
   background-clip: text;

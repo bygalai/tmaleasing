@@ -8,9 +8,8 @@ export function AppLayout({ children }: PropsWithChildren) {
     <div
       className="min-h-dvh w-full"
       style={{
-        background:
-          'radial-gradient(900px 520px at 110% -10%, rgba(255, 92, 52, 0.10), transparent 60%), radial-gradient(820px 480px at -15% 20%, rgba(59, 130, 246, 0.08), transparent 62%), #ffffff',
-        color: '#0f172a',
+        background: '#000000',
+        color: '#fafafa',
       }}
     >
       <main

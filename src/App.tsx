@@ -34,7 +34,7 @@ function Header() {
           type="button"
           onClick={goBack}
           aria-label="Назад в каталог"
-          className="absolute left-0 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-900 transition-all duration-150 active:scale-90 active:opacity-60"
+          className="absolute left-0 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-zinc-100 transition-all duration-150 active:scale-90 active:opacity-60"
         >
           <svg
             aria-hidden="true"
@@ -63,7 +63,7 @@ function Header() {
           type="button"
           onClick={goToCategories}
           aria-label="Назад к выбору раздела"
-          className="absolute left-0 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-900 transition-all duration-150 active:scale-90 active:opacity-60"
+          className="absolute left-0 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-zinc-100 transition-all duration-150 active:scale-90 active:opacity-60"
         >
           <svg
             aria-hidden="true"
@@ -157,7 +157,7 @@ function App() {
       <header
         className={
           isStickyHeader
-            ? 'sticky top-0 z-20 -mx-4 -mt-5 flex items-center justify-center px-4 pt-[max(env(safe-area-inset-top,0px),1.25rem)] pb-3 mb-5 bg-white/95 shadow-sm backdrop-blur-md'
+            ? 'sticky top-0 z-20 -mx-4 -mt-5 flex items-center justify-center px-4 pt-[max(env(safe-area-inset-top,0px),1.25rem)] pb-3 mb-5 border-b border-white/10 bg-black/90 shadow-none backdrop-blur-md'
             : 'mb-5 flex items-center justify-center'
         }
       >

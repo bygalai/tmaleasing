@@ -25,22 +25,7 @@ export function SearchBar({
   onFocusChange,
   onSubmit,
 }: SearchBarProps) {
-  const glassRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-
-  const handlePointerMove = useCallback((e: React.PointerEvent) => {
-    const rect = glassRef.current?.getBoundingClientRect()
-    if (!rect) return
-    const x = ((e.clientX - rect.left) / rect.width) * 100
-    const y = ((e.clientY - rect.top) / rect.height) * 100
-    glassRef.current!.style.setProperty('--mx', `${x}%`)
-    glassRef.current!.style.setProperty('--my', `${y}%`)
-  }, [])
-
-  const handlePointerLeave = useCallback(() => {
-    glassRef.current?.style.setProperty('--mx', '50%')
-    glassRef.current?.style.setProperty('--my', '50%')
-  }, [])
 
   const handleFocus = useCallback(() => {
     onFocusChange?.(true)
@@ -85,13 +70,7 @@ export function SearchBar({
     <div className="mx-auto w-full max-w-[560px] space-y-2">
       <form action="" onSubmit={handleFormSubmit}>
         <label className="block">
-          <div
-            ref={glassRef}
-            className="liquid-glass rounded-none"
-            onPointerMove={handlePointerMove}
-            onPointerLeave={handlePointerLeave}
-          >
-            <span className="liquid-glass-shimmer" aria-hidden="true" />
+          <div className="relative flex items-center rounded-md bg-zinc-900/80 transition-colors duration-150 focus-within:bg-zinc-900">
             <input
               ref={inputRef}
               type="search"
@@ -105,8 +84,8 @@ export function SearchBar({
               autoCorrect="off"
               autoCapitalize="off"
               spellCheck={false}
-              className={`search-bar-input relative z-10 w-full bg-transparent px-4 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-500 font-sf ${
-                value.trim().length > 0 ? 'pr-20' : 'pr-11'
+              className={`search-bar-input min-h-[44px] w-full bg-transparent py-2.5 pl-3.5 text-[15px] font-normal leading-snug text-zinc-100 outline-none placeholder:text-zinc-600 font-sf ${
+                value.trim().length > 0 ? 'pr-[4.25rem]' : 'pr-11'
               }`}
             />
             {value.trim().length > 0 ? (
@@ -114,15 +93,15 @@ export function SearchBar({
                 type="button"
                 aria-label="Очистить"
                 onClick={handleClear}
-                className="absolute right-12 top-1/2 z-10 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                className="absolute right-11 top-1/2 -translate-y-1/2 text-zinc-600 transition-colors hover:text-zinc-400"
               >
                 <svg
                   aria-hidden="true"
                   viewBox="0 0 24 24"
-                  className="h-6 w-6"
+                  className="h-5 w-5"
                   fill="none"
                   stroke="currentColor"
-                  strokeWidth="2"
+                  strokeWidth="1.75"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 >
@@ -133,19 +112,19 @@ export function SearchBar({
             <button
               type="submit"
               aria-label="Поиск"
-              className="absolute right-4 top-1/2 z-10 -translate-y-1/2 text-slate-400"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-600 transition-colors hover:text-zinc-400"
             >
               <svg
                 aria-hidden="true"
                 viewBox="0 0 24 24"
-                className="h-5 w-5"
+                className="h-[18px] w-[18px]"
                 fill="none"
                 stroke="currentColor"
-                strokeWidth="2"
+                strokeWidth="1.75"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               >
-                <circle cx="11" cy="11" r="7" />
+                <circle cx="11" cy="11" r="6.5" />
                 <path d="M20 20l-3.5-3.5" />
               </svg>
             </button>
@@ -154,9 +133,9 @@ export function SearchBar({
       </form>
 
       {suggestions.length > 0 ? (
-        <div className="overflow-hidden rounded-2xl bg-white/80 shadow-sm ring-1 ring-slate-200/80 backdrop-blur-lg">
+        <div className="overflow-hidden rounded-md bg-zinc-900/80">
           {headerLabel ? (
-            <p className="px-3.5 pb-1 pt-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400 font-sf">
+            <p className="px-3.5 pb-1 pt-2.5 text-[10px] font-medium uppercase tracking-[0.14em] text-zinc-600 font-sf">
               {headerLabel}
             </p>
           ) : null}
@@ -169,9 +148,9 @@ export function SearchBar({
                 handleSuggestionSelect(item.label)
               }}
               onClick={(e) => e.preventDefault()}
-              className="group/row flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-[13px] font-sf text-slate-900 transition-colors hover:bg-slate-50 active:bg-[#FFE1D5]"
+              className="group/row flex w-full items-center gap-2.5 border-t border-zinc-800 px-3.5 py-2.5 text-left text-[14px] font-sf font-normal text-zinc-200 first:border-t-0 transition-colors hover:bg-zinc-800/60"
             >
-              <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-slate-400">
+              <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-zinc-600">
                 {item.kind === 'history' ? (
                   <svg
                     aria-hidden="true"
@@ -179,7 +158,7 @@ export function SearchBar({
                     className="h-3.5 w-3.5"
                     fill="none"
                     stroke="currentColor"
-                    strokeWidth="2"
+                    strokeWidth="1.75"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   >
@@ -193,7 +172,7 @@ export function SearchBar({
                     className="h-3.5 w-3.5"
                     fill="none"
                     stroke="currentColor"
-                    strokeWidth="2"
+                    strokeWidth="1.75"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   >
@@ -204,7 +183,7 @@ export function SearchBar({
               </span>
               <span className="flex-1 truncate">{item.label}</span>
               {item.count != null && item.count > 0 ? (
-                <span className="shrink-0 rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] tabular-nums text-slate-500">
+                <span className="shrink-0 tabular-nums text-[11px] text-zinc-600">
                   {item.count}
                 </span>
               ) : null}
@@ -218,7 +197,7 @@ export function SearchBar({
                     e.stopPropagation()
                     onDeleteSuggestion(item.label)
                   }}
-                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-slate-300 hover:text-slate-500"
+                  className="flex h-7 w-7 shrink-0 items-center justify-center text-zinc-600 transition-colors hover:text-zinc-400"
                 >
                   <svg
                     aria-hidden="true"
@@ -226,7 +205,7 @@ export function SearchBar({
                     className="h-3 w-3"
                     fill="none"
                     stroke="currentColor"
-                    strokeWidth="2.5"
+                    strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   >

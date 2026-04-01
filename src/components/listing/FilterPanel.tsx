@@ -190,7 +190,7 @@ export function FilterPanel({
     <div className="fixed inset-0 z-[60] font-sf">
       {/* Backdrop */}
       <div
-        className={`absolute inset-0 bg-black/40 transition-opacity duration-300 ${
+        className={`absolute inset-0 bg-black/70 transition-opacity duration-300 ${
           isAnimating ? 'opacity-100' : 'opacity-0'
         }`}
         onClick={handleBackdropClick}
@@ -199,19 +199,19 @@ export function FilterPanel({
       {/* Sheet */}
       <div
         ref={sheetRef}
-        className={`absolute bottom-0 left-0 right-0 flex max-h-[88vh] flex-col rounded-t-[20px] bg-white shadow-[0_-8px_40px_rgba(15,23,42,0.12)] transition-transform duration-300 ease-out ${
+        className={`absolute bottom-0 left-0 right-0 flex max-h-[88vh] flex-col rounded-t-md border-t border-x border-white/10 bg-zinc-950 shadow-none transition-transform duration-300 ease-out ${
           isAnimating ? 'translate-y-0' : 'translate-y-full'
         }`}
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
         {/* Handle */}
         <div className="flex shrink-0 justify-center pb-1 pt-3">
-          <div className="h-[5px] w-9 rounded-full bg-slate-300" />
+          <div className="h-[3px] w-8 rounded-full bg-zinc-600" />
         </div>
 
         {/* Header */}
         <div className="flex shrink-0 items-center justify-between px-5 pb-4 pt-1">
-          <h2 className="text-[18px] font-bold tracking-tight text-slate-900">
+          <h2 className="text-[17px] font-bold uppercase tracking-wide text-zinc-100">
             Фильтры
           </h2>
           {hasChanges && (
@@ -329,11 +329,11 @@ export function FilterPanel({
         </div>
 
         {/* Fixed bottom button */}
-        <div className="absolute bottom-0 left-0 right-0 border-t border-slate-100 bg-white/95 px-5 pb-[max(env(safe-area-inset-bottom,12px),12px)] pt-3 backdrop-blur-md">
+        <div className="absolute bottom-0 left-0 right-0 border-t border-white/10 bg-zinc-950/98 px-5 pb-[max(env(safe-area-inset-bottom,12px),12px)] pt-3 backdrop-blur-md">
           <button
             type="button"
             onClick={handleApply}
-            className="w-full rounded-2xl bg-[#FF5C34] py-3.5 text-[15px] font-semibold text-white shadow-[0_4px_16px_rgba(255,92,52,0.3)] transition-all active:scale-[0.98] active:bg-[#e5522e]"
+            className="w-full rounded-md border border-white/10 bg-[#FF5C34] py-3.5 text-[14px] font-semibold uppercase tracking-wide text-white transition-all active:scale-[0.99] active:bg-[#e5522e]"
           >
             {resultCount === 0
               ? 'Ничего не найдено'
@@ -357,7 +357,7 @@ function FilterSection({
 }) {
   return (
     <div className="mb-6">
-      <p className="mb-2.5 text-[13px] font-semibold uppercase tracking-wider text-slate-400">
+      <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
         {title}
       </p>
       {children}
@@ -380,16 +380,16 @@ function FilterChip({
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[13px] font-medium transition-all active:scale-[0.96] ${
+      className={`inline-flex items-center gap-1.5 rounded-md border px-3.5 py-2 text-[13px] font-medium transition-all active:scale-[0.98] ${
         selected
-          ? 'bg-[#FF5C34] text-white shadow-[0_2px_8px_rgba(255,92,52,0.25)]'
-          : 'bg-slate-50 text-slate-700 ring-1 ring-inset ring-slate-200/80'
+          ? 'border-[#FF5C34] bg-[#FF5C34] text-white'
+          : 'border-white/10 bg-zinc-900 text-zinc-300'
       }`}
     >
       <span>{label}</span>
       <span
         className={`text-[11px] tabular-nums ${
-          selected ? 'text-white/70' : 'text-slate-400'
+          selected ? 'text-white/70' : 'text-zinc-500'
         }`}
       >
         {count}
@@ -415,7 +415,7 @@ function RangeInput({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       autoComplete="off"
-      className="w-full rounded-xl border border-slate-200 bg-slate-50/80 px-4 py-3 text-[14px] text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-[#FF5C34]/40 focus:bg-white focus:ring-2 focus:ring-[#FF5C34]/10"
+      className="w-full rounded-md border border-white/10 bg-zinc-900 px-4 py-3 text-[14px] text-zinc-100 outline-none transition-colors placeholder:text-zinc-500 focus:border-[#FF5C34]/50 focus:ring-1 focus:ring-[#FF5C34]/30"
     />
   )
 }

@@ -32,7 +32,7 @@ export function ScrollToTopButton() {
       type="button"
       onClick={scrollToTop}
       aria-label="Наверх"
-      className={`liquid-glass-nav right-4 z-[55] flex h-9 w-9 items-center justify-center rounded-full transition-all duration-300 ease-out active:scale-90 ${
+      className={`liquid-glass-nav right-4 z-[55] flex h-9 w-9 items-center justify-center rounded-md text-zinc-200 transition-all duration-300 ease-out active:scale-90 ${
         visible
           ? 'opacity-100 translate-y-0'
           : 'pointer-events-none opacity-0 translate-y-4'

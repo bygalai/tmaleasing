@@ -1,4 +1,4 @@
-import { Link, useLocation } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 
 type Tab = {
   to: string
@@ -78,11 +78,11 @@ export function BottomNav({ favoritesCount = 0 }: BottomNavProps) {
       style={{ bottom: 'max(env(safe-area-inset-bottom, 0px), 14px)' }}
       aria-label="Навигация"
     >
-      <div className="liquid-glass-nav relative mx-auto flex w-fit items-center justify-center gap-9 rounded-xl px-6 py-3">
+      <div className="liquid-glass-nav relative mx-auto flex w-fit items-center justify-center gap-9 rounded-md px-6 py-3">
         {/* Sliding pill background — капля перетекает при смене таба */}
         {rawIndex >= 0 && (
           <div
-            className="absolute left-4 top-1/2 h-10 w-14 -translate-y-1/2 rounded-full bg-brand/60 transition-all duration-300 ease-out"
+            className="absolute left-4 top-1/2 h-10 w-14 -translate-y-1/2 rounded-md bg-brand/70 transition-all duration-300 ease-out"
             style={{
               transform: `translateX(${activeIndex * SLOT_WIDTH}px) translateY(-50%)`,
             }}
@@ -90,14 +90,17 @@ export function BottomNav({ favoritesCount = 0 }: BottomNavProps) {
           />
         )}
         {tabs.map((tab) => (
-            <Link
+            <NavLink
               key={tab.to}
               to={tab.to}
+              end={tab.to === '/'}
               aria-label={tab.to === '/favorites' && favoritesCount > 0 ? `${tab.label} (${favoritesCount})` : tab.label}
-              className={[
-                'relative z-10 flex h-10 w-10 items-center justify-center text-slate-900 transition-colors',
-                'hover:text-slate-700',
-              ].join(' ')}
+              className={({ isActive }) =>
+                [
+                  'relative z-10 flex h-10 w-10 items-center justify-center transition-colors',
+                  isActive ? 'text-white' : 'text-zinc-500 hover:text-zinc-300',
+                ].join(' ')
+              }
             >
               {tab.icon}
               {tab.to === '/favorites' && favoritesCount > 0 && (
@@ -105,7 +108,7 @@ export function BottomNav({ favoritesCount = 0 }: BottomNavProps) {
                   {favoritesCount > 99 ? '99+' : favoritesCount}
                 </span>
               )}
-            </Link>
+            </NavLink>
         ))}
       </div>
     </nav>

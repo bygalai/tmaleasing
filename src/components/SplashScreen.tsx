@@ -71,7 +71,7 @@ export function SplashScreen({ onReady, isAppReady, isAlmostReady = false }: Spl
 
   return (
     <div
-      className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-white transition-opacity duration-300 ${fading ? 'opacity-0' : 'opacity-100'}`}
+      className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-black transition-opacity duration-300 ${fading ? 'opacity-0' : 'opacity-100'}`}
       style={{
         fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif',
       }}
@@ -97,7 +97,7 @@ export function SplashScreen({ onReady, isAppReady, isAlmostReady = false }: Spl
           {HINT_PHRASES.map((phrase, i) => (
             <span
               key={phrase}
-              className="absolute inset-x-0 top-0 block text-center text-sm font-normal text-slate-500"
+              className="absolute inset-x-0 top-0 block text-center text-sm font-normal text-zinc-500"
               style={{
                 opacity: !isAlmostReady && hintIndex === i ? 1 : 0,
                 transition: `opacity 0.6s ${APPLE_EASING}`,
@@ -108,7 +108,7 @@ export function SplashScreen({ onReady, isAppReady, isAlmostReady = false }: Spl
             </span>
           ))}
           <span
-            className="absolute inset-x-0 top-0 block text-center text-sm font-normal text-slate-500"
+            className="absolute inset-x-0 top-0 block text-center text-sm font-normal text-zinc-500"
             style={{
               opacity: isAlmostReady ? 1 : 0,
               transition: `opacity 0.6s ${APPLE_EASING}`,

@@ -9,10 +9,14 @@ export const LISTING_CARD_HEIGHT_PX = 452
 
 const isTrailer = (item: Listing) => item.category === 'pricepy'
 
+export type ListingCardPricePresentation = 'default' | 'compact'
+
 type ListingCardProps = {
   item: Listing
   isFavorite: boolean
   onToggleFavorite: (id: string) => void
+  /** `compact` — узкая лента «Выгодно»; `default` — каталог / избранное (крупный кегль) */
+  pricePresentation?: ListingCardPricePresentation
 }
 
 function HeartIcon({ filled }: { filled: boolean }) {
@@ -42,11 +46,17 @@ function badgeLabel(item: Listing, badge: Listing['badges'][number]) {
   return `Скидка ${item.discountPercent ?? 0}%`
 }
 
-export const ListingCard = memo(function ListingCard({ item, isFavorite, onToggleFavorite }: ListingCardProps) {
+export const ListingCard = memo(function ListingCard({
+  item,
+  isFavorite,
+  onToggleFavorite,
+  pricePresentation = 'default',
+}: ListingCardProps) {
+  const compact = pricePresentation === 'compact'
   return (
     <Link
       to={`/listing/${item.id}`}
-      className="relative mx-auto flex w-full max-w-[560px] flex-col overflow-hidden rounded-lg border border-black/10 bg-white/70 shadow-[0_14px_45px_rgba(15,23,42,0.10)] transition active:scale-[0.99]"
+      className="relative mx-auto flex w-full max-w-[560px] flex-col overflow-hidden rounded-md border border-white/10 bg-zinc-950 shadow-none transition active:scale-[0.99]"
       style={{ WebkitTapHighlightColor: 'transparent', height: LISTING_CARD_HEIGHT_PX }}
     >
     <article className="flex h-full min-h-0 flex-col">
@@ -79,7 +89,7 @@ export const ListingCard = memo(function ListingCard({ item, isFavorite, onToggl
           </div>
           <button
             type="button"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/80 bg-white shadow-[0_4px_12px_rgba(15,23,42,0.25)] transition active:scale-95 hover:bg-white"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/15 bg-zinc-900 text-zinc-100 shadow-none transition active:scale-95 hover:bg-zinc-800"
             aria-label={isFavorite ? 'Убрать из избранного' : 'Добавить в избранное'}
             onClick={(e) => {
               e.preventDefault()
@@ -92,16 +102,16 @@ export const ListingCard = memo(function ListingCard({ item, isFavorite, onToggl
         </div>
       </div>
 
-      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden border-t border-black/10 bg-white p-4">
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden border-t border-white/10 bg-zinc-950 p-4">
         <div className="flex min-h-0 flex-1 flex-col gap-3">
           <div className="min-h-0 shrink-0">
-            <p className="relative z-10 line-clamp-2 font-sf text-lg font-semibold uppercase leading-tight text-slate-900">
+            <p className="relative z-10 line-clamp-2 font-sf text-lg font-semibold uppercase leading-tight text-zinc-100">
               {item.title}
             </p>
-            <p className="relative z-10 mt-1 line-clamp-2 font-sf text-sm leading-snug text-slate-600">{item.subtitle}</p>
+            <p className="relative z-10 mt-1 line-clamp-2 font-sf text-sm leading-snug text-zinc-400">{item.subtitle}</p>
           </div>
 
-          <div className="relative z-10 grid min-h-0 shrink-0 grid-cols-[auto_1fr] gap-x-2 gap-y-1 font-sf text-xs text-slate-600">
+          <div className="relative z-10 grid min-h-0 shrink-0 grid-cols-[auto_1fr] gap-x-2 gap-y-1 font-sf text-xs text-zinc-500">
             <span className="whitespace-nowrap">{item.year ? `Год: ${item.year}` : 'Год: —'}</span>
             {isTrailer(item) ? (
               <span className="min-w-0 truncate text-right">Наработка: {formatMileageHours(item.mileageKm)}</span>
@@ -109,24 +119,34 @@ export const ListingCard = memo(function ListingCard({ item, isFavorite, onToggl
               <span className="min-w-0 truncate text-right">Пробег: {formatMileage(item.mileageKm)}</span>
             )}
             <span className="min-w-0 truncate">{item.location ?? '—'}</span>
-            <span className="text-right text-slate-600">Проверенный лот</span>
+            <span className="text-right text-zinc-500">Проверенный лот</span>
           </div>
 
           <div className="relative z-10 mt-auto flex shrink-0 flex-col gap-0.5 pt-1">
             <div className="flex items-end justify-between gap-2">
               <div className="min-w-0 flex flex-col gap-0.5">
                 {item.originalPriceRub != null && item.originalPriceRub > item.priceRub ? (
-                  <p className="font-sf text-base tabular-nums text-slate-500">
+                  <p
+                    className={`font-sf tabular-nums text-zinc-400 ${compact ? 'text-sm' : 'text-base'}`}
+                  >
                     <span className="line-through">{splitPriceRub(item.originalPriceRub).amount}</span>
-                    <span className="align-top text-slate-400 text-[0.75em]"> ₽</span>
+                    <span className="align-top text-zinc-500 text-[0.75em]"> ₽</span>
                   </p>
                 ) : null}
-                <p className="font-sf text-2xl font-bold tabular-nums tracking-tight text-[#FF5C34]">
+                <p
+                  className={`font-sf font-bold tabular-nums tracking-tight text-[#FF5C34] ${
+                    compact ? 'text-lg' : 'text-3xl'
+                  }`}
+                >
                   {splitPriceRub(item.priceRub).amount}
-                  <span className="align-top text-slate-400 text-[0.75em]"> ₽</span>
+                  <span className="align-top text-zinc-500 text-[0.75em]"> ₽</span>
                 </p>
               </div>
-              <span className="shrink-0 font-sf rounded-xl bg-[#FF5C34] px-3 py-2 text-sm font-semibold text-white transition hover:opacity-90 sm:px-4 sm:py-2.5">
+              <span
+                className={`shrink-0 font-sf rounded-xl bg-[#FF5C34] font-semibold text-white transition hover:opacity-90 ${
+                  compact ? 'px-2.5 py-1.5 text-xs' : 'px-3 py-2 text-sm sm:px-4 sm:py-2.5'
+                }`}
+              >
                 Подробнее
               </span>
             </div>

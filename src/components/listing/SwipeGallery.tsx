@@ -10,7 +10,7 @@ type SwipeGalleryProps = {
 }
 
 const PLACEHOLDER_STYLE =
-  'bg-slate-200 text-slate-400 flex items-center justify-center text-sm font-sf'
+  'bg-zinc-900 text-zinc-600 flex items-center justify-center text-sm font-sf'
 
 const GALLERY_SCROLL_STYLE = {
   scrollSnapType: 'x mandatory' as const,
@@ -223,7 +223,7 @@ export function SwipeGallery({
   if (validUrls.length === 1) {
     return (
       <div
-        className={`relative flex min-h-0 cursor-pointer items-center justify-center overflow-hidden bg-slate-100 ${className}`}
+        className={`relative flex min-h-0 cursor-pointer items-center justify-center overflow-hidden bg-zinc-950 ${className}`}
         onClick={() => openLightbox(0)}
         onTouchStart={handleGalleryTouchStart}
         onTouchMove={handleGalleryTouchMove}
@@ -252,7 +252,7 @@ export function SwipeGallery({
       <div
         ref={scrollRef}
         data-swipe-gallery
-        className="flex h-full w-full cursor-pointer overflow-x-auto overflow-y-hidden overscroll-x-contain scroll-smooth bg-slate-100 [scrollbar-width:none] [-ms-overflow-style:none]"
+        className="flex h-full w-full cursor-pointer overflow-x-auto overflow-y-hidden overscroll-x-contain scroll-smooth bg-zinc-950 [scrollbar-width:none] [-ms-overflow-style:none]"
         style={GALLERY_SCROLL_STYLE}
         role="region"
         aria-label={`Галерея: ${validUrls.length} фото. Нажмите для просмотра`}

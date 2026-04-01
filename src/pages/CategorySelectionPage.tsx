@@ -123,13 +123,13 @@ function CategoryCard({
   return (
     <Link
       to={category.href}
-      className={`group relative block min-h-[100px] overflow-hidden rounded-2xl transition-transform active:scale-[0.98] ${className}`}
+      className={`group relative block min-h-[100px] overflow-hidden rounded-lg transition-transform active:scale-[0.98] ${className}`}
     >
       <div
         className={`relative flex h-full min-h-full flex-col justify-end p-5 pt-12 ${
           isAccent
             ? 'bg-[#FF5C34] text-white'
-            : 'rounded-2xl border border-slate-200/80 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)]'
+            : 'rounded-lg border border-white/10 bg-zinc-950 shadow-none'
         }`}
       >
         {category.topLeftText ? (
@@ -140,21 +140,21 @@ function CategoryCard({
         <div className="absolute right-4 top-4">
           <ArrowIcon
             className={`h-7 w-7 opacity-70 transition-opacity group-hover:opacity-100 ${
-              isAccent ? 'text-white' : 'text-slate-400'
+              isAccent ? 'text-white' : 'text-zinc-500'
             }`}
           />
         </div>
         <div>
           <p
             className={`font-bold tracking-tight font-sf [font-size:clamp(18px,4.5vw,22px)] ${
-              isAccent ? 'text-white' : 'text-slate-900'
+              isAccent ? 'text-white' : 'text-zinc-100'
             }`}
           >
             {category.label}
           </p>
           <p
             className={`mt-1 text-sm font-sf font-normal ${
-              isAccent ? 'text-white/85' : 'text-slate-500'
+              isAccent ? 'text-white/85' : 'text-zinc-500'
             }`}
           >
             {category.subtitle}
@@ -387,7 +387,7 @@ export function CategorySelectionPage({
             onPointerMove={handleBackPointerMove}
             onPointerLeave={handleBackPointerLeave}
             aria-label="Назад к каталогу"
-            className={`liquid-glass relative z-30 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-slate-900 transition-all duration-300 ease-out active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 ${
+            className={`liquid-glass relative z-30 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-zinc-100 transition-all duration-300 ease-out active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-600 focus-visible:ring-offset-2 focus-visible:ring-offset-black ${
               showSearchBackButton
                 ? 'opacity-100 translate-x-0'
                 : 'pointer-events-none opacity-0 -translate-x-4'
@@ -425,14 +425,14 @@ export function CategorySelectionPage({
       {isShowingResults ? (
         <section className="space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="font-sf font-bold tracking-tight text-slate-900 [font-size:clamp(20px,5vw,26px)]">
+            <h2 className="font-sf font-bold tracking-tight text-zinc-100 [font-size:clamp(20px,5vw,26px)]">
               {normalizedQuery ? 'Результаты поиска' : 'Все лоты'}
             </h2>
             <button
               type="button"
               aria-label="Фильтры"
               onClick={() => setIsFilterOpen(true)}
-              className="relative flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-white transition hover:opacity-90"
+              className="relative flex h-10 items-center gap-2 rounded-md border border-white/10 bg-brand px-4 text-white transition hover:opacity-90"
             >
               <span className="text-[14px] font-medium">Фильтры</span>
               <FilterIcon />
@@ -450,7 +450,7 @@ export function CategorySelectionPage({
               toggleFavorite={toggleFavorite}
             />
           ) : (
-            <p className="text-sm text-slate-600">
+            <p className="text-sm text-zinc-400">
               {normalizedQuery
                 ? `По запросу «${normalizedQuery}» ничего не найдено. Попробуйте другой запрос.`
                 : 'По заданным фильтрам ничего не найдено. Попробуйте изменить параметры.'}
@@ -462,14 +462,14 @@ export function CategorySelectionPage({
       {!isShowingResults ? (
         <>
           <header className="flex items-center justify-between">
-            <h1 className="font-bold tracking-tight text-slate-900 font-sf [font-size:clamp(28px,7vw,34px)]">
+            <h1 className="font-bold tracking-tight text-zinc-100 font-sf [font-size:clamp(28px,7vw,34px)]">
               Каталог
             </h1>
             <button
               type="button"
               aria-label="Фильтры"
               onClick={() => setIsFilterOpen(true)}
-              className="relative flex h-10 items-center gap-2 rounded-xl bg-brand px-4 text-white transition hover:opacity-90"
+              className="relative flex h-10 items-center gap-2 rounded-md border border-white/10 bg-brand px-4 text-white transition hover:opacity-90"
             >
               <span className="text-[14px] font-medium">Фильтры</span>
               <FilterIcon />
@@ -493,7 +493,7 @@ export function CategorySelectionPage({
 
           {discountedItems.length > 0 && (
             <section className="space-y-3">
-              <h2 className="font-sf font-bold tracking-tight text-slate-900 [font-size:clamp(28px,7vw,34px)]">
+              <h2 className="font-sf font-bold tracking-tight text-zinc-100 [font-size:clamp(28px,7vw,34px)]">
                 Выгодно
               </h2>
               <HorizontalListingStrip

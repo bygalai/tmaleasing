@@ -229,7 +229,7 @@ export function CatalogPage({
 
       {/* Filter bar */}
       <div className="mx-auto flex w-full max-w-[560px] items-center justify-between">
-        <p className="text-[13px] font-sf text-slate-500">
+        <p className="text-[13px] font-sf text-zinc-500">
           {isLoading
             ? 'Загрузка...'
             : `${filtered.length.toLocaleString('ru-RU')} ${filtered.length % 10 === 1 && filtered.length % 100 !== 11 ? 'лот' : filtered.length % 10 >= 2 && filtered.length % 10 <= 4 && (filtered.length % 100 < 10 || filtered.length % 100 >= 20) ? 'лота' : 'лотов'}`}
@@ -238,7 +238,7 @@ export function CatalogPage({
           type="button"
           aria-label="Фильтры"
           onClick={() => setIsFilterOpen(true)}
-          className="relative flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[13px] font-medium text-slate-600 transition active:bg-slate-100"
+          className="relative flex items-center gap-1.5 rounded-md border border-white/10 px-3 py-1.5 text-[13px] font-medium text-zinc-400 transition active:bg-white/5"
         >
           <svg
             viewBox="0 0 24 24"
@@ -262,7 +262,7 @@ export function CatalogPage({
       </div>
 
       {error ? (
-        <div className="mx-auto max-w-[560px] rounded-xl border border-[#FF5C34]/40 bg-[#FF5C34]/10 px-3 py-2 text-xs text-[#9A3412]">
+        <div className="mx-auto max-w-[560px] rounded-md border border-[#FF5C34]/35 bg-[#FF5C34]/10 px-3 py-2 text-xs text-zinc-300">
           {error}
         </div>
       ) : null}
@@ -270,7 +270,7 @@ export function CatalogPage({
       {isLoading ? (
         <ListingSkeletonGrid count={3} />
       ) : filtered.length === 0 ? (
-        <div className="mx-auto w-full max-w-[560px] px-2 text-center text-sm font-sf text-slate-900">
+        <div className="mx-auto w-full max-w-[560px] px-2 text-center text-sm font-sf text-zinc-300">
           Ничего не найдено.
           <br />
           Попробуйте изменить запрос или фильтры

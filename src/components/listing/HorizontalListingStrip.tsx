@@ -42,12 +42,12 @@ function SwipeHintOverlay({ phase, stripHeight }: { phase: 'on' | 'exit'; stripH
       aria-hidden
     >
       <div
-        className="absolute inset-y-0 right-0 w-[4.5rem] bg-gradient-to-l from-white via-white/85 to-transparent"
+        className="absolute inset-y-0 right-0 w-[4.5rem] bg-gradient-to-l from-black via-black/90 to-transparent"
         style={{ maskImage: 'linear-gradient(to left, black 0%, black 55%, transparent 100%)' }}
       />
       <div className="relative flex justify-center px-4 pb-1 pt-6">
         <div
-          className={`liquid-glass relative flex max-w-[min(100%,360px)] items-center gap-2 overflow-hidden rounded-full py-2 pl-2 pr-3.5 shadow-[0_10px_40px_rgba(15,23,42,0.14)] transition-[opacity,transform] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
+          className={`liquid-glass relative flex max-w-[min(100%,360px)] items-center gap-2 overflow-hidden rounded-md py-2 pl-2 pr-3.5 shadow-none transition-[opacity,transform] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
             exiting ? 'translate-y-2 scale-[0.97] opacity-0' : 'translate-y-0 scale-100 opacity-100'
           }`}
         >
@@ -76,7 +76,7 @@ function SwipeHintOverlay({ phase, stripHeight }: { phase: 'on' | 'exit'; stripH
               <path d="M9 6l6 6-6 6" />
             </svg>
           </span>
-          <span className="font-sf text-left text-[13px] font-medium leading-snug text-slate-800">
+          <span className="font-sf text-left text-[13px] font-medium leading-snug text-zinc-200">
             Свайпните влево — ещё выгодные лоты
           </span>
         </div>
@@ -176,6 +176,7 @@ export const HorizontalListingStrip = memo(function HorizontalListingStrip({
                 item={item}
                 isFavorite={isFavorite(item.id)}
                 onToggleFavorite={toggleFavorite}
+                pricePresentation="compact"
               />
             </div>
           ))}
@@ -225,6 +226,7 @@ export const HorizontalListingStrip = memo(function HorizontalListingStrip({
                     item={item}
                     isFavorite={isFavorite(item.id)}
                     onToggleFavorite={toggleFavorite}
+                    pricePresentation="compact"
                   />
                 </div>
               </div>

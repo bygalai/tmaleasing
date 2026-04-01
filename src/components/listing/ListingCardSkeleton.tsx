@@ -1,16 +1,16 @@
 function Bone({ className = '' }: { className?: string }) {
-  return <div className={`animate-pulse rounded-md bg-slate-200 ${className}`} />
+  return <div className={`animate-pulse rounded-md bg-zinc-800 ${className}`} />
 }
 
 export function ListingCardSkeleton() {
   return (
     <div
-      className="mx-auto w-full max-w-[560px] overflow-hidden rounded-lg border border-black/10 bg-white/70 shadow-[0_14px_45px_rgba(15,23,42,0.10)]"
+      className="mx-auto w-full max-w-[560px] overflow-hidden rounded-md border border-white/10 bg-zinc-950 shadow-none"
       aria-hidden="true"
     >
       <Bone className="h-48 w-full !rounded-none" />
 
-      <div className="space-y-3 border-t border-black/10 bg-white/60 p-4">
+      <div className="space-y-3 border-t border-white/10 bg-zinc-950 p-4">
         <div className="space-y-2">
           <Bone className="h-5 w-3/4" />
           <Bone className="h-3.5 w-1/2" />

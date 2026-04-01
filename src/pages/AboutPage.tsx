@@ -1,9 +1,9 @@
 export function AboutPage() {
   return (
-    <section className="page-transition rounded-2xl border border-black/10 bg-black/5 p-6 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur-xl">
-      <p className="text-xs tracking-[0.12em] text-slate-500">О НАС</p>
-      <h2 className="mt-2 text-xl font-semibold text-slate-900">GONKA CONFISCATED MARKET</h2>
-      <p className="mt-2 text-sm text-slate-700">
+    <section className="page-transition rounded-md border border-white/10 bg-zinc-950 p-6 shadow-none">
+      <p className="text-xs tracking-[0.2em] text-zinc-500">О НАС</p>
+      <h2 className="mt-2 text-xl font-semibold uppercase tracking-tight text-zinc-100">GONKA CONFISCATED MARKET</h2>
+      <p className="mt-2 text-sm leading-relaxed text-zinc-400">
         Мы строим цифровой маркетплейс конфискованной техники лизинговых компаний с единым поиском,
         аналитикой цены и быстрым выходом на сделку.
       </p>

@@ -30,8 +30,8 @@ export type LeadPayload = {
 }
 
 const FALLBACK_THEME: AppTheme = {
-  bgColor: '#0b0f19',
-  textColor: '#f8fafc',
+  bgColor: '#000000',
+  textColor: '#fafafa',
 }
 
 let cachedTelegramUser: TelegramUser | null | undefined
