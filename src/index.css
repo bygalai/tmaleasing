@@ -156,40 +156,6 @@ body {
   100% { left: 140%; opacity: 0; }
 }
 
-/* Горизонтальная лента «Выгодно»: жест «свайп влево — чуть назад» */
-@keyframes swipe-hint-horizontal {
-  0%,
-  100% {
-    transform: translateX(0);
-  }
-  22% {
-    transform: translateX(14px);
-  }
-  38% {
-    transform: translateX(2px);
-  }
-  54% {
-    transform: translateX(11px);
-  }
-  72% {
-    transform: translateX(-3px);
-  }
-  86% {
-    transform: translateX(0);
-  }
-}
-
-.swipe-hint-arrows-anim {
-  animation: swipe-hint-horizontal 2.35s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .swipe-hint-arrows-anim {
-    animation: none;
-    opacity: 0.9;
-  }
-}
-
 .liquid-glass-apple-dark {
   position: relative;
   overflow: hidden;

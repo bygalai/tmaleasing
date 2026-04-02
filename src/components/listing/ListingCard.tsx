@@ -15,7 +15,7 @@ type ListingCardProps = {
   item: Listing
   isFavorite: boolean
   onToggleFavorite: (id: string) => void
-  /** `compact` — узкая лента «Выгодно»; `default` — каталог / избранное (крупный кегль) */
+  /** `compact` — лента «Выгодно»; `default` — каталог / избранное (крупная плашка текста и цена) */
   pricePresentation?: ListingCardPricePresentation
 }
 
@@ -81,7 +81,7 @@ export const ListingCard = memo(function ListingCard({
               .map((badge) => (
                 <span
                   key={`${item.id}-${badge}`}
-                  className="rounded-lg bg-brand px-2.5 py-1 text-[11px] text-white"
+                  className={`rounded-lg bg-brand text-white ${compact ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-[11px]'}`}
                 >
                   {badgeLabel(item, badge)}
                 </span>
@@ -102,16 +102,34 @@ export const ListingCard = memo(function ListingCard({
         </div>
       </div>
 
-      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden border-t border-white/10 bg-zinc-950 p-4">
-        <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <div
+        className={`relative flex min-h-0 flex-1 flex-col overflow-hidden border-t border-white/10 bg-zinc-950 ${
+          compact ? 'p-3.5' : 'p-4'
+        }`}
+      >
+        <div className={`flex min-h-0 flex-1 flex-col ${compact ? 'gap-2' : 'gap-3'}`}>
           <div className="min-h-0 shrink-0">
-            <p className="relative z-10 line-clamp-2 font-sf text-lg font-semibold uppercase leading-tight text-zinc-100">
+            <p
+              className={`relative z-10 line-clamp-2 font-sf font-semibold uppercase leading-tight text-zinc-100 ${
+                compact ? 'text-base' : 'text-xl'
+              }`}
+            >
               {item.title}
             </p>
-            <p className="relative z-10 mt-1 line-clamp-2 font-sf text-sm leading-snug text-zinc-400">{item.subtitle}</p>
+            <p
+              className={`relative z-10 mt-1 line-clamp-2 font-sf leading-snug text-zinc-400 ${
+                compact ? 'text-xs' : 'text-sm'
+              }`}
+            >
+              {item.subtitle}
+            </p>
           </div>
 
-          <div className="relative z-10 grid min-h-0 shrink-0 grid-cols-[auto_1fr] gap-x-2 gap-y-1 font-sf text-xs text-zinc-500">
+          <div
+            className={`relative z-10 grid min-h-0 shrink-0 grid-cols-[auto_1fr] gap-x-2 gap-y-1 font-sf text-zinc-500 ${
+              compact ? 'text-[11px] leading-snug' : 'text-sm'
+            }`}
+          >
             <span className="whitespace-nowrap">{item.year ? `Год: ${item.year}` : 'Год: —'}</span>
             {isTrailer(item) ? (
               <span className="min-w-0 truncate text-right">Наработка: {formatMileageHours(item.mileageKm)}</span>
