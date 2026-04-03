@@ -156,6 +156,31 @@ body {
   100% { left: 140%; opacity: 0; }
 }
 
+/* «Выгодно»: один раз сдвигаем ряд карточек влево и возвращаем (подсказка свайпа) */
+@keyframes vygodno-row-nudge {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  42% {
+    transform: translate3d(-52px, 0, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.vygodno-nudge-once {
+  animation: vygodno-row-nudge 0.95s cubic-bezier(0.33, 0, 0.2, 1) 1 both;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vygodno-nudge-once {
+    animation: none;
+    will-change: auto;
+  }
+}
+
 .liquid-glass-apple-dark {
   position: relative;
   overflow: hidden;

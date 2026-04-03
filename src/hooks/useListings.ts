@@ -331,6 +331,63 @@ function getErrorMessage(err: unknown): string {
 const LISTINGS_SELECT =
   'id,category,title,price,original_price,mileage,year,images,listing_url,created_at,city,vin,engine,transmission,drivetrain,body_color,body_type,source,listing_price_analysis(market_low,market_avg,market_high,sample_size)'
 
+/** Дедупликация, порядок Europlan внизу, батчевый map — используется и для первой страницы (быстрый вход), и для полного каталога. */
+async function rowsToListings(rows: ListingsRow[]): Promise<Listing[]> {
+  const dedupedRows: ListingsRow[] = []
+  const seenVins = new Set<string>()
+  const seenTitleYearMileage = new Set<string>()
+  for (const row of rows) {
+    const vin = row.vin?.trim().toUpperCase()
+    if (vin) {
+      if (seenVins.has(vin)) continue
+      seenVins.add(vin)
+    } else {
+      const titleNorm = (row.title ?? '').trim().replace(/\s+/g, ' ').toLowerCase()
+      const year = row.year ?? ''
+      const mileage = row.mileage != null ? String(row.mileage).trim() : ''
+      const key = `${titleNorm}|${year}|${mileage}`
+      if (titleNorm && seenTitleYearMileage.has(key)) continue
+      seenTitleYearMileage.add(key)
+    }
+    dedupedRows.push(row)
+  }
+
+  const europlanKey = 'europlan'
+  const nonEuroplan = dedupedRows.filter((row) => row.source?.trim().toLowerCase() !== europlanKey)
+  const europlan = dedupedRows.filter((row) => row.source?.trim().toLowerCase() === europlanKey)
+  const ordered = [...nonEuroplan, ...europlan]
+
+  if (typeof window !== 'undefined') {
+    const anyWindow = window as unknown as { __tmaDeduped?: ListingsRow[] }
+    anyWindow.__tmaDeduped = ordered
+  }
+
+  const BATCH_SIZE = 80
+  const mapped: Listing[] = []
+  for (let i = 0; i < ordered.length; i += BATCH_SIZE) {
+    const batch = ordered.slice(i, i + BATCH_SIZE).map(mapRowToListing)
+    mapped.push(...batch)
+    if (i + BATCH_SIZE < ordered.length) {
+      await new Promise((r) => setTimeout(r, 0))
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    const anyWindow = window as unknown as { __tmaListings?: Listing[] }
+    anyWindow.__tmaListings = mapped
+
+    const byCategory: Record<string, number> = {}
+    for (const item of mapped) {
+      const cat = item.category ?? 'legkovye'
+      byCategory[cat] = (byCategory[cat] ?? 0) + 1
+    }
+    // eslint-disable-next-line no-console
+    console.log('useListings: items by category', byCategory)
+  }
+
+  return mapped
+}
+
 export function useListings() {
   const cacheBootstrap = useMemo(() => {
     const cached = readListingsCache()
@@ -355,6 +412,7 @@ export function useListings() {
         setIsLoading(true)
       }
       setError(null)
+      let showedPartial = false
 
       try {
         const supabase = getSupabaseClient()
@@ -373,6 +431,24 @@ export function useListings() {
         const allRows: ListingsRow[] = [...((firstRes.data ?? []) as ListingsRow[])]
         const totalCount = typeof firstRes.count === 'number' ? firstRes.count : null
         const targetTotal = Math.min(totalCount ?? allRows.length, MAX_ITEMS)
+
+        /** Будут ещё HTTP-запросы — можно показать первую страницу и снять сплэш до конца догрузки. */
+        const needsAdditionalPages =
+          allRows.length === PAGE_SIZE &&
+          (targetTotal > PAGE_SIZE || totalCount == null || totalCount > PAGE_SIZE)
+
+        if (!cancelled) setIsAlmostReady(true)
+
+        // Холодный старт: не ждём все страницы — после первой порции снимаем SplashScreen (см. App isAppReady).
+        if (!hadCachedOnStart && allRows.length > 0 && needsAdditionalPages) {
+          const partialListings = await rowsToListings(allRows)
+          if (!cancelled) {
+            setItems(partialListings)
+            writeListingsCache(partialListings)
+            setIsLoading(false)
+            showedPartial = true
+          }
+        }
 
         if (allRows.length === PAGE_SIZE && targetTotal > PAGE_SIZE) {
           const extraStarts: number[] = []
@@ -415,20 +491,12 @@ export function useListings() {
           totalCount != null ? `(server count ≈ ${totalCount})` : '',
         )
 
-        if (!cancelled) setIsAlmostReady(true)
-
-        const rows = allRows
-
-        // Debug: what exactly вернул Supabase по категориям и источникам
         if (typeof window !== 'undefined') {
-          const anyWindow = window as unknown as {
-            __tmaRows?: ListingsRow[]
-            __tmaDeduped?: ListingsRow[]
-          }
-          anyWindow.__tmaRows = rows
+          const anyWindow = window as unknown as { __tmaRows?: ListingsRow[] }
+          anyWindow.__tmaRows = allRows
 
           const rawCounts: Record<string, number> = {}
-          for (const row of rows) {
+          for (const row of allRows) {
             const cat = (row.category ?? 'null').toString()
             const src = (row.source ?? 'null').toString().toLowerCase()
             const key = `${src}:${cat}`
@@ -438,72 +506,7 @@ export function useListings() {
           console.log('useListings: raw rows by source/category', rawCounts)
         }
 
-        // The source can contain duplicates (e.g. same VIN posted multiple times).
-        // Since we sort by created_at desc, keep the newest row per VIN.
-        // When VIN is missing (common for спецтехника), dedupe by title+year+mileage to avoid identical listings.
-        const dedupedRows: ListingsRow[] = []
-        const seenVins = new Set<string>()
-        const seenTitleYearMileage = new Set<string>()
-        for (const row of rows) {
-          const vin = row.vin?.trim().toUpperCase()
-          if (vin) {
-            if (seenVins.has(vin)) continue
-            seenVins.add(vin)
-          } else {
-            const titleNorm = (row.title ?? '').trim().replace(/\s+/g, ' ').toLowerCase()
-            const year = row.year ?? ''
-            const mileage = row.mileage != null ? String(row.mileage).trim() : ''
-            const key = `${titleNorm}|${year}|${mileage}`
-            if (titleNorm && seenTitleYearMileage.has(key)) continue
-            seenTitleYearMileage.add(key)
-          }
-          dedupedRows.push(row)
-        }
-
-        // Все объявления от Европлана опускаем в самый низ,
-        // сохраняя изначальный порядок внутри каждой группы.
-        const europlanKey = 'europlan'
-        const nonEuroplan = dedupedRows.filter(
-          (row) => row.source?.trim().toLowerCase() !== europlanKey,
-        )
-        const europlan = dedupedRows.filter(
-          (row) => row.source?.trim().toLowerCase() === europlanKey,
-        )
-        const ordered = [...nonEuroplan, ...europlan]
-
-        if (typeof window !== 'undefined') {
-          const anyWindow = window as unknown as {
-            __tmaRows?: ListingsRow[]
-            __tmaDeduped?: ListingsRow[]
-          }
-          anyWindow.__tmaDeduped = ordered
-        }
-
-        // Батчируем mapRowToListing, чтобы не блокировать main thread при 1000+ лотах
-        const BATCH_SIZE = 80
-        const mapped: Listing[] = []
-        for (let i = 0; i < ordered.length; i += BATCH_SIZE) {
-          const batch = ordered.slice(i, i + BATCH_SIZE).map(mapRowToListing)
-          mapped.push(...batch)
-          if (i + BATCH_SIZE < ordered.length) {
-            await new Promise((r) => setTimeout(r, 0))
-          }
-        }
-
-        // Debug: expose items and per-category counts in browser console
-        if (typeof window !== 'undefined') {
-          const anyWindow = window as unknown as { __tmaListings?: Listing[] }
-          anyWindow.__tmaListings = mapped
-
-          const byCategory: Record<string, number> = {}
-          for (const item of mapped) {
-            const cat = item.category ?? 'legkovye'
-            byCategory[cat] = (byCategory[cat] ?? 0) + 1
-          }
-          // eslint-disable-next-line no-console
-          console.log('useListings: items by category', byCategory)
-        }
-
+        const mapped = await rowsToListings(allRows)
         if (!cancelled) {
           setItems(mapped)
           writeListingsCache(mapped)
@@ -514,6 +517,8 @@ export function useListings() {
         if (!cancelled) {
           if (hadCachedOnStart) {
             console.warn('Listings refresh failed; showing cached catalog.', err)
+          } else if (showedPartial) {
+            console.warn('Listings: догрузка полного каталога не удалась; показана первая порция.', err)
           } else {
             console.error('Failed to load listings from Supabase:', err)
             setError(message)
