@@ -201,6 +201,8 @@ export default async function handler(req: any, res: any) {
             [
               {
                 text: 'Начать',
+                // Цвет кнопки в чате: в API нет чёрного, только danger / success / primary.
+                // Без `style` — нейтральный стиль клиента (часто тёмно-серый), не синий primary.
                 web_app: { url },
               },
             ],

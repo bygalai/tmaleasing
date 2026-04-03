@@ -34,23 +34,6 @@ const FALLBACK_THEME: AppTheme = {
   textColor: '#fafafa',
 }
 
-/** Фирменный «хурмовый» оранжевый — фон Main Button в Telegram (как в аватаре / UI) */
-const BRAND_MAIN_BUTTON_COLOR = '#FF5C34'
-const BRAND_MAIN_BUTTON_TEXT_COLOR = '#ffffff'
-
-function applyMainButtonBrandColors(): void {
-  const mb = window.Telegram?.WebApp?.MainButton
-  if (!mb?.setParams) return
-  try {
-    mb.setParams({
-      color: BRAND_MAIN_BUTTON_COLOR,
-      text_color: BRAND_MAIN_BUTTON_TEXT_COLOR,
-    })
-  } catch {
-    /* старые клиенты / не Mini App */
-  }
-}
-
 let cachedTelegramUser: TelegramUser | null | undefined
 
 export function initializeTelegram(): void {
@@ -64,7 +47,6 @@ export function initializeTelegram(): void {
   if (!webApp) return
 
   webApp.expand()
-  applyMainButtonBrandColors()
 }
 
 /** Вызвать, когда приложение готово к показу (после SplashScreen). */
@@ -73,7 +55,6 @@ export function notifyAppReady(): void {
   if (webApp) {
     webApp.ready()
   }
-  applyMainButtonBrandColors()
 }
 
 export function getTelegramUserFromInitData(): TelegramUser | undefined {
