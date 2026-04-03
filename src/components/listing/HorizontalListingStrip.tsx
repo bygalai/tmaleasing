@@ -101,7 +101,7 @@ export const HorizontalListingStrip = memo(function HorizontalListingStrip({
             className={`flex gap-4 ${rowNudgeClass}`}
             onAnimationEnd={handleNudgeEnd}
           >
-            {items.map((item) => (
+            {items.map((item, index) => (
               <div
                 key={item.id}
                 className="w-[min(85vw,300px)] shrink-0 snap-center [scroll-snap-align:center]"
@@ -111,6 +111,7 @@ export const HorizontalListingStrip = memo(function HorizontalListingStrip({
                   isFavorite={isFavorite(item.id)}
                   onToggleFavorite={toggleFavorite}
                   pricePresentation="compact"
+                  imagePriority={index < 3}
                 />
               </div>
             ))}
@@ -159,6 +160,7 @@ export const HorizontalListingStrip = memo(function HorizontalListingStrip({
                     isFavorite={isFavorite(item.id)}
                     onToggleFavorite={toggleFavorite}
                     pricePresentation="compact"
+                    imagePriority={vi.index < 3}
                   />
                 </div>
               </div>

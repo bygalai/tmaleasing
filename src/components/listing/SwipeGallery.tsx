@@ -236,7 +236,10 @@ export function SwipeGallery({
         <img
           src={validUrls[0]}
           alt={alt}
-          loading="lazy"
+          sizes="100vw"
+          loading="eager"
+          decoding="async"
+          fetchPriority="high"
           onError={() => handleImageError(validUrls[0])}
           className="min-h-0 min-w-0 max-h-full max-w-full shrink-0 object-contain object-center select-none"
           draggable={false}
@@ -275,7 +278,10 @@ export function SwipeGallery({
             <img
               src={url}
               alt={`${alt} — фото ${i + 1}`}
+              sizes="100vw"
               loading={i === 0 ? 'eager' : 'lazy'}
+              decoding="async"
+              fetchPriority={i === 0 ? 'high' : 'low'}
               onError={() => handleImageError(url)}
               {...imageProps}
             />
@@ -359,10 +365,13 @@ export function SwipeGallery({
                     <img
                       src={url}
                       alt={`${alt} — фото ${i + 1}`}
+                      sizes="100vw"
                       className="h-auto max-h-full w-auto max-w-full object-contain select-none"
                       draggable={false}
                       referrerPolicy="no-referrer"
-                      loading="eager"
+                      loading={Math.abs(i - lightboxIndex) <= 1 ? 'eager' : 'lazy'}
+                      decoding="async"
+                      fetchPriority={i === lightboxIndex ? 'high' : 'low'}
                       style={{ touchAction: 'pan-x' }}
                       onClick={(e) => e.stopPropagation()}
                     />

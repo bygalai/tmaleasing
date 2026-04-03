@@ -23,12 +23,13 @@ export function FavoritesPage({ items, isFavorite, toggleFavorite }: FavoritesPa
 
   return (
     <section className="page-transition grid gap-4 pb-4">
-      {favorites.map((item) => (
+      {favorites.map((item, index) => (
         <ListingCard
           key={item.id}
           item={item}
           isFavorite={isFavorite(item.id)}
           onToggleFavorite={toggleFavorite}
+          imagePriority={index < 4}
         />
       ))}
       <ScrollToTopButton />

@@ -42,12 +42,13 @@ export const VirtualizedListingGrid = memo(function VirtualizedListingGrid({
   if (items.length <= VIRTUALIZE_THRESHOLD) {
     return (
       <div className="grid gap-4 pb-4">
-        {items.map((item) => (
+        {items.map((item, index) => (
           <ListingCard
             key={item.id}
             item={item}
             isFavorite={isFavorite(item.id)}
             onToggleFavorite={toggleFavorite}
+            imagePriority={index < 4}
           />
         ))}
       </div>
@@ -81,6 +82,7 @@ export const VirtualizedListingGrid = memo(function VirtualizedListingGrid({
                   item={item}
                   isFavorite={isFavorite(item.id)}
                   onToggleFavorite={toggleFavorite}
+                  imagePriority={virtualRow.index < 4}
                 />
               </div>
             </div>

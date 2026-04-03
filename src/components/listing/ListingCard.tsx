@@ -17,6 +17,8 @@ type ListingCardProps = {
   onToggleFavorite: (id: string) => void
   /** `compact` — лента «Выгодно»; `default` — каталог / избранное (крупная плашка текста и цена) */
   pricePresentation?: ListingCardPricePresentation
+  /** Первые карточки на экране — выше приоритет загрузки фото (LCP). */
+  imagePriority?: boolean
 }
 
 function HeartIcon({ filled }: { filled: boolean }) {
@@ -51,6 +53,7 @@ export const ListingCard = memo(function ListingCard({
   isFavorite,
   onToggleFavorite,
   pricePresentation = 'default',
+  imagePriority = false,
 }: ListingCardProps) {
   const compact = pricePresentation === 'compact'
   return (
@@ -65,7 +68,8 @@ export const ListingCard = memo(function ListingCard({
           imageUrls={item.imageUrls}
           alt={item.title}
           className="h-full w-full object-cover"
-          loading="lazy"
+          loading={imagePriority ? 'eager' : 'lazy'}
+          fetchPriority={imagePriority ? 'high' : undefined}
           showPlaceholderWhenFailed
         />
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
