@@ -78,7 +78,7 @@ export function SearchBar({
               onChange={(event) => onChange(event.target.value)}
               onFocus={handleFocus}
               onBlur={handleBlur}
-              placeholder="Найдите свою гонку"
+              placeholder="Найти свою гонку"
               enterKeyHint="search"
               autoComplete="off"
               autoCorrect="off"
