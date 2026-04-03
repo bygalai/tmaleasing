@@ -33,6 +33,9 @@ type TelegramWebApp = {
    // Строка initData, которую Telegram пробрасывает в Mini App
   initData?: string
   initDataUnsafe?: TelegramWebAppInitDataUnsafe
+  /** Bot API 7.7+: отключает вертикальные свайпы закрытия/сворачивания Mini App (конфликт со скроллом). */
+  disableVerticalSwipes?: () => void
+  enableVerticalSwipes?: () => void
 }
 
 interface Window {

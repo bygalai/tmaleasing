@@ -94,7 +94,7 @@ export const HorizontalListingStrip = memo(function HorizontalListingStrip({
       <div className="relative -mx-4" style={{ minHeight: STRIP_VIEWPORT_HEIGHT }}>
         <div
           ref={scrollRef}
-          className="overflow-x-auto overflow-y-hidden px-4 pb-3 pt-0 scroll-smooth snap-x snap-mandatory"
+          className="touch-pan-x overflow-x-auto overflow-y-hidden px-4 pb-3 pt-0 scroll-smooth snap-x snap-mandatory"
           style={{ WebkitOverflowScrolling: 'touch' }}
         >
           <div
@@ -127,7 +127,7 @@ export const HorizontalListingStrip = memo(function HorizontalListingStrip({
     <div className="relative -mx-4" style={{ minHeight: STRIP_VIEWPORT_HEIGHT }}>
       <div
         ref={scrollRef}
-        className="overflow-x-auto overflow-y-hidden px-4 pb-3"
+        className="touch-pan-x overflow-x-auto overflow-y-hidden px-4 pb-3"
         style={{
           WebkitOverflowScrolling: 'touch',
           height: STRIP_VIEWPORT_HEIGHT,

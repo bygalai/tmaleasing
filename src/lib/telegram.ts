@@ -54,6 +54,11 @@ export function notifyAppReady(): void {
   const webApp = window.Telegram?.WebApp
   if (webApp) {
     webApp.ready()
+    try {
+      webApp.disableVerticalSwipes?.()
+    } catch {
+      /* ignore */
+    }
   }
 }
 
