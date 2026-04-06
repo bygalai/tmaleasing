@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { ListingCard, LISTING_CARD_HEIGHT_PX } from './ListingCard'
 import type { Listing } from '../../types/marketplace'
@@ -12,6 +12,27 @@ const VIRTUALIZE_THRESHOLD = 16
 
 /** Один раз за сессию вкладки: короткая анимация сдвига ряда */
 const NUDGE_SESSION_KEY = 'tma:vygodno-scroll-nudge-once'
+/** Горизонтальная позиция ленты — чтобы после «Назад» со страницы лота не сбрасывать свайп. */
+const SCROLL_POS_KEY = 'tma:vygodno-scroll-left'
+
+function readSavedScrollLeft(): number {
+  try {
+    const raw = sessionStorage.getItem(SCROLL_POS_KEY)
+    if (raw == null) return 0
+    const n = Number(raw)
+    return Number.isFinite(n) && n > 0 ? n : 0
+  } catch {
+    return 0
+  }
+}
+
+function writeSavedScrollLeft(left: number): void {
+  try {
+    sessionStorage.setItem(SCROLL_POS_KEY, String(Math.max(0, Math.round(left))))
+  } catch {
+    /* ignore */
+  }
+}
 
 function readNudgeDone(): boolean {
   try {
@@ -42,6 +63,60 @@ export const HorizontalListingStrip = memo(function HorizontalListingStrip({
 }: HorizontalListingStripProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [playNudge, setPlayNudge] = useState(false)
+
+  /** После возврата с /listing/:id восстанавливаем scrollLeft (у виртуализатора scrollWidth может стать известен на следующем кадре). */
+  useLayoutEffect(() => {
+    const saved = readSavedScrollLeft()
+    if (saved <= 0) return
+
+    const apply = (): void => {
+      const node = scrollRef.current
+      if (!node) return
+      const max = Math.max(0, node.scrollWidth - node.clientWidth)
+      if (max <= 0) return
+      node.scrollLeft = Math.min(saved, max)
+    }
+
+    apply()
+    let rafInner = 0
+    const rafOuter = requestAnimationFrame(() => {
+      apply()
+      rafInner = requestAnimationFrame(apply)
+    })
+    const tShort = window.setTimeout(apply, 0)
+    const tLong = window.setTimeout(apply, 120)
+
+    return () => {
+      cancelAnimationFrame(rafOuter)
+      cancelAnimationFrame(rafInner)
+      window.clearTimeout(tShort)
+      window.clearTimeout(tLong)
+    }
+  }, [items.length])
+
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+
+    let throttleId = 0
+    const flush = () => {
+      throttleId = 0
+      const node = scrollRef.current
+      if (node) writeSavedScrollLeft(node.scrollLeft)
+    }
+
+    const onScroll = () => {
+      if (throttleId) return
+      throttleId = window.setTimeout(flush, 100)
+    }
+
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      if (throttleId) window.clearTimeout(throttleId)
+      writeSavedScrollLeft(el.scrollLeft)
+      el.removeEventListener('scroll', onScroll)
+    }
+  }, [items.length])
 
   const virtualizer = useVirtualizer({
     count: items.length,
