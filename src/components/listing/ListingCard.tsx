@@ -4,8 +4,10 @@ import { formatMileage, formatMileageHours, splitPriceRub } from '../../lib/form
 import type { Listing } from '../../types/marketplace'
 import { ImageWithFallback } from './ImageWithFallback'
 
-/** Единая высота карточки (px); виртуализаторы импортируют это значение. */
+/** Единая высота карточки (px); виртуализаторы каталога импортируют это значение. */
 export const LISTING_CARD_HEIGHT_PX = 452
+/** Лента «Выгодно»: ниже общей, без flex-дыры между сеткой и ценой. */
+export const LISTING_CARD_COMPACT_HEIGHT_PX = 412
 
 const isTrailer = (item: Listing) => item.category === 'pricepy'
 
@@ -60,10 +62,13 @@ export const ListingCard = memo(function ListingCard({
     <Link
       to={`/listing/${item.id}`}
       className="relative mx-auto flex w-full max-w-[560px] flex-col overflow-hidden rounded-md border border-white/10 bg-zinc-950 shadow-none transition active:scale-[0.99]"
-      style={{ WebkitTapHighlightColor: 'transparent', height: LISTING_CARD_HEIGHT_PX }}
+      style={{
+        WebkitTapHighlightColor: 'transparent',
+        height: compact ? LISTING_CARD_COMPACT_HEIGHT_PX : LISTING_CARD_HEIGHT_PX,
+      }}
     >
     <article className="flex h-full min-h-0 flex-col">
-      <div className="relative h-48 w-full shrink-0">
+      <div className={`relative w-full shrink-0 ${compact ? 'h-52' : 'h-48'}`}>
         <ImageWithFallback
           imageUrls={item.imageUrls}
           alt={item.title}
@@ -108,30 +113,40 @@ export const ListingCard = memo(function ListingCard({
 
       <div
         className={`relative flex min-h-0 flex-1 flex-col overflow-hidden border-t border-white/10 bg-zinc-950 ${
-          compact ? 'p-3.5' : 'p-4'
+          compact ? 'px-3.5 pt-2.5 pb-2.5' : 'p-4'
         }`}
       >
-        <div className={`flex min-h-0 flex-1 flex-col ${compact ? 'gap-2' : 'gap-3'}`}>
+        <div
+          className={`flex min-h-0 flex-col ${compact ? 'gap-1.5' : 'min-h-0 flex-1 gap-3'}`}
+        >
           <div className="min-h-0 shrink-0">
-            <p
-              className={`relative z-10 line-clamp-2 font-sf font-semibold uppercase leading-tight text-zinc-100 ${
-                compact ? 'text-base' : 'text-xl'
-              }`}
-            >
-              {item.title}
-            </p>
-            <p
-              className={`relative z-10 mt-1 line-clamp-2 font-sf leading-snug text-zinc-400 ${
-                compact ? 'text-xs' : 'text-sm'
-              }`}
-            >
-              {item.subtitle}
-            </p>
+            {compact ? (
+              <div className="h-[2.8125rem] overflow-hidden">
+                <p className="relative z-10 line-clamp-2 font-sf text-lg font-semibold uppercase leading-tight text-zinc-100">
+                  {item.title}
+                </p>
+              </div>
+            ) : (
+              <p className="relative z-10 line-clamp-2 font-sf text-xl font-semibold uppercase leading-tight text-zinc-100">
+                {item.title}
+              </p>
+            )}
+            {compact ? (
+              <div className="mt-0.5 h-[2.4375rem] overflow-hidden">
+                <p className="relative z-10 line-clamp-2 font-sf text-sm leading-snug text-zinc-400">
+                  {item.subtitle}
+                </p>
+              </div>
+            ) : (
+              <p className="relative z-10 mt-1 line-clamp-2 font-sf text-sm leading-snug text-zinc-400">
+                {item.subtitle}
+              </p>
+            )}
           </div>
 
           <div
-            className={`relative z-10 grid min-h-0 shrink-0 grid-cols-[auto_1fr] gap-x-2 gap-y-1 font-sf text-zinc-500 ${
-              compact ? 'text-[11px] leading-snug' : 'text-sm'
+            className={`relative z-10 grid shrink-0 grid-cols-[auto_1fr] gap-x-2 gap-y-1 font-sf text-zinc-500 ${
+              compact ? 'h-[2.375rem] content-start overflow-hidden text-xs leading-snug' : 'min-h-0 text-sm'
             }`}
           >
             <span className="whitespace-nowrap">{item.year ? `Год: ${item.year}` : 'Год: —'}</span>
@@ -144,9 +159,17 @@ export const ListingCard = memo(function ListingCard({
             <span className="text-right text-zinc-500">Проверенный лот</span>
           </div>
 
-          <div className="relative z-10 mt-auto flex shrink-0 flex-col gap-0.5 pt-1">
+          <div
+            className={`relative z-10 flex shrink-0 flex-col gap-0.5 ${
+              compact ? 'mt-2 pt-0' : 'mt-auto pt-1'
+            }`}
+          >
             <div className="flex items-end justify-between gap-2">
-              <div className="min-w-0 flex flex-col gap-0.5">
+              <div
+                className={`min-w-0 flex flex-col gap-0.5 ${
+                  compact ? 'min-h-[3.125rem] justify-end' : ''
+                }`}
+              >
                 {item.originalPriceRub != null && item.originalPriceRub > item.priceRub ? (
                   <p
                     className={`font-sf tabular-nums text-zinc-400 ${compact ? 'text-sm' : 'text-base'}`}
@@ -154,10 +177,12 @@ export const ListingCard = memo(function ListingCard({
                     <span className="line-through">{splitPriceRub(item.originalPriceRub).amount}</span>
                     <span className="align-top text-zinc-500 text-[0.75em]"> ₽</span>
                   </p>
+                ) : compact ? (
+                  <div className="h-[1.125rem] shrink-0" aria-hidden />
                 ) : null}
                 <p
                   className={`font-sf font-bold tabular-nums tracking-tight text-[#FF5C34] ${
-                    compact ? 'text-lg' : 'text-3xl'
+                    compact ? 'text-xl' : 'text-3xl'
                   }`}
                 >
                   {splitPriceRub(item.priceRub).amount}

@@ -1,11 +1,11 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { ListingCard, LISTING_CARD_HEIGHT_PX } from './ListingCard'
+import { ListingCard, LISTING_CARD_COMPACT_HEIGHT_PX } from './ListingCard'
 import type { Listing } from '../../types/marketplace'
 
 /** Ширина колонки: карточка 300px + отступ справа между слайдами */
 const COLUMN_STRIDE = 316
-const STRIP_VIEWPORT_HEIGHT = LISTING_CARD_HEIGHT_PX
+const STRIP_VIEWPORT_HEIGHT = LISTING_CARD_COMPACT_HEIGHT_PX
 const OVERSCAN = 5
 /** Ниже порога — простой flex-ряд без виртуализатора */
 const VIRTUALIZE_THRESHOLD = 16
