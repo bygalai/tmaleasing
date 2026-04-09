@@ -13,6 +13,11 @@ type ImageWithFallbackProps = {
   onAllFailed?: () => void
   /** Показать нейтральный placeholder вместо битой иконки, если все изображения не загрузились */
   showPlaceholderWhenFailed?: boolean
+  /**
+   * Горизонтальная карусель родителя: касания проходят к скроллу (iOS/WebKit),
+   * картинка не перехватывает pan.
+   */
+  passiveImgTouches?: boolean
 }
 
 const PLACEHOLDER_STYLE =
@@ -29,6 +34,7 @@ export function ImageWithFallback({
   sizes = DEFAULT_SIZES,
   onAllFailed,
   showPlaceholderWhenFailed = false,
+  passiveImgTouches = false,
 }: ImageWithFallbackProps) {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [allFailed, setAllFailed] = useState(false)
@@ -81,7 +87,7 @@ export function ImageWithFallback({
   return (
     <div className="relative h-full w-full">
       {showShimmer ? (
-        <div className="absolute inset-0 animate-pulse bg-zinc-200" aria-hidden />
+        <div className="pointer-events-none absolute inset-0 animate-pulse bg-zinc-200" aria-hidden />
       ) : null}
       <img
         ref={imgRef}
@@ -89,8 +95,12 @@ export function ImageWithFallback({
         alt={alt}
         sizes={sizes}
         decoding="async"
+        draggable={false}
         {...(fetchPriority != null ? { fetchPriority } : {})}
-        className={`${className} ${showShimmer ? 'opacity-0' : 'opacity-100'} transition-opacity duration-200`}
+        className={`${className} ${showShimmer ? 'opacity-0' : 'opacity-100'} transition-opacity duration-200 ${
+          passiveImgTouches ? 'pointer-events-none select-none' : ''
+        }`}
+        style={passiveImgTouches ? { touchAction: 'pan-x' } : undefined}
         loading={loading}
         referrerPolicy="no-referrer"
         onError={handleError}

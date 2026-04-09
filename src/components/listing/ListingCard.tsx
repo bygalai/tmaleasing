@@ -69,7 +69,7 @@ export const ListingCard = memo(function ListingCard({
         height: compact ? LISTING_CARD_COMPACT_HEIGHT_PX : LISTING_CARD_HEIGHT_PX,
       }}
     >
-      <div className="relative shrink-0">
+      <div className="relative min-w-0 shrink-0">
         <ListingFeedGallery
           imageUrls={item.imageUrls}
           alt={item.title}

@@ -285,6 +285,11 @@ body {
   color: transparent;
 }
 
+/* Карусель фото в ленте: не перехватывать горизонтальный свайп */
+[data-feed-gallery] img {
+  -webkit-user-drag: none;
+}
+
 /* Page transition — subtle enter animation on route change */
 @keyframes page-enter {
   from {

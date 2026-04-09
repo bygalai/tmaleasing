@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { ImageWithFallback } from './ImageWithFallback'
 
 type ListingFeedGalleryProps = {
@@ -9,9 +9,11 @@ type ListingFeedGalleryProps = {
   className?: string
 }
 
-const SCROLL_STYLE = {
-  scrollSnapType: 'x mandatory' as const,
-  WebkitOverflowScrolling: 'touch' as const,
+const SCROLL_STYLE: CSSProperties = {
+  scrollSnapType: 'x mandatory',
+  WebkitOverflowScrolling: 'touch',
+  touchAction: 'pan-x',
+  overscrollBehaviorX: 'contain',
 }
 
 export const ListingFeedGallery = memo(function ListingFeedGallery({
@@ -61,21 +63,22 @@ export const ListingFeedGallery = memo(function ListingFeedGallery({
   }
 
   return (
-    <div className={`relative ${hClass} w-full overflow-hidden bg-zinc-100 ${className}`}>
+    <div className={`relative ${hClass} w-full min-w-0 max-w-full overflow-hidden bg-zinc-100 ${className}`}>
       <div
         ref={scrollRef}
         data-feed-gallery
-        className={`flex h-full w-full overflow-x-auto overflow-y-hidden overscroll-x-contain scroll-smooth [scrollbar-width:none] [-ms-overflow-style:none] ${
-          multi ? 'gap-2 px-3' : ''
+        className={`flex h-full min-h-0 min-w-0 w-full max-w-full touch-pan-x overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:none] [-ms-overflow-style:none] ${
+          multi ? 'gap-2 px-3' : 'scroll-smooth'
         }`}
         style={SCROLL_STYLE}
         aria-label={`Фотографии: ${urls.length}`}
+        role="region"
       >
         <style>{`[data-feed-gallery]::-webkit-scrollbar { display: none; }`}</style>
         {urls.map((url, i) => (
           <div
             key={`${url}-${i}`}
-            className={`relative h-full shrink-0 snap-center snap-always overflow-hidden bg-zinc-100 ${
+            className={`relative h-full min-w-0 shrink-0 snap-center snap-always overflow-hidden bg-zinc-100 touch-pan-x ${
               multi ? 'w-[92%] rounded-xl' : 'w-full min-w-full'
             }`}
           >
@@ -86,6 +89,7 @@ export const ListingFeedGallery = memo(function ListingFeedGallery({
               loading={imagePriority && i === 0 ? 'eager' : 'lazy'}
               fetchPriority={imagePriority && i === 0 ? 'high' : undefined}
               showPlaceholderWhenFailed
+              passiveImgTouches={multi}
             />
           </div>
         ))}
