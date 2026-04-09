@@ -268,15 +268,16 @@ body {
   }
 }
 
+/* Светлый сплэш: тёмный текст + пробегающий блик brand */
 .splash-text-loading {
   background: linear-gradient(
     90deg,
-    #fafafa 0%,
-    #fafafa 22%,
-    #FF5C34 42%,
-    #FF5C34 58%,
-    #fafafa 78%,
-    #fafafa 100%
+    #18181b 0%,
+    #18181b 22%,
+    #ff5c34 42%,
+    #ff5c34 58%,
+    #18181b 78%,
+    #18181b 100%
   );
   background-size: 200% 100%;
   background-clip: text;

@@ -71,7 +71,7 @@ export function SplashScreen({ onReady, isAppReady, isAlmostReady = false }: Spl
 
   return (
     <div
-      className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-black transition-opacity duration-300 ${fading ? 'opacity-0' : 'opacity-100'}`}
+      className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-white transition-opacity duration-300 ${fading ? 'opacity-0' : 'opacity-100'}`}
       style={{
         fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif',
       }}
