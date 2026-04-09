@@ -29,24 +29,18 @@ function SpecRow({ label, value }: { label: string; value: string }) {
   )
 }
 
-function HeartBtn({
-  filled,
-  onClick,
-  className = '',
-}: {
-  filled: boolean
-  onClick: () => void
-  className?: string
-}) {
+function HeartIcon({ filled }: { filled: boolean }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={filled ? 'Убрать из избранного' : 'В избранное'}
-      className={`flex h-11 w-11 items-center justify-center rounded-full border border-zinc-200/90 bg-white/95 text-xl shadow-md backdrop-blur-sm transition active:scale-95 ${className}`}
-    >
-      {filled ? <span className="text-brand">♥</span> : <span className="text-zinc-400">♡</span>}
-    </button>
+    <svg viewBox="0 0 24 24" className="h-6 w-6" aria-hidden="true" focusable="false">
+      <path
+        d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
+        fill={filled ? '#FF5C34' : 'none'}
+        stroke={filled ? '#FF5C34' : '#AEAEB2'}
+        strokeWidth={2.2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   )
 }
 
@@ -108,11 +102,6 @@ export function ListingPage({ items, isFavorite, toggleFavorite }: ListingPagePr
             fit="cover"
             surface="light"
           />
-          <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-end p-3">
-            <div className="pointer-events-auto">
-              <HeartBtn filled={fav} onClick={() => toggleFavorite(item.id)} />
-            </div>
-          </div>
         </div>
 
         <div className="space-y-3 pt-2">
@@ -203,18 +192,11 @@ export function ListingPage({ items, isFavorite, toggleFavorite }: ListingPagePr
           </button>
           <button
             type="button"
-            disabled={submitting || submitted}
-            onClick={() => void submitLead()}
-            className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-xl bg-brand text-white shadow-sm shadow-brand/25 transition active:scale-95 disabled:opacity-60"
-            aria-label="Написать по объявлению"
+            onClick={() => toggleFavorite(item.id)}
+            className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-xl border border-zinc-200 bg-white shadow-sm transition active:scale-95"
+            aria-label={fav ? 'Убрать из избранного' : 'В избранное'}
           >
-            <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2">
-              <path
-                d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
+            <HeartIcon filled={fav} />
           </button>
         </div>
       </div>
