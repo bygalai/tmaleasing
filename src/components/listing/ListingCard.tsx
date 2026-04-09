@@ -76,8 +76,8 @@ export const ListingCard = memo(function ListingCard({
           imagePriority={imagePriority}
           density={density}
         />
-        <div className="pointer-events-none absolute inset-x-0 top-0 flex justify-between gap-2 p-3">
-          <div className="pointer-events-auto flex max-w-[72%] flex-wrap gap-1.5">
+        <div className="pointer-events-none absolute inset-x-0 top-0 p-3">
+          <div className="pointer-events-auto flex max-w-[90%] flex-wrap gap-1.5">
             {item.badges
               .filter((badge) => badge !== 'in_stock')
               .map((badge) => (
@@ -92,18 +92,6 @@ export const ListingCard = memo(function ListingCard({
               ))}
           </div>
         </div>
-        <button
-          type="button"
-          className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full border border-zinc-200/90 bg-white/95 shadow-md backdrop-blur-sm transition active:scale-95"
-          aria-label={isFavorite ? 'Убрать из избранного' : 'Добавить в избранное'}
-          onClick={(e) => {
-            e.preventDefault()
-            e.stopPropagation()
-            onToggleFavorite(item.id)
-          }}
-        >
-          <HeartIcon filled={isFavorite} />
-        </button>
       </div>
 
       <Link
