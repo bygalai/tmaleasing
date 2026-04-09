@@ -5,6 +5,9 @@ export default {
     extend: {
       colors: {
         brand: '#FF5C34',
+        'app-bg': '#F2F2F7',
+        'ios-green': '#34C759',
+        'ios-label': '#8E8E93',
       },
     },
   },

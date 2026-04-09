@@ -1,31 +1,24 @@
 function Bone({ className = '' }: { className?: string }) {
-  return <div className={`animate-pulse rounded-md bg-zinc-800 ${className}`} />
+  return <div className={`animate-pulse rounded-lg bg-zinc-200/90 ${className}`} />
 }
 
 export function ListingCardSkeleton() {
   return (
     <div
-      className="mx-auto w-full max-w-[560px] overflow-hidden rounded-md border border-white/10 bg-zinc-950 shadow-none"
+      className="mx-auto w-full max-w-[560px] overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-sm"
       aria-hidden="true"
     >
-      <Bone className="h-48 w-full !rounded-none" />
+      <Bone className="h-[200px] w-full !rounded-none rounded-t-2xl" />
 
-      <div className="space-y-3 border-t border-white/10 bg-zinc-950 p-4">
-        <div className="space-y-2">
-          <Bone className="h-5 w-3/4" />
-          <Bone className="h-3.5 w-1/2" />
-        </div>
+      <div className="space-y-3 p-4">
+        <Bone className="h-8 w-2/3" />
+        <Bone className="h-4 w-full" />
+        <Bone className="h-4 w-4/5" />
+        <Bone className="h-3.5 w-1/2" />
 
-        <div className="grid grid-cols-2 gap-2">
-          <Bone className="h-3 w-20" />
-          <Bone className="h-3 w-28" />
-          <Bone className="h-3 w-24" />
-          <Bone className="h-3 w-24" />
-        </div>
-
-        <div className="flex items-center justify-between">
-          <Bone className="h-7 w-36" />
-          <Bone className="h-10 w-28 !rounded-xl" />
+        <div className="flex gap-2 border-t border-zinc-100 pt-3">
+          <Bone className="h-12 flex-1 !rounded-xl" />
+          <Bone className="h-12 w-12 !rounded-xl" />
         </div>
       </div>
     </div>

@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { readListingsCache, writeListingsCache } from '../lib/listings-cache'
 import { getSupabaseClient } from '../lib/supabase'
 import { extractBrand } from '../lib/filters'
+import { buildNormalizedHaystack, ensureListingsSearchHaystack } from '../lib/search'
 import { inferEquipmentType, normalizeBodyType } from '../lib/equipment-types'
+import { formatListingDisplayTitle } from '../lib/listing-title'
 import type { Listing } from '../types/marketplace'
 
 const FALLBACK_IMAGE =
@@ -279,10 +281,12 @@ function mapRowToListing(row: ListingsRow): Listing {
     marketHighRub = Math.round(priceRub * 1.05)
   }
 
-  return {
+  const displayTitle = formatListingDisplayTitle(row.title ?? '', resolvedBodyType)
+
+  const listing: Listing = {
     id: row.id,
     category: row.category ?? undefined,
-    title: row.title,
+    title: displayTitle,
     subtitle: subtitleParts.length ? subtitleParts.join(' • ') : subtitleFallback,
     priceRub,
     ...(originalPriceRub != null ? { originalPriceRub } : {}),
@@ -310,8 +314,13 @@ function mapRowToListing(row: ListingsRow): Listing {
       : {}),
     source: row.source ?? undefined,
     bodyType: resolvedBodyType ?? undefined,
-    brand: extractBrand(row.title),
+    brand: extractBrand(row.title ?? ''),
     drivetrain: drivetrain ?? undefined,
+  }
+
+  return {
+    ...listing,
+    searchHaystackNormalized: buildNormalizedHaystack(listing),
   }
 }
 
@@ -391,9 +400,18 @@ async function rowsToListings(rows: ListingsRow[]): Promise<Listing[]> {
 export function useListings() {
   const cacheBootstrap = useMemo(() => {
     const cached = readListingsCache()
+    if (!cached || cached.length === 0) {
+      return { items: [] as Listing[], hadCache: false }
+    }
+    const withHaystack = ensureListingsSearchHaystack(cached)
+    if (withHaystack !== cached && typeof window !== 'undefined') {
+      window.setTimeout(() => {
+        writeListingsCache(withHaystack)
+      }, 0)
+    }
     return {
-      items: cached ?? [],
-      hadCache: Boolean(cached && cached.length > 0),
+      items: withHaystack,
+      hadCache: true,
     }
   }, [])
 

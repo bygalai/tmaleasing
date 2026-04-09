@@ -1,11 +1,21 @@
 import { useCallback, useEffect, useDeferredValue, useMemo, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { VirtualizedListingGrid } from '../components/listing/VirtualizedListingGrid'
-import { SearchBar, type SuggestionItem } from '../components/listing/SearchBar'
+import { MarketplaceSearchCard } from '../components/listing/MarketplaceSearchCard'
+import type { SuggestionItem } from '../components/listing/SearchBar'
 import { FilterPanel } from '../components/listing/FilterPanel'
 import { ListingSkeletonGrid } from '../components/listing/ListingCardSkeleton'
 import { ScrollToTopButton } from '../components/ScrollToTopButton'
 import type { Listing, CategoryId } from '../types/marketplace'
+
+const CATALOG_QUICK_LABELS: Record<CategoryId, string> = {
+  legkovye: 'Легковые',
+  gruzovye: 'Грузовые',
+  speztechnika: 'Спецтехника',
+  pricepy: 'Прицепы',
+}
+
+const CATALOG_QUICK_IDS: CategoryId[] = ['legkovye', 'gruzovye', 'speztechnika', 'pricepy']
 import { getTelegramUserFromInitData } from '../lib/telegram'
 import {
   BRAND_SYNONYMS,
@@ -207,6 +217,17 @@ export function CatalogPage({
       : focusSuggestions
     : []
 
+  const quickCategories = useMemo(() => {
+    const qs = searchParams.toString()
+    const suffix = qs ? `?${qs}` : ''
+    return CATALOG_QUICK_IDS.map((id) => ({
+      id,
+      label: CATALOG_QUICK_LABELS[id],
+      to: `/catalog/${id}${suffix}`,
+      active: categoryId === id,
+    }))
+  }, [categoryId, searchParams])
+
   const handleSearchFocusChange = (focused: boolean) => {
     setIsSearchFocused(focused)
     onSearchFocusedChange?.(focused)
@@ -214,7 +235,7 @@ export function CatalogPage({
 
   return (
     <section className="page-transition space-y-4">
-      <SearchBar
+      <MarketplaceSearchCard
         value={query}
         onChange={setQuery}
         suggestions={effectiveSuggestions}
@@ -223,46 +244,18 @@ export function CatalogPage({
           saveToHistory(value)
         }}
         onDeleteSuggestion={deleteFromHistory}
-        onFocusChange={handleSearchFocusChange}
+        onSearchFocusBroadcast={handleSearchFocusChange}
+        isSearchFocused={isSearchFocused}
         onSubmit={() => saveToHistory(query)}
+        hintLoading={isLoading}
+        hintCount={filtered.length}
+        onOpenFilters={() => setIsFilterOpen(true)}
+        activeFilterCount={activeFilterCount}
+        quickCategories={quickCategories}
       />
 
-      {/* Filter bar */}
-      <div className="mx-auto flex w-full max-w-[560px] items-center justify-between">
-        <p className="text-[13px] font-sf text-zinc-500">
-          {isLoading
-            ? 'Загрузка...'
-            : `${filtered.length.toLocaleString('ru-RU')} ${filtered.length % 10 === 1 && filtered.length % 100 !== 11 ? 'лот' : filtered.length % 10 >= 2 && filtered.length % 10 <= 4 && (filtered.length % 100 < 10 || filtered.length % 100 >= 20) ? 'лота' : 'лотов'}`}
-        </p>
-        <button
-          type="button"
-          aria-label="Фильтры"
-          onClick={() => setIsFilterOpen(true)}
-          className="relative flex items-center gap-1.5 rounded-md border border-white/10 px-3 py-1.5 text-[13px] font-medium text-zinc-400 transition active:bg-white/5"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="h-4 w-4"
-            aria-hidden
-          >
-            <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" />
-          </svg>
-          <span>Фильтры</span>
-          {activeFilterCount > 0 && (
-            <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#FF5C34] px-1 text-[10px] font-bold text-white">
-              {activeFilterCount}
-            </span>
-          )}
-        </button>
-      </div>
-
       {error ? (
-        <div className="mx-auto max-w-[560px] rounded-md border border-[#FF5C34]/35 bg-[#FF5C34]/10 px-3 py-2 text-xs text-zinc-300">
+        <div className="mx-auto max-w-[560px] rounded-xl border border-brand/25 bg-brand/10 px-3 py-2.5 font-sf text-xs text-zinc-800">
           {error}
         </div>
       ) : null}
@@ -270,7 +263,7 @@ export function CatalogPage({
       {isLoading ? (
         <ListingSkeletonGrid count={3} />
       ) : filtered.length === 0 ? (
-        <div className="mx-auto w-full max-w-[560px] px-2 text-center text-sm font-sf text-zinc-300">
+        <div className="mx-auto w-full max-w-[560px] px-2 text-center text-sm font-sf text-ios-label">
           Ничего не найдено.
           <br />
           Попробуйте изменить запрос или фильтры

@@ -14,7 +14,7 @@ export function FavoritesPage({ items, isFavorite, toggleFavorite }: FavoritesPa
   if (favorites.length === 0) {
     return (
       <section className="page-transition flex min-h-[40vh] flex-1 items-center justify-center">
-        <p className="font-sf text-zinc-500">
+        <p className="font-sf text-ios-label">
           Здесь пока пусто
         </p>
       </section>

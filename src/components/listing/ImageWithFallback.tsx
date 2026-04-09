@@ -16,7 +16,7 @@ type ImageWithFallbackProps = {
 }
 
 const PLACEHOLDER_STYLE =
-  'bg-zinc-900 text-zinc-600 flex items-center justify-center text-sm font-sf'
+  'bg-zinc-200 text-zinc-400 flex items-center justify-center text-sm font-sf'
 
 const DEFAULT_SIZES = '(max-width: 680px) min(calc(100vw - 2rem), 560px), 560px'
 
@@ -81,10 +81,7 @@ export function ImageWithFallback({
   return (
     <div className="relative h-full w-full">
       {showShimmer ? (
-        <div
-          className="absolute inset-0 animate-pulse bg-zinc-800"
-          aria-hidden
-        />
+        <div className="absolute inset-0 animate-pulse bg-zinc-200" aria-hidden />
       ) : null}
       <img
         ref={imgRef}

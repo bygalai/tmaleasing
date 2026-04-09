@@ -23,30 +23,30 @@ export function PriceAnalysisBar({
 
   return (
     <section className="space-y-3">
-      <div className="mb-3 flex items-center justify-between font-sf text-xs uppercase tracking-wide text-zinc-500">
+      <div className="flex items-center justify-between font-sf text-xs font-semibold uppercase tracking-wide text-ios-label">
         <span>Анализ цены</span>
-        <span>{label}</span>
+        <span className="text-zinc-700">{label}</span>
       </div>
 
-      <div className="relative h-1 rounded-none bg-white/10">
+      <div className="relative h-1.5 overflow-hidden rounded-full bg-zinc-200">
         <div
-          className="absolute left-0 top-0 h-1 bg-gradient-to-r from-[#2aa871] to-[#FF5C34]"
+          className="absolute left-0 top-0 h-full rounded-full bg-gradient-to-r from-emerald-500 to-brand"
           style={{ width: '100%' }}
         />
         <span
-          className="absolute -top-1.5 h-5 w-px bg-zinc-100"
-          style={{ left: `${marker}%` }}
+          className="absolute -top-1 h-6 w-0.5 rounded-full bg-zinc-900 shadow-sm"
+          style={{ left: `calc(${marker}% - 1px)` }}
           aria-label="Текущая цена"
         />
       </div>
 
-      <div className="mt-3 flex items-center justify-between font-sf text-xs tabular-nums text-zinc-500">
+      <div className="flex items-center justify-between font-sf text-xs tabular-nums text-ios-label">
         {[marketLowRub, marketAvgRub, marketHighRub].map((value, index) => {
           const { amount, currency } = splitPriceRub(value)
           return (
             <span key={index}>
               {amount}
-              <span className="align-top text-zinc-600 text-[0.75em]">{currency}</span>
+              <span className="align-top text-[0.75em] text-zinc-400">{currency}</span>
             </span>
           )
         })}

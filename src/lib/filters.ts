@@ -141,10 +141,23 @@ export type FilterState = {
   priceTo: string
   mileageFrom: string
   mileageTo: string
+  yearFrom: string
+  yearTo: string
 }
 
 export function emptyFilterState(): FilterState {
-  return { brands: [], bodyTypes: [], drivetrains: [], locations: [], priceFrom: '', priceTo: '', mileageFrom: '', mileageTo: '' }
+  return {
+    brands: [],
+    bodyTypes: [],
+    drivetrains: [],
+    locations: [],
+    priceFrom: '',
+    priceTo: '',
+    mileageFrom: '',
+    mileageTo: '',
+    yearFrom: '',
+    yearTo: '',
+  }
 }
 
 export function countActiveFilters(f: FilterState): number {
@@ -155,6 +168,7 @@ export function countActiveFilters(f: FilterState): number {
   if (f.locations.length > 0) n++
   if (f.priceFrom || f.priceTo) n++
   if (f.mileageFrom || f.mileageTo) n++
+  if (f.yearFrom || f.yearTo) n++
   return n
 }
 
@@ -169,6 +183,8 @@ const PARAM_PRICE_FROM = 'priceFrom'
 const PARAM_PRICE_TO = 'priceTo'
 const PARAM_MILEAGE_FROM = 'mileageFrom'
 const PARAM_MILEAGE_TO = 'mileageTo'
+const PARAM_YEAR_FROM = 'yearFrom'
+const PARAM_YEAR_TO = 'yearTo'
 
 function parseArray(value: string | null): string[] {
   if (!value || typeof value !== 'string') return []
@@ -198,6 +214,8 @@ export function parseCatalogStateFromSearchParams(params: URLSearchParams): {
       priceTo: parseString(params.get(PARAM_PRICE_TO)),
       mileageFrom: parseString(params.get(PARAM_MILEAGE_FROM)),
       mileageTo: parseString(params.get(PARAM_MILEAGE_TO)),
+      yearFrom: parseString(params.get(PARAM_YEAR_FROM)),
+      yearTo: parseString(params.get(PARAM_YEAR_TO)),
     },
   }
 }
@@ -217,6 +235,8 @@ export function catalogStateToSearchParams(
   if (filters.priceTo) params.set(PARAM_PRICE_TO, filters.priceTo)
   if (filters.mileageFrom) params.set(PARAM_MILEAGE_FROM, filters.mileageFrom)
   if (filters.mileageTo) params.set(PARAM_MILEAGE_TO, filters.mileageTo)
+  if (filters.yearFrom) params.set(PARAM_YEAR_FROM, filters.yearFrom)
+  if (filters.yearTo) params.set(PARAM_YEAR_TO, filters.yearTo)
   return params
 }
 
@@ -307,6 +327,10 @@ export function filterItemsExcluding(items: Listing[], f: FilterState, exclude: 
     const mileageTo = f.mileageTo ? Number(f.mileageTo) : undefined
     if (mileageFrom != null && (item.mileageKm == null || item.mileageKm < mileageFrom)) return false
     if (mileageTo != null && (item.mileageKm == null || item.mileageKm > mileageTo)) return false
+    const yearFrom = f.yearFrom ? Number(f.yearFrom) : undefined
+    const yearTo = f.yearTo ? Number(f.yearTo) : undefined
+    if (yearFrom != null && (item.year == null || item.year < yearFrom)) return false
+    if (yearTo != null && (item.year == null || item.year > yearTo)) return false
     return true
   })
 }
@@ -336,6 +360,11 @@ function matchesNonBodyTypeFilters(item: Listing, f: FilterState): boolean {
   if (mileageFrom != null && (item.mileageKm == null || item.mileageKm < mileageFrom)) return false
   if (mileageTo != null && (item.mileageKm == null || item.mileageKm > mileageTo)) return false
 
+  const yearFrom = f.yearFrom ? Number(f.yearFrom) : undefined
+  const yearTo = f.yearTo ? Number(f.yearTo) : undefined
+  if (yearFrom != null && (item.year == null || item.year < yearFrom)) return false
+  if (yearTo != null && (item.year == null || item.year > yearTo)) return false
+
   return true
 }
 
@@ -360,7 +389,9 @@ export function applyFilters(items: Listing[], f: FilterState): Listing[] {
     f.priceFrom !== '' ||
     f.priceTo !== '' ||
     f.mileageFrom !== '' ||
-    f.mileageTo !== ''
+    f.mileageTo !== '' ||
+    f.yearFrom !== '' ||
+    f.yearTo !== ''
   if (!hasAny) return items
 
   return items.filter((item) => {
@@ -383,7 +414,9 @@ export function countStrictMatches(items: Listing[], f: FilterState): number {
     f.priceFrom !== '' ||
     f.priceTo !== '' ||
     f.mileageFrom !== '' ||
-    f.mileageTo !== ''
+    f.mileageTo !== '' ||
+    f.yearFrom !== '' ||
+    f.yearTo !== ''
   if (!hasAny) return items.length
 
   let count = 0

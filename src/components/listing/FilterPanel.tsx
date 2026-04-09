@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import type { Listing, CategoryId } from '../../types/marketplace'
+import { normalizeForSearch } from '../../lib/search'
 import {
   type FilterState,
   emptyFilterState,
@@ -32,6 +33,11 @@ function parseInputNumber(value: string): string {
   return value.replace(/\D/g, '')
 }
 
+function formatYearInput(raw: string): string {
+  const digits = raw.replace(/\D/g, '').slice(0, 4)
+  return digits
+}
+
 function pluralizeLots(n: number): string {
   const mod10 = n % 10
   const mod100 = n % 100
@@ -50,6 +56,7 @@ export function FilterPanel({
   category,
 }: FilterPanelProps) {
   const [draft, setDraft] = useState<FilterState>(filters)
+  const [brandQuery, setBrandQuery] = useState('')
   const [isVisible, setIsVisible] = useState(false)
   const [isAnimating, setIsAnimating] = useState(false)
   const sheetRef = useRef<HTMLDivElement>(null)
@@ -57,6 +64,7 @@ export function FilterPanel({
   useEffect(() => {
     if (isOpen) {
       setDraft(filters)
+      setBrandQuery('')
       setIsVisible(true)
       requestAnimationFrame(() => {
         requestAnimationFrame(() => setIsAnimating(true))
@@ -82,6 +90,17 @@ export function FilterPanel({
     [items, draft, isOpen],
   )
   const availableBrands = useMemo(() => getAvailableBrands(itemsForBrands), [itemsForBrands])
+
+  const filteredBrands = useMemo(() => {
+    const q = brandQuery.trim()
+    if (!q) return availableBrands
+    const nq = normalizeForSearch(q)
+    if (!nq) return availableBrands
+    return availableBrands.filter((b) => {
+      const nb = normalizeForSearch(b.value)
+      return nb.includes(nq) || nq.includes(nb)
+    })
+  }, [availableBrands, brandQuery])
 
   const itemsForBodyTypes = useMemo(
     () => (isOpen ? filterItemsExcluding(items, draft, 'bodyTypes') : []),
@@ -151,6 +170,10 @@ export function FilterPanel({
     setDraft((prev) => ({ ...prev, [field]: parseInputNumber(raw) }))
   }, [])
 
+  const updateYear = useCallback((field: 'yearFrom' | 'yearTo', raw: string) => {
+    setDraft((prev) => ({ ...prev, [field]: formatYearInput(raw) }))
+  }, [])
+
   const handleApply = useCallback(() => {
     onApply(draft)
     onClose()
@@ -160,10 +183,13 @@ export function FilterPanel({
     setDraft(emptyFilterState())
   }, [])
 
-  const handleBackdropClick = useCallback(() => {
-    onApply(draft)
+  const handleDismiss = useCallback(() => {
     onClose()
-  }, [draft, onApply, onClose])
+  }, [onClose])
+
+  const handleBackdropClick = useCallback(() => {
+    handleDismiss()
+  }, [handleDismiss])
 
   if (!isVisible) return null
 
@@ -188,63 +214,110 @@ export function FilterPanel({
 
   return createPortal(
     <div className="fixed inset-0 z-[60] font-sf">
-      {/* Backdrop */}
       <div
-        className={`absolute inset-0 bg-black/70 transition-opacity duration-300 ${
+        className={`absolute inset-0 bg-black/40 transition-opacity duration-300 ${
           isAnimating ? 'opacity-100' : 'opacity-0'
         }`}
         onClick={handleBackdropClick}
+        aria-hidden
       />
 
-      {/* Sheet */}
       <div
         ref={sheetRef}
-        className={`absolute bottom-0 left-0 right-0 flex max-h-[88vh] flex-col rounded-t-md border-t border-x border-white/10 bg-zinc-950 shadow-none transition-transform duration-300 ease-out ${
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="filter-sheet-title"
+        className={`absolute bottom-0 left-0 right-0 flex max-h-[92vh] flex-col rounded-t-[1.25rem] border-t border-x border-zinc-200/90 bg-white shadow-[0_-8px_40px_rgba(0,0,0,0.12)] transition-transform duration-300 ease-out ${
           isAnimating ? 'translate-y-0' : 'translate-y-full'
         }`}
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
-        {/* Handle */}
         <div className="flex shrink-0 justify-center pb-1 pt-3">
-          <div className="h-[3px] w-8 rounded-full bg-zinc-600" />
+          <div className="h-1 w-10 rounded-full bg-zinc-300" />
         </div>
 
-        {/* Header */}
-        <div className="flex shrink-0 items-center justify-between px-5 pb-4 pt-1">
-          <h2 className="text-[17px] font-bold uppercase tracking-wide text-zinc-100">
-            Фильтры
+        <div className="flex shrink-0 items-center gap-3 px-4 pb-3 pt-1">
+          <button
+            type="button"
+            onClick={handleDismiss}
+            aria-label="Закрыть"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-zinc-600 transition active:scale-95 active:bg-zinc-100"
+          >
+            <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" />
+            </svg>
+          </button>
+          <h2
+            id="filter-sheet-title"
+            className="flex-1 text-center text-[17px] font-bold tracking-tight text-zinc-900"
+          >
+            Параметры
           </h2>
-          {hasChanges && (
-            <button
-              type="button"
-              onClick={handleReset}
-              className="text-[14px] font-medium text-[#FF5C34] active:opacity-60"
-            >
-              Сбросить
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={handleReset}
+            disabled={!hasChanges}
+            className={`min-w-[4.5rem] shrink-0 text-right text-[16px] font-medium transition ${
+              hasChanges
+                ? 'text-brand active:opacity-70'
+                : 'cursor-default text-zinc-400'
+            }`}
+          >
+            Сбросить
+          </button>
         </div>
 
-        {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto overscroll-contain px-5 pb-28">
-          {/* ── Brand ── */}
+        <div className="flex-1 overflow-y-auto overscroll-contain px-4 pb-36">
           {availableBrands.length > 0 && (
-            <FilterSection title="Марка">
-              <div className="flex flex-wrap gap-2">
-                {availableBrands.map((b) => (
-                  <FilterChip
-                    key={b.value}
-                    label={b.value}
-                    count={b.count}
-                    selected={draft.brands.includes(b.value)}
-                    onClick={() => toggleBrand(b.value)}
-                  />
-                ))}
+            <section className="mb-6">
+              <div className="mb-3 flex items-baseline justify-between gap-2">
+                <h3 className="text-[20px] font-bold leading-tight tracking-tight text-zinc-900">Марка</h3>
+                <span className="text-[13px] text-ios-label">несколько</span>
               </div>
-            </FilterSection>
+              <label className="mb-3 block">
+                <span className="sr-only">Поиск марки</span>
+                <div className="relative">
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="pointer-events-none absolute left-3 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-ios-label"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.75"
+                    aria-hidden
+                  >
+                    <circle cx="11" cy="11" r="6.5" />
+                    <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
+                  </svg>
+                  <input
+                    type="search"
+                    value={brandQuery}
+                    onChange={(e) => setBrandQuery(e.target.value)}
+                    placeholder="Поиск марки"
+                    autoComplete="off"
+                    className="w-full rounded-xl border border-zinc-200/90 bg-zinc-50 py-3 pl-10 pr-3 text-[16px] text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-brand/40 focus:ring-1 focus:ring-brand/25"
+                  />
+                </div>
+              </label>
+              <div className="max-h-[220px] overflow-y-auto overscroll-contain rounded-xl border border-zinc-200/90 bg-zinc-50/80 p-2">
+                <div className="flex flex-wrap gap-2">
+                  {filteredBrands.length === 0 ? (
+                    <p className="w-full py-4 text-center text-[14px] text-ios-label">Ничего не найдено</p>
+                  ) : (
+                    filteredBrands.map((b) => (
+                      <FilterChip
+                        key={b.value}
+                        label={b.value}
+                        count={b.count}
+                        selected={draft.brands.includes(b.value)}
+                        onClick={() => toggleBrand(b.value)}
+                      />
+                    ))
+                  )}
+                </div>
+              </div>
+            </section>
           )}
 
-          {/* ── Body type ── */}
           {availableBodyTypes.length > 0 && (
             <FilterSection title={bodyTypeLabel}>
               <div className="flex flex-wrap gap-2">
@@ -261,7 +334,6 @@ export function FilterPanel({
             </FilterSection>
           )}
 
-          {/* ── Drivetrain ── */}
           {!isTrailerCategory && availableDrivetrains.length > 0 && drivetrainLabel && (
             <FilterSection title={drivetrainLabel}>
               <div className="flex flex-wrap gap-2">
@@ -278,7 +350,6 @@ export function FilterPanel({
             </FilterSection>
           )}
 
-          {/* ── Location ── */}
           {availableLocations.length > 0 && (
             <FilterSection title="Город">
               <div className="flex flex-wrap gap-2">
@@ -295,58 +366,84 @@ export function FilterPanel({
             </FilterSection>
           )}
 
-          {/* ── Price ── */}
-          <FilterSection title="Цена, ₽">
-            <div className="flex gap-3">
-              <RangeInput
-                placeholder="от"
-                value={formatInputNumber(draft.priceFrom)}
-                onChange={(v) => updatePrice('priceFrom', v)}
-              />
-              <RangeInput
-                placeholder="до"
-                value={formatInputNumber(draft.priceTo)}
-                onChange={(v) => updatePrice('priceTo', v)}
-              />
+          <section className="mb-6">
+            <h3 className="mb-3 text-[20px] font-bold leading-tight tracking-tight text-zinc-900">
+              Основные параметры
+            </h3>
+            <div className="divide-y divide-zinc-100 overflow-hidden rounded-xl border border-zinc-200/90 bg-zinc-50/50">
+              <ParamRow label="Цена, ₽">
+                <div className="flex gap-2">
+                  <RangeInput
+                    placeholder="от"
+                    value={formatInputNumber(draft.priceFrom)}
+                    onChange={(v) => updatePrice('priceFrom', v)}
+                  />
+                  <RangeInput
+                    placeholder="до"
+                    value={formatInputNumber(draft.priceTo)}
+                    onChange={(v) => updatePrice('priceTo', v)}
+                  />
+                </div>
+              </ParamRow>
+              <ParamRow label={mileageLabel}>
+                <div className="flex gap-2">
+                  <RangeInput
+                    placeholder="от"
+                    value={formatInputNumber(draft.mileageFrom)}
+                    onChange={(v) => updateMileage('mileageFrom', v)}
+                  />
+                  <RangeInput
+                    placeholder="до"
+                    value={formatInputNumber(draft.mileageTo)}
+                    onChange={(v) => updateMileage('mileageTo', v)}
+                  />
+                </div>
+              </ParamRow>
+              <ParamRow label="Год выпуска">
+                <div className="flex gap-2">
+                  <RangeInput
+                    placeholder="от"
+                    value={draft.yearFrom}
+                    onChange={(v) => updateYear('yearFrom', v)}
+                    inputMode="numeric"
+                    maxLength={4}
+                  />
+                  <RangeInput
+                    placeholder="до"
+                    value={draft.yearTo}
+                    onChange={(v) => updateYear('yearTo', v)}
+                    inputMode="numeric"
+                    maxLength={4}
+                  />
+                </div>
+              </ParamRow>
             </div>
-          </FilterSection>
-
-          {/* ── Mileage ── */}
-          <FilterSection title={mileageLabel}>
-            <div className="flex gap-3">
-              <RangeInput
-                placeholder="от"
-                value={formatInputNumber(draft.mileageFrom)}
-                onChange={(v) => updateMileage('mileageFrom', v)}
-              />
-              <RangeInput
-                placeholder="до"
-                value={formatInputNumber(draft.mileageTo)}
-                onChange={(v) => updateMileage('mileageTo', v)}
-              />
-            </div>
-          </FilterSection>
+          </section>
         </div>
 
-        {/* Fixed bottom button */}
-        <div className="absolute bottom-0 left-0 right-0 border-t border-white/10 bg-zinc-950/98 px-5 pb-[max(env(safe-area-inset-bottom,12px),12px)] pt-3 backdrop-blur-md">
+        <div className="absolute bottom-0 left-0 right-0 border-t border-zinc-200/90 bg-white/95 px-4 pb-[max(env(safe-area-inset-bottom,12px),12px)] pt-3 backdrop-blur-md">
           <button
             type="button"
             onClick={handleApply}
-            className="w-full rounded-md border border-white/10 bg-[#FF5C34] py-3.5 text-[14px] font-semibold uppercase tracking-wide text-white transition-all active:scale-[0.99] active:bg-[#e5522e]"
+            className="w-full rounded-xl bg-ios-green py-4 text-[16px] font-semibold text-white shadow-sm transition active:scale-[0.99] active:opacity-95"
           >
-            {resultCount === 0
-              ? 'Ничего не найдено'
-              : `Показать ${resultCount.toLocaleString('ru-RU')} ${pluralizeLots(resultCount)}`}
+            {resultCount === 0 ? (
+              'Ничего не найдено'
+            ) : (
+              <>
+                Показать {resultCount.toLocaleString('ru-RU')} {pluralizeLots(resultCount)}
+              </>
+            )}
           </button>
+          <p className="mt-2 text-center text-[12px] leading-snug text-ios-label">
+            Лизинговые лоты из каталога GONKA
+          </p>
         </div>
       </div>
     </div>,
     document.body,
   )
 }
-
-// ── Sub-components ──────────────────────────────────────────
 
 function FilterSection({
   title,
@@ -356,11 +453,18 @@ function FilterSection({
   children: React.ReactNode
 }) {
   return (
-    <div className="mb-6">
-      <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
-        {title}
-      </p>
+    <section className="mb-6">
+      <h3 className="mb-3 text-[20px] font-bold leading-tight tracking-tight text-zinc-900">{title}</h3>
       {children}
+    </section>
+  )
+}
+
+function ParamRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-2 px-4 py-3.5 sm:flex-row sm:items-center sm:gap-4">
+      <span className="shrink-0 text-[15px] text-ios-label sm:w-[8.5rem]">{label}</span>
+      <div className="min-w-0 flex-1">{children}</div>
     </div>
   )
 }
@@ -380,17 +484,15 @@ function FilterChip({
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex items-center gap-1.5 rounded-md border px-3.5 py-2 text-[13px] font-medium transition-all active:scale-[0.98] ${
+      className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-[13px] font-medium transition-all active:scale-[0.98] ${
         selected
-          ? 'border-[#FF5C34] bg-[#FF5C34] text-white'
-          : 'border-white/10 bg-zinc-900 text-zinc-300'
+          ? 'border-brand bg-brand text-white'
+          : 'border-zinc-200 bg-zinc-50 text-zinc-700'
       }`}
     >
       <span>{label}</span>
       <span
-        className={`text-[11px] tabular-nums ${
-          selected ? 'text-white/70' : 'text-zinc-500'
-        }`}
+        className={`text-[11px] tabular-nums ${selected ? 'text-white/80' : 'text-ios-label'}`}
       >
         {count}
       </span>
@@ -402,20 +504,25 @@ function RangeInput({
   placeholder,
   value,
   onChange,
+  inputMode = 'numeric',
+  maxLength,
 }: {
   placeholder: string
   value: string
   onChange: (value: string) => void
+  inputMode?: 'numeric' | 'text' | 'decimal'
+  maxLength?: number
 }) {
   return (
     <input
       type="text"
-      inputMode="numeric"
+      inputMode={inputMode}
+      maxLength={maxLength}
       placeholder={placeholder}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       autoComplete="off"
-      className="w-full rounded-md border border-white/10 bg-zinc-900 px-4 py-3 text-[14px] text-zinc-100 outline-none transition-colors placeholder:text-zinc-500 focus:border-[#FF5C34]/50 focus:ring-1 focus:ring-[#FF5C34]/30"
+      className="min-w-0 flex-1 rounded-lg border border-zinc-200/90 bg-white px-3 py-2.5 text-[15px] text-zinc-900 outline-none transition-colors placeholder:text-zinc-400 focus:border-brand/45 focus:ring-1 focus:ring-brand/20"
     />
   )
 }

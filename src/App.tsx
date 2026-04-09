@@ -34,7 +34,7 @@ function Header() {
           type="button"
           onClick={goBack}
           aria-label="Назад в каталог"
-          className="absolute left-0 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-zinc-100 transition-all duration-150 active:scale-90 active:opacity-60"
+          className="absolute left-0 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-zinc-700 transition-all duration-150 active:scale-90 active:bg-zinc-200/80"
         >
           <svg
             aria-hidden="true"
@@ -49,7 +49,7 @@ function Header() {
             <path d="M15 18l-6-6 6-6" />
           </svg>
         </button>
-        <h1 className="whitespace-nowrap font-bold leading-[1] tracking-tight text-[#FF5C34] [font-family:Helvetica,Arial,sans-serif] [font-size:clamp(28px,8vw,42px)]">
+        <h1 className="whitespace-nowrap font-bold leading-[1] tracking-tight text-brand [font-family:Helvetica,Arial,sans-serif] [font-size:clamp(28px,8vw,42px)]">
           "GONKA"
         </h1>
       </div>
@@ -63,7 +63,7 @@ function Header() {
           type="button"
           onClick={goToCategories}
           aria-label="Назад к выбору раздела"
-          className="absolute left-0 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-zinc-100 transition-all duration-150 active:scale-90 active:opacity-60"
+          className="absolute left-0 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-zinc-700 transition-all duration-150 active:scale-90 active:bg-zinc-200/80"
         >
           <svg
             aria-hidden="true"
@@ -78,7 +78,7 @@ function Header() {
             <path d="M15 18l-6-6 6-6" />
           </svg>
         </button>
-        <h1 className="whitespace-nowrap font-bold leading-[1] tracking-tight text-[#FF5C34] [font-family:Helvetica,Arial,sans-serif] [font-size:clamp(28px,8vw,42px)]">
+        <h1 className="whitespace-nowrap font-bold leading-[1] tracking-tight text-brand [font-family:Helvetica,Arial,sans-serif] [font-size:clamp(28px,8vw,42px)]">
           "GONKA"
         </h1>
       </div>
@@ -87,7 +87,7 @@ function Header() {
 
   return (
     <div className="relative flex w-full items-center justify-center">
-      <h1 className="whitespace-nowrap font-bold leading-[1] tracking-tight text-[#FF5C34] [font-family:Helvetica,Arial,sans-serif] [font-size:clamp(24px,7vw,38px)]">
+      <h1 className="whitespace-nowrap font-bold leading-[1] tracking-tight text-brand [font-family:Helvetica,Arial,sans-serif] [font-size:clamp(24px,7vw,38px)]">
         "GONKA" MARKETPLACE
       </h1>
     </div>
@@ -157,7 +157,7 @@ function App() {
       <header
         className={
           isStickyHeader
-            ? 'sticky top-0 z-20 -mx-4 -mt-5 flex items-center justify-center px-4 pt-[max(env(safe-area-inset-top,0px),1.25rem)] pb-3 mb-5 border-b border-white/10 bg-black/90 shadow-none backdrop-blur-md'
+            ? 'sticky top-0 z-20 -mx-4 -mt-5 mb-5 flex items-center justify-center border-b border-zinc-200/90 bg-white/90 px-4 pb-3 pt-[max(env(safe-area-inset-top,0px),1.25rem)] shadow-sm backdrop-blur-md'
             : 'mb-5 flex items-center justify-center'
         }
       >

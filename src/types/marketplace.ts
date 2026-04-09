@@ -26,6 +26,11 @@ export type Listing = {
   bodyType?: string
   brand?: string
   drivetrain?: string
+  /**
+   * Нормализованный текст для поиска (title + subtitle + description + поля карточки).
+   * Заполняется один раз при загрузке лота — не пересчитывать при каждом вводе в строку поиска.
+   */
+  searchHaystackNormalized?: string
 }
 
 export type ListingsResponse = {

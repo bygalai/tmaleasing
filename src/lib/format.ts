@@ -29,3 +29,13 @@ export function formatMileageHours(value?: number): string {
   if (!value) return 'не указана'
   return `${new Intl.NumberFormat('ru-RU').format(value)} м.ч.`
 }
+
+/** Склонение для счётчика лотов в поиске («176 541 предложение»). */
+export function pluralizeOffers(n: number): string {
+  const mod10 = n % 10
+  const mod100 = n % 100
+  if (mod100 >= 11 && mod100 <= 14) return 'предложений'
+  if (mod10 === 1) return 'предложение'
+  if (mod10 >= 2 && mod10 <= 4) return 'предложения'
+  return 'предложений'
+}

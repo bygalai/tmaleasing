@@ -78,11 +78,11 @@ export function BottomNav({ favoritesCount = 0 }: BottomNavProps) {
       style={{ bottom: 'max(env(safe-area-inset-bottom, 0px), 14px)' }}
       aria-label="Навигация"
     >
-      <div className="liquid-glass-nav relative mx-auto flex w-fit items-center justify-center gap-9 rounded-md px-6 py-3">
-        {/* Sliding pill background — капля перетекает при смене таба */}
+      <div className="relative mx-auto flex w-fit items-center justify-center gap-9 rounded-2xl border border-zinc-200/90 bg-white/95 px-6 py-3 shadow-[0_4px_24px_rgba(0,0,0,0.08)] backdrop-blur-md">
+        {/* Sliding pill — индикатор активного таба */}
         {rawIndex >= 0 && (
           <div
-            className="absolute left-4 top-1/2 h-10 w-14 -translate-y-1/2 rounded-md bg-brand/70 transition-all duration-300 ease-out"
+            className="absolute left-4 top-1/2 h-10 w-14 -translate-y-1/2 rounded-xl bg-zinc-100 transition-all duration-300 ease-out"
             style={{
               transform: `translateX(${activeIndex * SLOT_WIDTH}px) translateY(-50%)`,
             }}
@@ -98,13 +98,13 @@ export function BottomNav({ favoritesCount = 0 }: BottomNavProps) {
               className={({ isActive }) =>
                 [
                   'relative z-10 flex h-10 w-10 items-center justify-center transition-colors',
-                  isActive ? 'text-white' : 'text-zinc-500 hover:text-zinc-300',
+                  isActive ? 'text-zinc-900' : 'text-ios-label hover:text-zinc-600',
                 ].join(' ')
               }
             >
               {tab.icon}
               {tab.to === '/favorites' && favoritesCount > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-lg bg-brand px-1 text-[10px] font-sf font-medium text-white">
+                <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-lg bg-brand px-1 text-[10px] font-sf font-medium text-white shadow-sm">
                   {favoritesCount > 99 ? '99+' : favoritesCount}
                 </span>
               )}

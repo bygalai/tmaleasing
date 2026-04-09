@@ -12,7 +12,7 @@ export function ProfilePage() {
   return (
     <section className="page-transition flex flex-col items-center gap-6 pt-6">
       <div className="flex flex-col items-center gap-6">
-        <div className="relative flex h-40 w-40 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-zinc-900 shadow-none">
+        <div className="relative flex h-40 w-40 shrink-0 items-center justify-center overflow-hidden rounded-full border border-zinc-200/90 bg-white shadow-sm">
           {photoUrl ? (
             <img
               src={photoUrl}
@@ -22,7 +22,7 @@ export function ProfilePage() {
             />
           ) : (
             <span
-              className="font-sf text-5xl font-light text-zinc-400"
+              className="font-sf text-5xl font-light text-ios-label"
               aria-hidden
             >
               {initial}
@@ -31,14 +31,14 @@ export function ProfilePage() {
         </div>
 
         {/* Никнейм в San Francisco */}
-        <p className="text-center font-sf text-xl font-medium tracking-tight text-zinc-100">
+        <p className="text-center font-sf text-xl font-medium tracking-tight text-zinc-900">
           {nickname}
         </p>
       </div>
 
       {/* Нижний блок — «Здесь пока пусто» */}
-      <div className="flex w-full max-w-[560px] items-center justify-center rounded-md border border-white/10 bg-zinc-950 py-8">
-        <p className="font-sf text-zinc-500">В разработке</p>
+      <div className="flex w-full max-w-[560px] items-center justify-center rounded-2xl border border-zinc-200/90 bg-white py-8 shadow-sm">
+        <p className="font-sf text-ios-label">В разработке</p>
       </div>
     </section>
   )

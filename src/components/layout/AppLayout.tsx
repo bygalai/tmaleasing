@@ -5,13 +5,7 @@ export function AppLayout({ children }: PropsWithChildren) {
   const insets = getSafeAreaInsets()
 
   return (
-    <div
-      className="min-h-dvh w-full"
-      style={{
-        background: '#000000',
-        color: '#fafafa',
-      }}
-    >
+    <div className="min-h-dvh w-full bg-app-bg text-zinc-900">
       <main
         className="mx-auto flex w-full max-w-[680px] flex-col px-4 py-5"
         style={{

@@ -14,6 +14,9 @@ type SearchBarProps = {
   onDeleteSuggestion?: (value: string) => void
   onFocusChange?: (isFocused: boolean) => void
   onSubmit?: () => void
+  /** Вариант внутри карточки поиска (компактное поле, без внешней max-width). */
+  variant?: 'default' | 'hub'
+  placeholder?: string
 }
 
 export function SearchBar({
@@ -24,7 +27,13 @@ export function SearchBar({
   onDeleteSuggestion,
   onFocusChange,
   onSubmit,
+  variant = 'default',
+  placeholder: placeholderProp,
 }: SearchBarProps) {
+  const placeholder =
+    placeholderProp ??
+    (variant === 'hub' ? 'Марка, модель или тип техники' : 'Найти свою гонку')
+  const isHub = variant === 'hub'
   const inputRef = useRef<HTMLInputElement>(null)
 
   const handleFocus = useCallback(() => {
@@ -67,10 +76,20 @@ export function SearchBar({
   }, [suggestions, value])
 
   return (
-    <div className="mx-auto w-full max-w-[560px] space-y-2">
+    <div
+      className={
+        isHub ? 'w-full space-y-2' : 'mx-auto w-full max-w-[560px] space-y-2'
+      }
+    >
       <form action="" onSubmit={handleFormSubmit}>
         <label className="block">
-          <div className="relative flex items-center rounded-md bg-zinc-900/80 transition-colors duration-150 focus-within:bg-zinc-900">
+          <div
+            className={`relative flex items-center transition-colors duration-150 ${
+              isHub
+                ? 'rounded-xl border border-zinc-200/90 bg-white shadow-sm focus-within:border-zinc-300 focus-within:shadow-md'
+                : 'rounded-xl border border-zinc-200/90 bg-white shadow-sm focus-within:border-zinc-300'
+            }`}
+          >
             <input
               ref={inputRef}
               type="search"
@@ -78,13 +97,13 @@ export function SearchBar({
               onChange={(event) => onChange(event.target.value)}
               onFocus={handleFocus}
               onBlur={handleBlur}
-              placeholder="Найти свою гонку"
+              placeholder={placeholder}
               enterKeyHint="search"
               autoComplete="off"
               autoCorrect="off"
               autoCapitalize="off"
               spellCheck={false}
-              className={`search-bar-input min-h-[44px] w-full bg-transparent py-2.5 pl-3.5 text-[15px] font-normal leading-snug text-zinc-100 outline-none placeholder:text-zinc-600 font-sf ${
+              className={`search-bar-input min-h-[44px] w-full bg-transparent py-2.5 pl-3.5 text-[15px] font-normal leading-snug text-zinc-900 outline-none placeholder:text-zinc-400 font-sf ${
                 value.trim().length > 0 ? 'pr-[4.25rem]' : 'pr-11'
               }`}
             />
@@ -93,7 +112,7 @@ export function SearchBar({
                 type="button"
                 aria-label="Очистить"
                 onClick={handleClear}
-                className="absolute right-11 top-1/2 -translate-y-1/2 text-zinc-600 transition-colors hover:text-zinc-400"
+                className="absolute right-11 top-1/2 -translate-y-1/2 text-zinc-400 transition-colors hover:text-zinc-600"
               >
                 <svg
                   aria-hidden="true"
@@ -112,7 +131,7 @@ export function SearchBar({
             <button
               type="submit"
               aria-label="Поиск"
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-600 transition-colors hover:text-zinc-400"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 transition-colors hover:text-zinc-600"
             >
               <svg
                 aria-hidden="true"
@@ -133,9 +152,15 @@ export function SearchBar({
       </form>
 
       {suggestions.length > 0 ? (
-        <div className="overflow-hidden rounded-md bg-zinc-900/80">
+        <div
+          className={`overflow-hidden ${
+            isHub
+              ? 'rounded-xl border border-zinc-200/90 bg-white shadow-md'
+              : 'rounded-xl border border-zinc-200/90 bg-white shadow-md'
+          }`}
+        >
           {headerLabel ? (
-            <p className="px-3.5 pb-1 pt-2.5 text-[10px] font-medium uppercase tracking-[0.14em] text-zinc-600 font-sf">
+            <p className="px-3.5 pb-1 pt-2.5 text-[10px] font-medium uppercase tracking-[0.14em] text-ios-label font-sf">
               {headerLabel}
             </p>
           ) : null}
@@ -148,9 +173,9 @@ export function SearchBar({
                 handleSuggestionSelect(item.label)
               }}
               onClick={(e) => e.preventDefault()}
-              className="group/row flex w-full items-center gap-2.5 border-t border-zinc-800 px-3.5 py-2.5 text-left text-[14px] font-sf font-normal text-zinc-200 first:border-t-0 transition-colors hover:bg-zinc-800/60"
+              className="group/row flex w-full items-center gap-2.5 border-t border-zinc-100 px-3.5 py-2.5 text-left text-[14px] font-sf font-normal text-zinc-800 first:border-t-0 transition-colors hover:bg-zinc-50"
             >
-              <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-zinc-600">
+              <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-ios-label">
                 {item.kind === 'history' ? (
                   <svg
                     aria-hidden="true"
@@ -183,7 +208,7 @@ export function SearchBar({
               </span>
               <span className="flex-1 truncate">{item.label}</span>
               {item.count != null && item.count > 0 ? (
-                <span className="shrink-0 tabular-nums text-[11px] text-zinc-600">
+                <span className="shrink-0 tabular-nums text-[11px] text-ios-label">
                   {item.count}
                 </span>
               ) : null}
@@ -197,7 +222,7 @@ export function SearchBar({
                     e.stopPropagation()
                     onDeleteSuggestion(item.label)
                   }}
-                  className="flex h-7 w-7 shrink-0 items-center justify-center text-zinc-600 transition-colors hover:text-zinc-400"
+                  className="flex h-7 w-7 shrink-0 items-center justify-center text-ios-label transition-colors hover:text-zinc-600"
                 >
                   <svg
                     aria-hidden="true"

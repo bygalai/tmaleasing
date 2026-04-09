@@ -7,10 +7,14 @@ type SwipeGalleryProps = {
   className?: string
   /** Показать placeholder при ошибке загрузки всех фото */
   showPlaceholderWhenFailed?: boolean
+  /** `cover` — герой на странице лота; `contain` — прежнее поведение. */
+  fit?: 'cover' | 'contain'
+  /** Светлая подложка для карточки на светлом фоне. */
+  surface?: 'dark' | 'light'
 }
 
-const PLACEHOLDER_STYLE =
-  'bg-zinc-900 text-zinc-600 flex items-center justify-center text-sm font-sf'
+const PLACEHOLDER_DARK = 'bg-zinc-900 text-zinc-600 flex items-center justify-center text-sm font-sf'
+const PLACEHOLDER_LIGHT = 'bg-zinc-200 text-zinc-400 flex items-center justify-center text-sm font-sf'
 
 const GALLERY_SCROLL_STYLE = {
   scrollSnapType: 'x mandatory' as const,
@@ -43,7 +47,12 @@ export function SwipeGallery({
   alt,
   className = '',
   showPlaceholderWhenFailed = false,
+  fit = 'contain',
+  surface = 'dark',
 }: SwipeGalleryProps) {
+  const objectFit = fit === 'cover' ? 'object-cover' : 'object-contain'
+  const surfaceBg = surface === 'light' ? 'bg-zinc-100' : 'bg-zinc-950'
+  const PLACEHOLDER_STYLE = surface === 'light' ? PLACEHOLDER_LIGHT : PLACEHOLDER_DARK
   const scrollRef = useRef<HTMLDivElement>(null)
   const lightboxRef = useRef<HTMLDivElement>(null)
   const galleryTouchRef = useRef<TouchTrack>(null)
@@ -169,7 +178,7 @@ export function SwipeGallery({
     draggable: false,
     referrerPolicy: 'no-referrer' as const,
     style: { touchAction: 'pan-x' as const },
-    className: 'min-h-0 min-w-0 max-h-full max-w-full shrink-0 object-contain object-center select-none',
+    className: `min-h-0 min-w-0 max-h-full max-w-full shrink-0 ${objectFit} object-center select-none`,
   }
 
   const handleGalleryTouchStart = useCallback((e: TouchEvent<HTMLDivElement>) => {
@@ -223,7 +232,7 @@ export function SwipeGallery({
   if (validUrls.length === 1) {
     return (
       <div
-        className={`relative flex min-h-0 cursor-pointer items-center justify-center overflow-hidden bg-zinc-950 ${className}`}
+        className={`relative flex min-h-0 cursor-pointer items-center justify-center overflow-hidden ${surfaceBg} ${className}`}
         onClick={() => openLightbox(0)}
         onTouchStart={handleGalleryTouchStart}
         onTouchMove={handleGalleryTouchMove}
@@ -241,7 +250,7 @@ export function SwipeGallery({
           decoding="async"
           fetchPriority="high"
           onError={() => handleImageError(validUrls[0])}
-          className="min-h-0 min-w-0 max-h-full max-w-full shrink-0 object-contain object-center select-none"
+          className={`min-h-0 min-w-0 max-h-full max-w-full shrink-0 ${objectFit} object-center select-none`}
           draggable={false}
           referrerPolicy="no-referrer"
           style={{ touchAction: 'pan-x' }}
@@ -255,7 +264,7 @@ export function SwipeGallery({
       <div
         ref={scrollRef}
         data-swipe-gallery
-        className="flex h-full w-full cursor-pointer overflow-x-auto overflow-y-hidden overscroll-x-contain scroll-smooth bg-zinc-950 [scrollbar-width:none] [-ms-overflow-style:none]"
+        className={`flex h-full w-full cursor-pointer overflow-x-auto overflow-y-hidden overscroll-x-contain scroll-smooth ${surfaceBg} [scrollbar-width:none] [-ms-overflow-style:none]`}
         style={GALLERY_SCROLL_STYLE}
         role="region"
         aria-label={`Галерея: ${validUrls.length} фото. Нажмите для просмотра`}

@@ -10,7 +10,7 @@ export function MenuButton({ isOpen, onClick, className }: MenuButtonProps) {
       type="button"
       onClick={onClick}
       className={[
-        'liquid-glass inline-flex h-11 w-11 items-center justify-center rounded-md text-zinc-100 focus-visible:outline-none',
+        'inline-flex h-11 w-11 items-center justify-center rounded-xl border border-zinc-200/90 bg-zinc-50 text-zinc-800 shadow-sm transition active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-300',
         className ?? '',
       ].join(' ')}
       aria-label={isOpen ? 'Закрыть меню' : 'Открыть меню'}

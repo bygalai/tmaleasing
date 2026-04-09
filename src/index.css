@@ -38,8 +38,8 @@ body,
 
 body {
   min-width: 320px;
-  color: #fafafa;
-  background: #000000;
+  color: #18181b;
+  background: #f2f2f7;
 }
 
 /* ── Liquid Glass ────────────────────────────────────────── */
@@ -305,6 +305,14 @@ body {
 .search-bar-input::-webkit-search-decoration {
   -webkit-appearance: none;
   appearance: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 
 h1,
