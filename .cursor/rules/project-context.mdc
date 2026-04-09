@@ -93,4 +93,4 @@ scripts/scraper/         — Puppeteer-скраперы (VTB, Europlan, Alfaleas
 
 ## Источники данных (source)
 
-`vtb`, `europlan`, `alfaleasing`, `gazprom` — скраперы в `scripts/scraper/`
+`vtb`, `europlan`, `alfaleasing`, `gazprom`, `carcade` — скраперы в `scripts/scraper/` (`npm run scrape:carcade`)

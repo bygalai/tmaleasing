@@ -1,0 +1,61 @@
+# Ручной запуск: Actions → этот workflow → Run workflow (кнопка справа сверху).
+name: Scrape CARCADE Leasing
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_pages:
+        description: 'Макс. страниц каталога на секцию (0 = все)'
+        required: false
+        default: '0'
+      sections:
+        description: 'Секции через запятую (legkovye,gruzovye,...). Пусто = все секции'
+        required: false
+        default: ''
+      detail_delay_ms:
+        description: 'Пауза между карточками (мс)'
+        required: false
+        default: '450'
+
+concurrency:
+  group: carcade-scraper
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+      CARCADE_MAX_PAGES: ${{ github.event.inputs.max_pages || '0' }}
+      CARCADE_DETAIL_DELAY_MS: ${{ github.event.inputs.detail_delay_ms || '450' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify environment
+        run: |
+          echo "Node $(node -v), npm $(npm -v)"
+          [ -n "$SUPABASE_URL" ] || { echo "::error::SUPABASE_URL secret is not set"; exit 1; }
+          [ -n "$SUPABASE_KEY" ] || { echo "::error::SUPABASE_KEY secret is not set"; exit 1; }
+          echo "Supabase credentials OK"
+
+      - name: Run CARCADE scraper
+        env:
+          NODE_OPTIONS: '--max-old-space-size=4096'
+        run: |
+          RAW="${{ github.event.inputs.sections }}"
+          if [ -n "$RAW" ]; then export CARCADE_SECTIONS="$RAW"; fi
+          npm run scrape:carcade

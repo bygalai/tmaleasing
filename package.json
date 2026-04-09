@@ -12,6 +12,7 @@
     "scrape:europlan": "tsx scripts/scraper/europlan-scraper.ts",
     "scrape:alfaleasing": "tsx scripts/scraper/alfaleasing-scraper.ts",
     "scrape:gazprom": "tsx scripts/scraper/gazprom-scraper.ts",
+    "scrape:carcade": "tsx scripts/scraper/carcade-scraper.ts",
     "price:rebuild": "tsx scripts/price-analysis/rebuild-price-analysis.ts"
   },
   "dependencies": {
