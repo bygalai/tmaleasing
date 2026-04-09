@@ -425,7 +425,7 @@ export function FilterPanel({
           <button
             type="button"
             onClick={handleApply}
-            className="w-full rounded-xl bg-ios-green py-4 text-[16px] font-semibold text-white shadow-sm transition active:scale-[0.99] active:opacity-95"
+            className="w-full rounded-xl bg-brand py-4 text-[16px] font-semibold text-white shadow-sm shadow-brand/25 transition active:scale-[0.99] active:opacity-95"
           >
             {resultCount === 0 ? (
               'Ничего не найдено'
