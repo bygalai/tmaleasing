@@ -726,7 +726,17 @@ function extractDetailFromHtmlFallback(html: string, category: string): {
     if (!value) return null
     let out = value.replace(/\s+/g, ' ').trim()
     if (!out) return null
-    const stopWords = ['код предложения', 'адрес стоянки', 'платеж', 'аванс', 'срок лизинга', 'сумма договора', 'цвет']
+    const stopWords = [
+      'код предложения',
+      'адрес стоянки',
+      'платеж',
+      'аванс',
+      'срок лизинга',
+      'сумма договора',
+      'цвет',
+      'альфализинг',
+      'альфа-лизинг',
+    ]
     const lowered = out.toLowerCase()
     let cutIndex = out.length
     for (const stop of stopWords) {
@@ -878,7 +888,16 @@ async function extractDetailUrlsWithCardData(
 
         const cityMatch = text.match(/Лот\s+\d+\s*([А-Яа-яЁё][А-Яа-яЁё\s\-]{1,39})/) ??
           text.match(/([А-Яа-яЁё][А-Яа-яЁё\s\-]{2,30})\s*$/)
-        const city = cityMatch?.[1]?.trim() ?? null
+        let city = cityMatch?.[1]?.trim() ?? null
+        if (city) {
+          city = city
+            .replace(/\s+АЛЬФАЛИЗИНГ\s*$/i, '')
+            .replace(/\s+АЛЬФА\s*$/i, '')
+            .replace(/\s+АЛ\s*$/, '')
+            .replace(/\s+/g, ' ')
+            .trim()
+          if (!city) city = null
+        }
 
         const imgs = container.querySelectorAll('img[src], img[data-src]')
         const imageUrls = Array.from(imgs).map(function (img) {

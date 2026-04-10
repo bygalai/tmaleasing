@@ -5,6 +5,7 @@ import { extractBrand } from '../lib/filters'
 import { buildNormalizedHaystack, ensureListingsSearchHaystack } from '../lib/search'
 import { inferEquipmentType, normalizeBodyType } from '../lib/equipment-types'
 import { formatListingDisplayTitle } from '../lib/listing-title'
+import { normalizeListingCity } from '../lib/location'
 import type { Listing } from '../types/marketplace'
 
 const FALLBACK_IMAGE =
@@ -295,7 +296,7 @@ function mapRowToListing(row: ListingsRow): Listing {
     marketHighRub,
     year,
     mileageKm: mileageKm !== undefined ? Math.round(mileageKm) : undefined,
-    location: row.city ?? undefined,
+    location: normalizeListingCity(row.city),
     imageUrl,
     imageUrls: imageUrls.length ? imageUrls : [imageUrl],
     detailUrl: row.listing_url ?? 'https://t.me/GONKACONFBOT',
@@ -322,6 +323,22 @@ function mapRowToListing(row: ListingsRow): Listing {
     ...listing,
     searchHaystackNormalized: buildNormalizedHaystack(listing),
   }
+}
+
+/** Исправляет старые кэшированные лоты с «Москва АЛ» и т.п. */
+function listingsWithNormalizedCities(items: Listing[]): { items: Listing[]; changed: boolean } {
+  let changed = false
+  const out = items.map((item) => {
+    const loc = normalizeListingCity(item.location)
+    if (loc === item.location) return item
+    changed = true
+    const next: Listing = { ...item, location: loc }
+    return {
+      ...next,
+      searchHaystackNormalized: buildNormalizedHaystack(next),
+    }
+  })
+  return { items: changed ? out : items, changed }
 }
 
 function getErrorMessage(err: unknown): string {
@@ -403,8 +420,10 @@ export function useListings() {
     if (!cached || cached.length === 0) {
       return { items: [] as Listing[], hadCache: false }
     }
-    const withHaystack = ensureListingsSearchHaystack(cached)
-    if (withHaystack !== cached && typeof window !== 'undefined') {
+    const { items: cityFixed, changed: citiesChanged } = listingsWithNormalizedCities(cached)
+    const withHaystack = ensureListingsSearchHaystack(cityFixed)
+    const haystackChanged = withHaystack !== cityFixed
+    if ((citiesChanged || haystackChanged) && typeof window !== 'undefined') {
       window.setTimeout(() => {
         writeListingsCache(withHaystack)
       }, 0)
