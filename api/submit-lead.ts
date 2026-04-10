@@ -25,6 +25,7 @@ function isLeadBody(value: unknown): value is LeadBody {
     typeof v.listingId === 'string' &&
     typeof v.listingTitle === 'string' &&
     typeof v.priceRub === 'number' &&
+    Number.isFinite(v.priceRub) &&
     typeof v.detailUrl === 'string' &&
     typeof v.userId === 'number'
   )
@@ -58,6 +59,37 @@ function formatPriceRubCompact(value: number): string {
     .replace(/\s/g, '.')
 }
 
+/** Telegram HTML: экранируем пользовательский текст и URL в caption. */
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+const MAX_CAPTION_LEN = 1000
+
+function buildManagerMessageHtml(lead: LeadBody, userLabel: string, price: string): string {
+  const title = escapeHtml(lead.listingTitle.trim() || 'Без названия')
+  const label = escapeHtml(userLabel)
+  const url = escapeHtml(lead.detailUrl.trim())
+  const uid = lead.userId
+  const lines = [
+    '🟠 <b>Новая заявка из Mini App</b> (через API)',
+    '',
+    `👤 ${label}`,
+    '',
+    `🚗 <b>${title}</b>`,
+    `💰 Цена: <b>${escapeHtml(price)}</b> ₽`,
+    '',
+    `🔗 <a href="${url}">Открыть объявление</a>`,
+    '',
+    `💬 Ответ: <code>/reply ${uid} Ваш текст</code>`,
+  ]
+  let text = lines.join('\n')
+  if (text.length > MAX_CAPTION_LEN) {
+    text = text.slice(0, MAX_CAPTION_LEN - 1) + '…'
+  }
+  return text
+}
+
 export default async function handler(req: { method?: string; body?: unknown }, res: { status: (n: number) => { send: (x: unknown) => void; json: (x: unknown) => void } }) {
   if (req.method !== 'POST') {
     res.status(405).json({ ok: false, error: 'Method not allowed' })
@@ -82,43 +114,45 @@ export default async function handler(req: { method?: string; body?: unknown }, 
     username: lead.username,
   })
   const price = formatPriceRubCompact(lead.priceRub)
-
-  const textLines = [
-    '🟠 *Новая заявка из Mini App* (через API)',
-    '',
-    `👤 ${userLabel}`,
-    '',
-    `🚗 *${lead.listingTitle}*`,
-    `💰 Цена: *${price}₽*`,
-    '',
-    `🔗 [Открыть объявление](${lead.detailUrl})`,
-    '',
-    `💬 Ответ: \`/reply ${lead.userId} Ваш текст\``,
-  ]
+  const managerHtml = buildManagerMessageHtml(lead, userLabel, price)
 
   const managerChat = MANAGER_CHAT_ID ? Number(MANAGER_CHAT_ID) : lead.userId
 
   try {
-    if (lead.imageUrl) {
-      await callTelegram('sendPhoto', {
-        chat_id: managerChat,
-        photo: lead.imageUrl,
-        caption: textLines.join('\n'),
-        parse_mode: 'Markdown',
-      })
+    const imageUrl = lead.imageUrl?.trim()
+    if (imageUrl && /^https?:\/\//i.test(imageUrl)) {
+      try {
+        await callTelegram('sendPhoto', {
+          chat_id: managerChat,
+          photo: imageUrl,
+          caption: managerHtml,
+          parse_mode: 'HTML',
+        })
+      } catch (photoErr) {
+        console.warn('submit-lead: sendPhoto failed, falling back to text', photoErr)
+        await callTelegram('sendMessage', {
+          chat_id: managerChat,
+          text: managerHtml,
+          parse_mode: 'HTML',
+        })
+      }
     } else {
       await callTelegram('sendMessage', {
         chat_id: managerChat,
-        text: textLines.join('\n'),
-        parse_mode: 'Markdown',
+        text: managerHtml,
+        parse_mode: 'HTML',
       })
     }
 
-    await callTelegram('sendMessage', {
-      chat_id: lead.userId,
-      text:
-        '✅ Заявка по автомобилю отправлена менеджеру.\nМы свяжемся с Вами в этом чате или в лс.',
-    })
+    try {
+      await callTelegram('sendMessage', {
+        chat_id: lead.userId,
+        text:
+          '✅ Заявка по автомобилю отправлена менеджеру.\nМы свяжемся с Вами в этом чате или в лс.',
+      })
+    } catch (userNotifyErr) {
+      console.warn('submit-lead: could not DM user (blocked / no /start)', userNotifyErr)
+    }
 
     res.status(200).json({ ok: true })
   } catch (err) {

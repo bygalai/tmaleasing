@@ -52,11 +52,12 @@ export function ListingPage({ items, isFavorite, toggleFavorite }: ListingPagePr
 
   const submitLead = async () => {
     if (!item) return
+    const priceRub = Number.isFinite(item.priceRub) ? item.priceRub : 0
     const payload = {
       kind: 'lead' as const,
       listingId: item.id,
       listingTitle: item.title,
-      priceRub: item.priceRub,
+      priceRub,
       detailUrl: item.detailUrl,
       imageUrl: item.imageUrl,
     }
@@ -65,8 +66,16 @@ export function ListingPage({ items, isFavorite, toggleFavorite }: ListingPagePr
       setSubmitting(true)
       try {
         const ok = await submitLeadViaApi(payload)
-        if (ok) setSubmitted(true)
-        else window.open('https://t.me/GONKACONFBOT', '_blank', 'noreferrer')
+        if (ok) {
+          setSubmitted(true)
+          return
+        }
+        // API недоступен или ошибка на части лотов — пробуем нативный sendData (Mini App).
+        if (sendLeadToTelegram(payload)) {
+          setSubmitted(true)
+          return
+        }
+        window.open('https://t.me/GONKACONFBOT', '_blank', 'noreferrer')
       } finally {
         setSubmitting(false)
       }
