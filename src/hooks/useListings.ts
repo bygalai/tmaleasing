@@ -6,6 +6,7 @@ import { buildNormalizedHaystack, ensureListingsSearchHaystack } from '../lib/se
 import { inferEquipmentType, normalizeBodyType } from '../lib/equipment-types'
 import { formatListingDisplayTitle } from '../lib/listing-title'
 import { normalizeListingCity } from '../lib/location'
+import { resolveVtbListingCategory } from '../lib/vtb-category'
 import type { Listing } from '../types/marketplace'
 
 const FALLBACK_IMAGE =
@@ -211,7 +212,12 @@ function mapRowToListing(row: ListingsRow): Listing {
   const imageUrls = rawImageUrls
   const imageUrl = imageUrls[0] ?? FALLBACK_IMAGE
 
-  const isTrailer = row.category === 'pricepy'
+  const effectiveCategory =
+    row.source?.trim().toLowerCase() === 'vtb'
+      ? resolveVtbListingCategory(row.title ?? '', row.body_type, row.category)
+      : row.category ?? undefined
+
+  const isTrailer = effectiveCategory === 'pricepy'
   const engine = isTrailer ? null : normalizeEngine(row.engine)
   const drivetrain = isTrailer ? null : normalizeDrivetrain(row.drivetrain)
   const transmission = isTrailer ? null : normalizeTransmission(row.transmission)
@@ -219,7 +225,7 @@ function mapRowToListing(row: ListingsRow): Listing {
   const bodyType = (row.body_type ?? '').trim() || null
   const resolvedBodyType = normalizeBodyType(
     bodyType
-    ?? inferEquipmentType(row.title, row.category)
+    ?? inferEquipmentType(row.title, effectiveCategory)
     ?? (isBodyType(bodyColor) ? bodyColor!.trim() : null)
   )
 
@@ -251,7 +257,7 @@ function mapRowToListing(row: ListingsRow): Listing {
     !isTrailer && engine ? `Двигатель: ${engine}` : null,
     !isTrailer && transmission ? `Коробка: ${transmission}` : null,
     !isTrailer && drivetrainForDescription
-      ? row.category === 'legkovye'
+      ? effectiveCategory === 'legkovye'
         ? `Привод: ${drivetrainForDescription}`
         : `Колёсная формула: ${drivetrainForDescription}`
       : null,
@@ -286,7 +292,7 @@ function mapRowToListing(row: ListingsRow): Listing {
 
   const listing: Listing = {
     id: row.id,
-    category: row.category ?? undefined,
+    category: effectiveCategory,
     title: displayTitle,
     subtitle: subtitleParts.length ? subtitleParts.join(' • ') : subtitleFallback,
     priceRub,

@@ -9,6 +9,8 @@ import { createClient } from '@supabase/supabase-js'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Page } from 'puppeteer'
 
+import { inferVtbCategoryFromSignals } from '../../src/lib/vtb-category'
+
 dotenv.config({ path: resolve(process.cwd(), '.env') })
 puppeteer.use(StealthPlugin())
 
@@ -1682,6 +1684,11 @@ async function scrapeOneSection(
       }
     console.log(`Section ${currentSection.category} complete. Enriching ${collected.size} listings...`)
     await enrichListingsFromDetailsViaBrowserPage(page, collected)
+    // JSON/API на странице раздела могут подмешать чужие лоты — выравниваем категорию по заголовку и типу.
+    for (const listing of collected.values()) {
+      const inferred = inferVtbCategoryFromSignals(listing.title, listing.body_type)
+      if (inferred) listing.category = inferred
+    }
     return [...collected.values()]
   } finally {
     page.off('response', onResponse)
